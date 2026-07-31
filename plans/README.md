@@ -37,6 +37,23 @@ codebase defines. And when a design value has **no** matching token, it says so
 rather than guessing — which turns the plugin into a design-system QA tool as a
 side effect.
 
+### Built for the public, not for one codebase
+
+This ships to the Figma Community. **Nobody here will ever see the configs it
+has to handle.** That is a design constraint, not a caveat, and it shows up in
+three places:
+
+- **Test corpora are drawn from the wild**, not from the owner's own project.
+  Plan 001's eight v3 fixtures come from open-source projects with deliberately
+  different shapes. Tuning the resolver to any single team's config would
+  optimise for a sample of one.
+- **Fallbacks fail toward raw values**, never toward a guessed token name — see
+  invariant 2. A wrong class name in someone else's codebase is a silent
+  no-op they cannot debug.
+- **Limits are documented rather than hidden.** Plan 001 Step 9 and plan 010
+  require the docs to state plainly which config patterns the in-plugin resolver
+  cannot read, so a stranger can predict what they will get before installing.
+
 ### Components
 
 | Component | What it is | Plans |
@@ -144,7 +161,8 @@ The fallback ladders this program commits to:
 
 | When | Falls back to | Label the user sees |
 |---|---|---|
-| Config only partly readable | Everything that did resolve; defaults for the rest | "N settings in your config could not be read" + what each was |
+| Config partly readable, **extending** key missed (`theme.extend.colors`) | Everything that resolved, plus Tailwind's defaults — still correct, just missing the extensions | "N settings in your config could not be read" + what each was |
+| Config partly readable, **replacing** key missed (`theme.colors`) | That namespace is marked **unknown**, so it emits arbitrary values — *not* Tailwind's defaults, which the project does not have | "fig-tail could not read your colours; showing raw values for them" |
 | No config on the document | The developer's own pasted config (`clientStorage`) | "Using your personal config — this file has no shared one" |
 | No config at all | **Arbitrary-value output** (`bg-[#3b82f6]`, `p-[24px]`) | "No Tailwind config — showing raw values. Add your config for real token names." |
 | Variable bound but unresolvable (e.g. from an unavailable library) | Value matching against the theme | confidence drops from `exact-variable` to `exact-value` |
@@ -156,6 +174,32 @@ The fallback ladders this program commits to:
 Every fallback carries a visible label naming **what was used**, **why**, and
 **what to do to get the better version**. A fallback the user cannot see is a
 silent wrong answer, which invariant 6 forbids.
+
+#### Which way a fallback must fail
+
+This program ships publicly, to teams whose configs nobody here will ever see.
+So fallbacks have a required **direction**, and it is not the intuitive one:
+
+> **Never emit a class name unless the config confirms it exists. When in doubt,
+> emit an arbitrary value.**
+
+`bg-[#3b82f6]` always compiles, in every project, whatever the config says. It
+is ugly and it bypasses the design system, and it is *never wrong*.
+`bg-brand-500` compiles to **nothing at all** in a project that has no
+`brand-500` — the developer pastes it, the styling silently does not apply, and
+they blame the design or their build before they blame fig-tail.
+
+So an unverifiable token name is worse than a raw value, and every fallback
+resolves toward the raw value. The concrete consequences, each specified in the
+plan that owns it:
+
+- A **replacing** theme key that cannot be evaluated marks its namespace
+  *unknown*, never *default* (plan 001).
+- An unknown Tailwind major version degrades to arbitrary values rather than
+  guessing which version's semantics apply (plan 001).
+- An unresolvable `prefix` or a disabled core plugin suppresses the affected
+  utilities rather than emitting them unprefixed or non-existent (plan 002).
+- A near-miss value is reported, not emitted (plan 002).
 
 **Two things are refusals, not degradations**, and correctly block: writing to
 the document outside the sanctioned path (invariant 3), and executing user

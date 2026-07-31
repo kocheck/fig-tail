@@ -184,8 +184,11 @@ document anything.
    settings (just you, needs no edit access), or no config (raw values plus a
    prompt). Frame tier 2 as an ordinary option, not a workaround — a developer
    with a view-only seat should not feel locked out.
-6. What the confidence levels mean, and specifically why a near-match is
-   reported rather than emitted.
+6. What the confidence levels mean; why a near-match is reported rather than
+   emitted; and why fig-tail shows `bg-[#3b82f6]` instead of a token name when
+   it could not read part of your config. That last one is the question the
+   Community listing will get most often — answer it in the README before
+   someone has to ask.
 7. The linter and stamping, **if 006/007 shipped** — with stamping's write
    behaviour stated plainly and early.
 8. Privacy: no network access, nothing leaves Figma, no telemetry.
@@ -317,6 +320,9 @@ ALL must hold.
       personal-config tier as an ordinary option rather than a workaround
 - [ ] The docs are honest about which config patterns the in-plugin resolver
       cannot read, and what to do about each
+- [ ] The docs explain why unreadable parts of a config produce raw values
+      rather than Tailwind's defaults — a stranger should understand that this
+      is deliberate, not a bug
 - [ ] `CONTRIBUTING.md` states the write-safety invariant and points to plans
       003 and 007
 - [ ] Both README paths verified end to end from a fresh clone

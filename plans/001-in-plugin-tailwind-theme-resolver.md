@@ -130,6 +130,23 @@ Auto-detect the flavour from the source text: `@theme` or `@import "tailwindcss"
 `@config "./tailwind.config.js"`, in which case **both** files are needed — so
 the API accepts multiple named sources (Step 2).
 
+**When detection is ambiguous or the version is unknown**, degrade rather than
+guess. This ships publicly and will meet configs from Tailwind versions that did
+not exist when it was written:
+
+- **Neither marker present** → return `ok: false` with a `parse-error` entry
+  saying which two file types fig-tail accepts. Do not assume a flavour.
+- **Both markers present** (a v4 CSS entry alongside a v3 config, without
+  `@config`) → resolve as v4 and add a warning naming the other file, since v4 is
+  the one that actually drives the build in that setup.
+- **A recognised major, unfamiliar minor/patch** → proceed. Theme structure is
+  stable within a major. Record the bundled default-theme version in
+  `source.defaultThemeVersion` so any skew is visible downstream.
+- **An unrecognised major** (a future v5, say) → **do not apply v4 semantics to
+  it.** Return a `TokenSet` with every namespace marked unknown, plus a warning
+  naming the version. The plugin then emits arbitrary values, which are correct
+  in any Tailwind version, instead of token names built on guessed semantics.
+
 ### v3 resolution semantics — get these exactly right
 
 Confirmed against Tailwind's v3 theme documentation:
@@ -212,6 +229,44 @@ report, and the README.
 These three cover the large majority of `require()` calls in real v3 configs, and
 resolving them is what makes the common `[...defaultTheme.fontFamily.sans]`
 pattern work.
+
+#### The safe-fallback rule — replace vs extend
+
+**This is the most consequential correctness rule in the package.** Get it wrong
+and fig-tail emits class names that do not exist in the user's build.
+
+When a theme key cannot be evaluated, what happens next depends on *which kind*
+of key it was:
+
+| Unresolvable key | Safe fallback | Why |
+|---|---|---|
+| `theme.extend.<ns>` | Keep Tailwind's defaults for `<ns>` | The project's config *adds* to the defaults, so the defaults are still real. Only the additions are missing. |
+| `theme.<ns>` (replacing) | Mark `<ns>` **unknown** — emit **no** tokens for it | The project's config *replaces* the defaults, so Tailwind's defaults are **not in their build**. Emitting them would produce `bg-blue-500` for a project that has no `blue-500`. |
+| A whole config that fails to parse | Mark **every** namespace unknown | Same reasoning, applied to everything. |
+
+An **unknown** namespace is not the same as an empty one and must be
+representable in `TokenSet` — add `unknownNamespaces: string[]`. Plan 002 treats
+an unknown namespace as "no tokens available", so every value in it falls
+through to an arbitrary value, which always compiles. Plans 004 and 005 surface
+it: "fig-tail could not read your colours; showing raw values for them."
+
+The instinct is to fall back to defaults because it produces prettier output.
+Resist it. `bg-[#3b82f6]` works in every project; `bg-blue-500` works only where
+`blue-500` exists, and where it does not, the developer pastes a class that
+silently does nothing and has no way to tell why. See invariant 2 in
+`plans/README.md`.
+
+The same rule governs three related cases:
+
+- **`prefix` unresolvable** → mark every namespace unknown. Emitting unprefixed
+  classes into a prefixed project produces uniformly dead output, which is worse
+  than raw values everywhere.
+- **`corePlugins` unresolvable, or a namespace's core plugin disabled** → mark
+  that namespace unknown *and* record it, so plan 002 knows not to emit an
+  arbitrary value for it either (a disabled core plugin means even
+  `bg-[#fff]` does not exist).
+- **`important: true` or a `important: '#app'` selector** → does not change class
+  names; record it in `source` for the record and carry on.
 
 **Not resolvable — each must produce a precise report entry, never a silent
 drop:**
@@ -392,7 +447,9 @@ export function validateTokenSet(value: unknown):
     "major": 3,                    // 3 | 4
     "entry": "tailwind.config.js",
     "prefix": null,                // e.g. "tw"
-    "remBasePx": 16                // the assumed rem base; never guess downstream
+    "remBasePx": 16,               // the assumed rem base; never guess downstream
+    "tailwindVersionGuess": null,  // if the config declares one; null otherwise
+    "defaultThemeVersion": "3.4.17" // which bundled defaults were merged in
   },
   "colors": {
     "brand-500": { "hex": "#3b82f6", "rgb": [59,130,246], "alpha": 1,
@@ -415,7 +472,10 @@ export function validateTokenSet(value: unknown):
   "opacity":       { "50": 0.5 },
   "breakpoints":   { "md": { "raw": "48rem", "px": 768 } },
   "zIndex":        { "10": "10" },
-  "unsupported":   { "<namespace>": 3 }      // recognised but not modelled
+  "unsupported":   { "<namespace>": 3 },     // recognised but not modelled
+  "unknownNamespaces": ["colors"]            // could NOT be read — emit raw values,
+                                             // never Tailwind defaults. See the
+                                             // safe-fallback rule above.
 }
 ```
 
@@ -431,6 +491,10 @@ Rules the validator must enforce:
 - `raw` is omitted when identical to `hex`.
 - Recognised-but-unmodelled namespaces go into `unsupported` with a count, never
   dropped silently.
+- **A namespace listed in `unknownNamespaces` must be empty in the token maps.**
+  Carrying both tokens and an unknown marker for the same namespace is a
+  contradiction, and the validator must reject it — this is the invariant that
+  stops a default value from leaking into a namespace the project replaced.
 
 **Check**: `pnpm --filter @fig-tail/theme test -t schema` → passes, including a
 hand-written valid fixture and five malformed variants (missing `alpha`, `px` as
@@ -441,9 +505,25 @@ channels) each failing with a distinguishable error.
 
 **Produces findings and a decision, not shipped code.** Do not skip.
 
-1. Collect **eight real-world v3 configs** into `fixtures/configs/v3/`. Sources:
-   popular open-source projects, Tailwind UI starters, shadcn/ui's config, and at
-   least one `tailwind.config.ts`. Record the provenance of each.
+1. Collect **eight real-world v3 configs** into `fixtures/configs/v3/`.
+
+   **Draw them from the wild, not from any one team's codebase.** fig-tail ships
+   to the Figma Community and will meet configs nobody here has seen; a corpus
+   tuned to a single project optimises for a sample of one. Aim for eight
+   deliberately *different* shapes:
+
+   - a minimal config (barely any `extend`)
+   - shadcn/ui's config (CSS-variable colours, `hsl(var(--x))` patterns)
+   - a Tailwind UI / official starter config
+   - one using a shared **preset**
+   - one written in TypeScript (`tailwind.config.ts`)
+   - one with several **plugins** contributing theme values
+   - one with a `prefix` set
+   - one from a monorepo, extending a config in another package
+
+   Record the provenance and licence of each in `fixtures/configs/README.md`. If
+   the repo owner's own config is available, add it as a **ninth**, clearly
+   marked as a smoke test — a useful data point, never the target.
 2. Prototype the acorn-based evaluator in `packages/theme/spike/eval.ts`.
 3. In `packages/theme/spike/FINDINGS.md`, record with pasted evidence:
    - For each of the eight: fully resolved, partially resolved (listing exactly
@@ -615,6 +695,17 @@ ALL must hold.
       actionable report — and the fully-resolved count is recorded in
       `FINDINGS.md` and in `plans/README.md` (6+ is the target; a lower number is
       a documented limitation, not a failure)
+- [ ] The fixture corpus covers all eight shapes listed in Step 3, with
+      provenance recorded
+- [ ] **The safe-fallback rule holds**: an unresolvable *replacing* key marks its
+      namespace unknown and emits no tokens for it; an unresolvable *extending*
+      key keeps the defaults. Both directions tested.
+- [ ] An unresolvable `prefix`, and a disabled core plugin, each mark the
+      affected namespaces unknown
+- [ ] An unrecognised Tailwind major marks every namespace unknown rather than
+      applying another major's semantics
+- [ ] The validator rejects a `TokenSet` carrying both tokens and an unknown
+      marker for the same namespace
 - [ ] All 4 v4 fixtures resolve, including resets, aliasing, and `@config`
 - [ ] `resolveTheme` never throws, for any input, including deliberately hostile
       ones
@@ -646,13 +737,18 @@ Stop and report back — do not improvise — if:
 - The two adapters cannot produce a structurally identical `TokenSet`. One schema
   is the point; if it cannot hold, the split needs designing rather than papering
   over.
-- Tailwind v5 exists and the owner has not said which versions to target.
+- Tailwind v5 exists **and** the owner wants it supported. Merely *encountering*
+  an unknown major is not a stop — the safe fallback marks every namespace
+  unknown and the plugin emits arbitrary values, which is correct in any
+  version. Adding real v5 support is a scoping decision.
 - A step's check fails twice after a reasonable attempt.
 
 ## Handoff / after it lands
 
-- **Plan 002** consumes `TokenSet` directly. Any change after 002 starts is
-  breaking — bump `schemaVersion` and say so in the commit.
+- **Plan 002** consumes `TokenSet` directly, including `unknownNamespaces` —
+  which it must treat as "no tokens here, emit an arbitrary value", never as
+  "use the defaults". Any schema change after 002 starts is breaking; bump
+  `schemaVersion` and say so in the commit.
 - **Plan 003** calls `resolveTheme` from the setup UI, stores the resulting
   `TokenSet`, and **must display the `unresolved` report to the user**. That
   display is the whole payoff of Step 8; do not let 003 discard it.

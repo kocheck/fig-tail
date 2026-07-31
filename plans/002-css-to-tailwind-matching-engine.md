@@ -149,6 +149,39 @@ Every match returns a confidence level. The ladder, highest to lowest:
 | `arbitrary` | No token is close. Fall back to Tailwind arbitrary-value syntax. | `bg-[#a1b2c3]` |
 | `none` | The property cannot be expressed in Tailwind at all. | an unsupported filter |
 
+### Unknown namespaces — the rule that keeps output safe in someone else's repo
+
+Plan 001 emits `unknownNamespaces: string[]` on the `TokenSet`. A namespace lands
+there when the resolver could not read a config key that **replaces** Tailwind's
+defaults (`theme.colors` rather than `theme.extend.colors`), when the `prefix`
+could not be resolved, when a core plugin is disabled, or when the Tailwind major
+is unrecognised.
+
+**Treat an unknown namespace as "no tokens exist here" — never as "use the
+defaults".** Every value in it must fall through to an arbitrary value:
+
+```
+colors ∈ unknownNamespaces,  background: #3b82f6   →   bg-[#3b82f6]   (arbitrary)
+                                                    NOT bg-blue-500
+```
+
+The reason is the whole shape of this product's risk. `bg-[#3b82f6]` compiles in
+every project on earth. `bg-blue-500` compiles to **nothing** in a project that
+replaced its palette — the developer pastes it, no styling appears, and there is
+no error message anywhere to explain why. fig-tail ships publicly, so the
+projects it runs against are ones nobody here can inspect; the only safe
+direction of failure is toward the raw value.
+
+Two refinements:
+
+- Attach a `note` to those results ("your config's colours could not be read")
+  so plans 004 and 005 can surface it once rather than per class.
+- When plan 001 reports a namespace unknown **because its core plugin is
+  disabled**, even the arbitrary value does not exist — `bg-[#fff]` requires the
+  `backgroundColor` core plugin. Return `none` with a note for those, not
+  `arbitrary`. Plan 001's `TokenSet` distinguishes the two cases; honour the
+  distinction.
+
 ### The empty token set must work
 
 Plan 003 defines a tier-3 state: **no Tailwind config at all**. In that state the
@@ -327,7 +360,9 @@ export type MatchOptions = {
   includeLayout: boolean
   /** Treat 'nearest' as a match and emit the class. Default FALSE. */
   acceptNearest: boolean
-  /** Class prefix from the theme, e.g. "tw" → "tw:bg-brand-500". */
+  /** Class prefix from the theme, e.g. "tw" → "tw:bg-brand-500". When plan 001
+   *  could not resolve the prefix it marks every namespace unknown, so this
+   *  being null never results in silently unprefixed output. */
   prefix: string | null
   /** ΔE and px tolerances; defaults per "Context". */
   tolerance: { colorExact: number; colorNearest: number; lengthExactPx: number; lengthNearestPx: number }
@@ -462,7 +497,15 @@ built on this; plans 004 and 005 use it to decide whether to show a warning bann
 Also add the **empty-token-set test** here: run `matchDeclarations` over all
 three captured fixtures with a `TokenSet` whose token maps are empty, and assert
 that every value produces an `arbitrary` result with a valid class, that layout
-utilities still resolve `exact-value`, and that nothing throws. This is plan
+utilities still resolve `exact-value`, and that nothing throws.
+
+And the **unknown-namespace test**, which is the safety-critical one: build a
+`TokenSet` that *has* a full colour palette but lists `colors` in
+`unknownNamespaces`, and assert that `background: #3b82f6` returns
+`bg-[#3b82f6]` and **never** a token name — even though a matching token is
+sitting right there in the map. Add the disabled-core-plugin variant too, which
+must return `none` rather than an arbitrary value. If either of these regresses,
+fig-tail starts emitting dead classes into other people's codebases. This is plan
 003's tier 3, and it is the difference between "the plugin works with no setup"
 and "the plugin crashes with no setup".
 
@@ -498,6 +541,11 @@ ALL must hold.
 - [ ] All six confidence levels are reachable and each has at least one test
 - [ ] An empty `TokenSet` produces `arbitrary` results for every value, still
       resolves layout utilities exactly, and never throws
+- [ ] A namespace in `unknownNamespaces` yields arbitrary values **even when
+      matching tokens are present in the map** — tested explicitly
+- [ ] A namespace unknown because its core plugin is disabled yields `none`, not
+      an arbitrary value
+- [ ] An unresolved `prefix` never produces unprefixed class names
 - [ ] `nearest` results always populate the `nearest` field, and never emit a
       class unless `acceptNearest: true`
 - [ ] The integration snapshot for the card fixture matches the exact expected

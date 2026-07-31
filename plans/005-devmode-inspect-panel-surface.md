@@ -308,6 +308,13 @@ The panel, rendering a `NodeResult`. Sections top to bottom:
    Plus, on any tier, when `configWarnings` is non-empty: "N settings in your
    config could not be read", expandable to the per-entry reasons and remedies
    from plan 001's resolver report.
+
+   And, given greater weight than the rest of that report, a line for
+   `unknownNamespaces`: "Colours could not be read from your config — showing
+   raw values for them." Those namespaces are why a developer sees
+   `bg-[#3b82f6]` where they expected `bg-brand-500`, and it is the single
+   question this panel is most likely to be asked. State it once at the top,
+   name the namespaces, and do not repeat it per class.
 2. **Header** — node name and type. When multiple layers are selected: "3 layers
    selected — showing Card" with previous/next controls.
 3. **All classes** — the full string with one copy button and a format toggle
@@ -407,6 +414,8 @@ ALL must hold.
       selection
 - [ ] Tier 3 shows usable arbitrary-value classes plus an **Add your config**
       action that works from Dev Mode — it never looks like an error
+- [ ] `unknownNamespaces` is explained once at the top, naming the namespaces,
+      and never repeated per class
 - [ ] Every copy button copies exactly what it displays (verified by pasting)
 - [ ] The two surfaces produce byte-identical class strings, asserted by a test
       **and** verified by hand across nine nodes

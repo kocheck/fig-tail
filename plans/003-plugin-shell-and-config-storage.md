@@ -458,9 +458,16 @@ Six states in the iframe:
    "Drop your `tailwind.config.js` (v3) or your CSS entry with `@theme` (v4)."
 2. **Resolving** — spinner past 300 ms.
 3. **Review** — before storing, show what was found: Tailwind version, token
-   counts per category, and — prominently — **the `unresolved` report**, each
-   entry with its path, plain-language message, and remedy. This is the whole
-   payoff of plan 001 Step 8; do not bury it. Offer Save and Cancel.
+   counts per category, **which bundled default-theme version was merged in**
+   (`source.defaultThemeVersion` — a public user on an older Tailwind should be
+   able to see the skew), and — prominently — **the `unresolved` report**, each
+   entry with its path, plain-language message, and remedy.
+
+   Call out `unknownNamespaces` separately and more loudly than the rest of the
+   report, because it is the one that changes output quality most: "fig-tail
+   could not read your **colours**, so it will show raw values like `#3b82f6`
+   for them rather than token names." Name the affected namespaces. This is the
+   whole payoff of plan 001 Step 8; do not bury it. Offer Save and Cancel.
 4. **Configured** — the same summary, plus **which tier is in use**, stated
    plainly ("Saved on this file — everyone inspecting it gets this" versus
    "Saved in your settings — only you see this"), a **staleness warning when

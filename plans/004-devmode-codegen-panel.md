@@ -282,6 +282,19 @@ which config produced the output:
 - tier 1 → `// Tailwind config: saved on this file`
 - tier 2 → `// Tailwind config: your personal settings (this file has none shared)`
 
+**Plus, on any tier, a line for `unknownNamespaces`** when the stored `TokenSet`
+has any. These are namespaces plan 001 could not read from the config — so plan
+002 emits raw values for them rather than token names that might not exist in
+the project's build:
+
+```
+// Colours could not be read from your config — showing raw values for them.
+```
+
+One line naming the affected namespaces, not one note per class. A developer
+seeing `bg-[#3b82f6]` where they expected `bg-brand-500` needs exactly this
+sentence to understand why.
+
 `errorResult(err)` returns a `PLAINTEXT` section containing the message and a
 one-line "report this" pointer. **Never rethrow.**
 
@@ -500,6 +513,8 @@ ALL must hold.
       banner — it never errors, empties, or refuses
 - [ ] The config-source tier is labelled on every render (tier 1, 2, or the
       tier-3 banner)
+- [ ] `unknownNamespaces` produces one explanatory line naming the affected
+      namespaces, not a note per class
 - [ ] The tier-3 banner names an action the developer can take themselves, and
       does **not** tell them to install or run anything
 - [ ] No exception escapes the generate callback (error-path tests pass)
