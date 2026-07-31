@@ -19,7 +19,7 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**: this plan was written at commit `2157dc6`, before
+> **Drift check (run first)**: this revision was written at commit `7932c82`, before
 > plans 002 and 003 existed. Confirm both are `DONE`, find their landing commits
 > with `git log --oneline -- plans/002-css-to-tailwind-matching-engine.md packages/match`
 > and `git log --oneline -- plans/003-plugin-shell-and-config-storage.md packages/plugin`,
@@ -35,14 +35,14 @@
   "plausible but wrong" is the failure mode. Steps 6 and 7 exist to catch it.
 - **Depends on**: 002, 003
 - **Category**: dx
-- **Planned at**: commit `2157dc6`, 2026-07-31 — dependency contracts are prospective.
+- **Planned at**: commit `7932c82`, 2026-07-31 — dependency contracts are prospective.
 
 ## Build sheet
 
 Use Node 20+ and pnpm. Copy package scripts and strict TypeScript settings from
 the landed packages; use named exports, no `any`, no non-null assertions, and
 colocated Vitest tests. Before every commit run
-`pnpm -r typecheck && pnpm -r lint && pnpm -r test`.
+`pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test`.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command or a named in-Figma check; it must produce the stated result before you
@@ -61,8 +61,8 @@ builds the durable test file this plan and plans 005–008 are all verified agai
 | `packages/plugin/src/mode-dev.ts` (rewrite) | the real generate handler | 1 |
 | `packages/plugin/src/hints.ts` + test | `boundVariables` → `VariableHint` | 2 |
 | `packages/plugin/src/render.ts` + test | `MatchResult[]` → `CodegenResult[]` | 3, 4 |
-| `packages/plugin/manifest.json` (edit) | the 5 codegen preferences | 5 |
-| `fixtures/figma/README.md` | the 9-node test matrix + file URL | 6 |
+| `packages/plugin/manifest.json` (edit) | the 4 codegen preferences | 5 |
+| `fixtures/figma/README.md` (edit) | add expected classes to plan 000's nine-node matrix | 6 |
 | `README.md` (section only) | using it in Dev Mode | 8 |
 
 Add `@fig-tail/match` as `workspace:*`. No new external dependencies.
@@ -74,9 +74,9 @@ Add `@fig-tail/match` as `workspace:*`. No new external dependencies.
 | 1 | Replace the stub with the real handler. **It must never return early because there is no config** — tier 3 emits arbitrary values plus a banner. Add the tier label. Catch everything; never rethrow. | `src/mode-dev.ts` | By hand in Dev Mode, all three tiers verified: tier 1 → classes + label; tier 2 → classes + label; tier 3 → **arbitrary classes + banner**, not an error |
 | 2 | `buildHints`: map every `boundVariables` key to its CSS property per the table in "Bound variables". Dedupe by variable ID, resolve with `Promise.all`, handle TextNode `fills` → `color`. | `src/hints.ts` + test | Unit tests pass for every table row, the TextNode case, the 4-sides-one-variable dedupe (exactly 1 call), and an unresolvable alias skipped without throwing |
 | 3 | Primary output section. Body is **the class string and nothing else** — no comments inside the copyable body. Do not re-sort; `toClassName` already did. | `src/render.ts` | Select the card node → section contains exactly the expected class string. Figma's copy button → paste → identical |
-| 4 | Drift section, emitted **only** when `summarise` reports any `nearest`/`arbitrary`/`none`. `nearest` never enters the primary string unless `acceptNearest` is on. | `src/render.ts` | Three purpose-built nodes verified by hand; a clean node produces **no** drift section |
-| 5 | Add the 5 codegen preferences from Step 5 and `optionsFromPreferences`. | `manifest.json`, `src/mode-dev.ts` | Each preference changes output live with **no plugin reload** — all 5 verified by hand |
-| 6 | Build the 9-node test file and write `fixtures/figma/README.md`: node name → expected class string → why. This is a durable deliverable. | `fixtures/figma/README.md` | All 9 nodes walked by hand and matching what you wrote. Mismatches either fixed or the expectation corrected **with a stated reason** |
+| 4 | Drift section, emitted only for `nearest`/`arbitrary`/`none`. A near result is report-only and can never enter the primary string. | `src/render.ts` | Three purpose-built nodes verified; near candidates appear only in attention output; clean node has no drift section |
+| 5 | Add the 4 codegen preferences from Step 5 and `optionsFromPreferences`. There is no near-match acceptance preference. | `manifest.json`, `src/mode-dev.ts` | Each preference changes output live with no reload; near output remains non-copyable under every combination |
+| 6 | Reuse plan 000's 9-node file and add node name → expected class string → provenance/why to its README. | `fixtures/figma/README.md` | All nine real captured nodes match; mismatches are fixed or expectation changes cite captured CSS evidence |
 | 7 | Instrument, measure (cold / warm / variable-heavy), then remove the instrumentation. Verify the corrupt-storage path. | `src/mode-dev.ts` | Timings in the commit message: warm <200 ms, cold <1 s, nothing >1 s. Corrupt chunk → readable error, not a hang |
 | 8 | README "Using it in Dev Mode" (~40 lines, one screenshot). | `README.md` | Someone else followed it from a configured file and got a class string |
 
@@ -120,7 +120,7 @@ function matchDeclarations(
   hints?: Record<string, VariableHint>,   // keyed by CSS property
 ): MatchResult[]
 
-function toClassName(results: MatchResult[], options?: { acceptNearest?: boolean }): string
+function toClassName(results: MatchResult[]): string
 function summarise(results: MatchResult[]): MatchSummary
 
 type Confidence =
@@ -138,20 +138,21 @@ type MatchResult = {
   value: string
   note?: string
   nearest?: { token: string; tokenValue: string; distance: number; unit: 'deltaE' | 'px' | 'ratio' }
+  provenance: MatchProvenance
+  ambiguity?: MatchAmbiguity
 }
 
-type VariableHint = { codeSyntax?: string; name?: string; collection?: string }
+type VariableHint = { variableId: string; codeSyntax?: string; name?: string; collection?: string }
 ```
 
-`nearest` results **do not** emit a class unless `options.acceptNearest` is
-true. That default is deliberate — see Step 4.
+`nearest` results always have `className: null`. There is no opt-in path. That
+structural rule is deliberate — see Step 4.
 
 **From `@fig-tail/plugin`** (plan 003):
 
-- `src/storage.ts` → `readConfig(): Promise<StoredConfig | null>`, with a
-  module-level cache invalidated on write. Reads from document storage
-  (`figma.root.getSharedPluginData('figtail', …)`, chunked + gzipped) with a
-  `clientStorage` fallback.
+- `src/storage.ts` → `readConfig(): Promise<ReadConfigResult>`, with a module-level
+  cache invalidated on write. It reads private document plugin data first, then
+  `clientStorage`, and retains typed failure diagnostics.
 - `src/mode-dev.ts` → currently a stub that returns one `CodegenResult`
   reporting whether a config is loaded. **You are replacing that stub.**
 - A manifest already declaring `capabilities: ["codegen", "inspect"]`,
@@ -314,10 +315,11 @@ Rewrite `src/mode-dev.ts`:
 ```ts
 figma.codegen.on('generate', async ({ node }) => {
   try {
-    const stored = await readConfig()          // { tokens, source } | null
+    const stored = await readConfig()          // complete ReadConfigResult
     const css = await node.getCSSAsync()
-    const results = matchDeclarations(css, stored?.tokens ?? null, optionsFromPreferences())
-    return renderSections(results, { node, tokens: stored?.tokens ?? null, source: stored?.source ?? null })
+    const active = stored.active
+    const results = matchDeclarations(css, active?.config.tokens ?? null, optionsFromPreferences())
+    return renderSections(results, { node, stored })
   } catch (err) {
     return errorResult(err)
   }
@@ -364,11 +366,15 @@ One line naming the affected namespaces, not one note per class. A developer
 seeing `bg-[#3b82f6]` where they expected `bg-brand-500` needs exactly this
 sentence to understand why.
 
+Render `partialNamespaces` separately: "Defaults for spacing were not confirmed
+because no exact Tailwind version was supplied; explicit project tokens still
+match." Do not merge this into the unknown message — the guarantees differ.
+
 `errorResult(err)` returns a `PLAINTEXT` section containing the message and a
 one-line "report this" pointer. **Never rethrow.**
 
 For this step, `renderSections` returns the status section plus the primary
-Tailwind section from `toClassName(results, { acceptNearest })`. The primary
+Tailwind section from `toClassName(results)`. The primary
 body remains the class string and nothing else.
 
 **Check**: in Figma desktop, in Dev Mode on the test file, verify all three
@@ -437,8 +443,8 @@ Code:
 
 Rules:
 
-- `nearest` results appear here **and** are excluded from the primary class
-  string by default (`acceptNearest: false`). A near-miss is a question, not an
+- `nearest` results appear here **and** are unconditionally excluded from the
+  primary class string. A near-miss is a question, not an
   answer, and silently emitting `bg-brand-500` for `#3b82f1` is exactly the
   failure this program exists to prevent.
 - `arbitrary` results **do** appear in the primary string (they are valid
@@ -473,11 +479,6 @@ because Figma has no boolean preference item type:
       { "label": "On", "value": "on", "isDefault": true },
       { "label": "Off", "value": "off" }
     ]},
-  { "itemType": "select", "propertyName": "acceptNearest",
-    "label": "Accept near matches (hides drift warnings)", "options": [
-      { "label": "Off", "value": "off", "isDefault": true },
-      { "label": "On", "value": "on" }
-    ]},
   { "itemType": "select", "propertyName": "output", "label": "Output",
     "options": [
       { "label": "Classes only", "value": "classes", "isDefault": true },
@@ -491,15 +492,10 @@ Read them via `figma.codegen.preferences` in `optionsFromPreferences()` and map
 the `on`/`off` strings explicitly onto `MatchOptions`; unknown or missing values
 fall back to the manifest defaults.
 
-Note the phrasing of `acceptNearest`: its label states the consequence
-("hides drift warnings"), because turning it on trades correctness for
-convenience and the user should know that at the point of choosing.
-
 **Check**: each preference changes the output live in Dev Mode without a plugin
 reload. Specifically: toggling `includeLayout` off removes `flex flex-col
-items-start`; toggling `acceptNearest` on moves a near-miss into the primary
-string and drops it from the drift section; switching `output` to `jsx` wraps
-the result as `className="…"`.
+items-start`; switching `output` to `jsx` wraps the result as `className="…"`;
+and the near-miss remains absent from every copyable format.
 
 **If** a needed preference cannot be expressed with the native item types, build
 a small preferences view in the settings iframe instead — but prefer the native
@@ -572,7 +568,9 @@ session.
   entries, error); `optionsFromPreferences` mapping every preference to
   `MatchOptions`.
 - **Error-path and fallback tests**: `getCSSAsync` rejecting, `readConfig`
-  returning `null` (→ arbitrary values plus banner, **not** an error), a corrupt
+  returning `{ active: null, available: { document: false, user: false },
+  preferred: 'document', overridden: false, failures: [] }` (→ arbitrary values
+  plus banner, **not** an error), a corrupt
   token set, an unresolvable variable alias (→ falls back to value matching with
   the confidence lowered) — each must return a `CodegenResult`, never throw.
 - **The Step 6 manual matrix** — nine nodes, each with a recorded expected
@@ -585,23 +583,25 @@ session.
 
 ALL must hold.
 
-- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r test` → exit 0
+- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test` → exit 0
 - [ ] Selecting a node in Dev Mode shows a copyable Tailwind class string
 - [ ] Class output is in canonical Tailwind order (verified against the card
       fixture's exact expected string)
 - [ ] Bound variables produce `exact-variable` only when `codeSyntax.WEB` names
       a configured token whose value agrees; invalid/stale syntax falls back to
       `name-match` or value matching
-- [ ] `nearest` results are excluded from the primary string by default and
+- [ ] `nearest` results are excluded from the primary string unconditionally and
       reported in the drift section with token, value, and distance
 - [ ] The drift section is absent when there is nothing to report
-- [ ] All five codegen preferences work live without a plugin reload
+- [ ] All four codegen preferences work live without a plugin reload
 - [ ] With no config at all, the panel emits arbitrary-value classes plus the
       banner — it never errors, empties, or refuses
 - [ ] The config-source tier is labelled on every render (tier 1, 2, or the
       tier-3 banner)
 - [ ] `unknownNamespaces` produces one explanatory line naming the affected
       namespaces, not a note per class
+- [ ] `partialNamespaces` explains that exact-version defaults were withheld
+      while explicit project tokens remain usable
 - [ ] The tier-3 banner names an action the developer can take themselves, and
       does **not** tell them to install or run anything
 - [ ] No exception escapes the generate callback (error-path tests pass)
@@ -622,9 +622,9 @@ Stop and report back — do not improvise — if:
   an `exact-value` match that is visibly not the right token. That is a plan-002
   correctness bug and the thresholds need revisiting with the owner, not a
   patch here.
-- `getCSSAsync()` returns a materially different shape from the examples in plan
-  002's "Context" (different property names, nested objects, units). Plan 002's
-  matchers were written against that shape and would all need revisiting.
+- `getCSSAsync()` differs materially from plan 000's checked-in captures for the
+  same fixture/Figma version. Re-capture and explain platform drift before
+  changing matcher expectations.
 - The generate callback cannot stay under the 2-second internal deadline on a realistically complex
   node. That is an architecture problem, not a tuning problem.
 - Codegen preferences do not persist between sessions, or do not reach
@@ -653,9 +653,8 @@ Stop and report back — do not improvise — if:
   `readConfig`/`buildHints` boundary, not inside the matcher.
 - **What a reviewer should scrutinise most**: Step 4's rule that `nearest` never
   enters the primary class string. It is the difference between a tool that
-  tells the truth and one that produces plausible-looking wrong code. Any
-  pressure to "just emit the close one" should be resisted — that is what the
-  `acceptNearest` preference is for, opted into knowingly.
+  tells the truth and one that produces plausible-looking wrong code. There is
+  deliberately no preference or API to emit the close one.
 - **Deliberately deferred**: multi-node selection (Figma passes one node to
   `generate`; handling a multi-select would mean defining what a combined class
   string even means), and any per-node caching of results.

@@ -19,7 +19,7 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**: this plan was written at commit `2157dc6`, before
+> **Drift check (run first)**: this revision was written at commit `7932c82`, before
 > plan 004 existed. Confirm 004 is `DONE`, locate its landing commit with
 > `git log --oneline -- plans/004-devmode-codegen-panel.md packages/plugin/src`,
 > and compare `mode-dev.ts`, `hints.ts`, and `render.ts` with the prospective
@@ -34,14 +34,14 @@
   impossible rather than a matter of discipline.
 - **Depends on**: 004
 - **Category**: dx
-- **Planned at**: commit `2157dc6`, 2026-07-31 — dependency contract is prospective.
+- **Planned at**: commit `7932c82`, 2026-07-31 — dependency contract is prospective.
 
 ## Build sheet
 
 Use Node 20+ and pnpm. Preserve plan 004's package scripts and strict TypeScript
 settings; use named exports, no `any`, no non-null assertions, and colocated
 Vitest tests. Before every commit run
-`pnpm -r typecheck && pnpm -r lint && pnpm -r test`.
+`pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test`.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command or a named in-Figma check; it must produce the stated result before you
@@ -57,7 +57,8 @@ A second Figma account helps for task 1 but is not required.
 | Path | Purpose | Task |
 |---|---|---|
 | `packages/plugin/notes/devmode-discovery.md` | the persistence findings | 1 |
-| `packages/plugin/src/pipeline.ts` + test | **the** shared resolution path | 2 |
+| `packages/plugin/src/pipeline.ts` + test | shared resolution path, operation context, bounded scheduler | 2 |
+| `packages/plugin/src/hints.ts` (edit) | context-owned variable cache | 2 |
 | `packages/plugin/src/mode-dev.ts` (refactor) | now calls the pipeline | 2 |
 | `packages/plugin/src/render.ts` (refactor) | shared grouping/ordering | 2 |
 | `packages/plugin/src/inspect/index.ts` | sandbox side, selection handling | 3 |
@@ -72,8 +73,8 @@ No new dependencies.
 | # | Do this | Files it may touch | Done when |
 |---|---|---|---|
 | 1 | Answer the 5 discovery questions in Step 1 by hand and write them up with screenshots. **Do not skip to task 2 first.** | `notes/devmode-discovery.md` | The file answers all 5 and ends with **one sentence** stating what a first-time developer must do. Plan 010's README is built from that sentence |
-| 2 | **Refactor before building anything new.** Extract `resolveNode` into `src/pipeline.ts`; point `mode-dev.ts` at it. Add the test asserting `matchDeclarations` is imported in **exactly one file**. | `src/pipeline.ts`, `mode-dev.ts`, `render.ts` + test | The single-import-site test passes, **and** plan 004's full 9-node matrix produces byte-identical output to `fixtures/figma/README.md`. Any difference is a refactor bug, not an improvement |
-| 3 | Build the panel: config status (3 tiers + `unknownNamespaces`), header w/ multi-select stepper, all-classes + format toggle, grouped classes w/ confidence badges, needs-attention, empty state. Debounce `selectionchange` at ~120 ms and enforce latest-request-wins. | `src/inspect/**`, `src/ui/inspect/**` | Every state walked by hand. Rapid A→B selection can never render stale A after B. **Every copy button pasted into a text editor and compared** — they must copy exactly what they display |
+| 2 | Refactor first. Extract `resolveNode`, then add `ResolutionContext` and `resolveNodes`: one storage read, promise caches, cancellation/deadline, and max-8 bounded scheduling. Single-node callers get a fresh context. Point `mode-dev.ts` at it and enforce one matcher import. | pipeline, hints, mode-dev, render + tests | nine-node output unchanged; one matcher import; 100 nodes/one variable → one variable API call; max in-flight ≤8; cancel/deadline stops new work; corrupt storage read happens once per operation |
+| 3 | Build the panel: config status (3 tiers + `unknownNamespaces` + `partialNamespaces`), header w/ multi-select stepper, all-classes + format toggle, grouped classes w/ confidence badges, needs-attention, empty state. Debounce `selectionchange` at ~120 ms and enforce latest-request-wins. | `src/inspect/**`, `src/ui/inspect/**` | Every state walked by hand, including exact-version defaults withheld while explicit tokens remain. Rapid A→B selection can never render stale A after B. **Every copy button pasted into a text editor and compared** — they must copy exactly what they display |
 | 4 | Add the cross-surface consistency test, then verify by hand across all 9 nodes. | `src/consistency.test.ts` | Test passes; the 9-node hand comparison shows zero differences; comparison recorded in the commit message |
 | 5 | Measure warm / rapid / cold. Verify the 3 fallback modes on **both** surfaces. | `src/inspect/**` | Warm <250 ms, cold <1 s, rapid selection stays responsive. No config → arbitrary classes + banner on both surfaces, never an error |
 | 6 | README "Two ways to see it" — Code section and Inspect panel, with task 1's sentence and a screenshot of each. | `README.md` | Someone followed it from a fresh Figma session and reached class names by **both** routes |
@@ -326,18 +327,45 @@ export type NodeResult = {
   className: string          // sorted, canonical order
   groups: Array<{ label: string; classNames: string[]; results: MatchResult[] }>
   configSource: 'document' | 'user' | null
+  documentConfigId: string | null
+  configInputSha256: string | null
   configLabel: string
   tokens: TokenSet | null
-  configWarnings: string[]   // from the stored unresolved report
+  configDiagnostics: {
+    unresolved: PersistedDiagnostic[]
+    warnings: string[]
+    storageFailures: StorageFailure[]
+  }
   unknownNamespaces: string[]
+  partialNamespaces: string[]
 }
 
 export type UiNodeResult = Omit<NodeResult, 'tokens'>
 
+export type ResolutionContext = {
+  storage: ReadConfigResult
+  variableCache: Map<string, Promise<Variable | null>>
+  cssCache: Map<string, Promise<Record<string, string>>>
+  cancelled: () => boolean
+  deadlineAt?: number
+  maxConcurrency: number       // default 8; never unbounded Promise.all
+}
+
+export async function createResolutionContext(
+  options?: { cancelled?: () => boolean; deadlineAt?: number; maxConcurrency?: number },
+): Promise<ResolutionContext>
+
 export async function resolveNode(
   node: SceneNode,
   options: Partial<MatchOptions>,
+  context?: ResolutionContext,
 ): Promise<NodeResult>
+
+export async function resolveNodes(
+  nodes: SceneNode[],
+  options: Partial<MatchOptions>,
+  context: ResolutionContext,
+): Promise<{ results: NodeResult[]; truncated: boolean; reason?: 'cancelled' | 'deadline' }>
 ```
 
 It does what plan 004's generate handler currently does inline: `readConfig()`,
@@ -349,6 +377,14 @@ pipeline context only: before posting to the iframe, convert to `UiNodeResult`
 and strip the full TokenSet. Do not structured-clone ~120 kB of tokens on every
 selection change.
 
+`createResolutionContext` reads storage once. `buildHints` uses the context's
+promise cache so concurrent callers deduplicate in-flight variable lookups, not
+just completed ones. `resolveNode` similarly caches CSS per node for the life of
+the operation. `resolveNodes` owns a small worker queue (default 8), preserves
+input order, and checks cancellation/deadline before starting each node. It never
+creates an unbounded `Promise.all(nodes.map(...))`. Cache lifetime is one user
+operation; no cross-selection cache exists, so invalidation remains simple.
+
 Refactor `mode-dev.ts` to call it. Behaviour must be **unchanged** — plan 004's
 test matrix is the regression net.
 
@@ -356,10 +392,10 @@ Then add the enforcement test: assert that `matchDeclarations` is imported in
 exactly one file (`src/pipeline.ts`) across `packages/plugin/src`. A second
 import site is how the surfaces drift.
 
-**Check**: `pnpm --filter @fig-tail/plugin test` → passes, including the
-single-import-site test. Re-run **plan 004's full nine-node test matrix** in Dev
-Mode and confirm every output is identical to what `fixtures/figma/README.md`
-records. Any difference is a refactor bug, not an improvement.
+**Check**: tests cover the single import, stable ordering, max eight in flight,
+cancel/deadline, one storage read, one variable API call for 100 nodes sharing a
+variable, and one CSS read per node. Re-run plan 004's nine-node matrix and
+confirm byte-identical output.
 
 ### Step 3: Build the inspect-panel UI
 
@@ -377,7 +413,7 @@ iframe message. Sections top to bottom:
      shows complete, copyable arbitrary-value classes, and the button works
      without edit access.
 
-   Plus, on any tier, when `configWarnings` is non-empty: "N settings in your
+   Plus, on any tier, when `configDiagnostics.unresolved` is non-empty: "N settings in your
    config could not be read", expandable to the per-entry reasons and remedies
    from plan 001's resolver report.
 
@@ -387,6 +423,12 @@ iframe message. Sections top to bottom:
    `bg-[#3b82f6]` where they expected `bg-brand-500`, and it is the single
    question this panel is most likely to be asked. State it once at the top,
    name the namespaces, and do not repeat it per class.
+
+   When `partialNamespaces` is non-empty, add a separate line: "Exact Tailwind
+   version not confirmed — bundled defaults for spacing and colours are
+   withheld; explicit project tokens still match." Name the actual namespaces.
+   Keep this separate from `unknownNamespaces`: partial means explicit values
+   are usable, while absent defaults are deliberately not guessed.
 2. **Header** — node name and type. When multiple layers are selected: "3 layers
    selected — showing Card" with previous/next controls.
 3. **All classes** — the full string with one copy button and a format toggle
@@ -469,7 +511,8 @@ following it literally from a fresh Figma session.
 - **Unit tests**: `resolveNode` for each node shape; grouping and ordering; the
   single-import-site enforcement; multi-select handling; debounce and
   out-of-order async completion behaviour;
-  the three failure modes.
+  the three failure modes; operation-scoped promise caches; bounded concurrency;
+  cancellation/deadline; stable result order.
 - **Cross-surface consistency test**: Step 4, byte-identical class strings.
 - **Plan 004 regression**: the full nine-node matrix, re-run after the Step 2
   refactor, matching `fixtures/figma/README.md` exactly.
@@ -483,12 +526,16 @@ following it literally from a fresh Figma session.
 
 ALL must hold.
 
-- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r test` → exit 0
+- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test` → exit 0
 - [ ] `packages/plugin/notes/devmode-discovery.md` answers all five Step 1
       questions with evidence, and states in one sentence what a first-time
       developer must do
 - [ ] `matchDeclarations` is imported in exactly one file (`src/pipeline.ts`),
       asserted by a test
+- [ ] `ResolutionContext` performs one storage read per operation, deduplicates
+      in-flight variable/CSS calls, and `resolveNodes` never exceeds 8 in flight
+- [ ] Cancellation/deadline prevents new work and returns a labelled partial
+      result while preserving completed-result order
 - [ ] Plan 004's nine-node matrix produces identical output after the refactor
 - [ ] The Inspect panel renders every state in Step 3, including all three
       config tiers, the unresolved-config warning, multi-select, and empty
@@ -497,6 +544,8 @@ ALL must hold.
       action that works from Dev Mode — it never looks like an error
 - [ ] `unknownNamespaces` is explained once at the top, naming the namespaces,
       and never repeated per class
+- [ ] `partialNamespaces` is explained once at the top, naming withheld-default
+      namespaces while confirming that explicit project tokens remain usable
 - [ ] Every copy button copies exactly what it displays (verified by pasting)
 - [ ] The two surfaces produce byte-identical class strings, asserted by a test
       **and** verified by hand across nine nodes

@@ -19,9 +19,9 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**: this plan was written at commit `2157dc6`, before
-> plan 001's package existed. Confirm plan 001 is `DONE`, run
-> `git diff --stat 2157dc6..HEAD -- packages/theme`, and compare its live exports
+> **Drift check (run first)**: this revision was written at commit `7932c82`, before
+> plan 001's package existed. Confirm plans 000 and 001 are `DONE`, run
+> `git diff --stat 7932c82..HEAD -- packages/theme fixtures/figma`, and compare live exports
 > with the contracts quoted below. A non-empty diff is expected; a contract
 > mismatch is a STOP condition.
 
@@ -33,9 +33,9 @@
   per-entry cap). The cross-user read question in Step 8 used to be the big risk;
   the three-tier config-source ladder demotes it to a convenience question, since
   any developer can add the config themselves without edit access.
-- **Depends on**: 001
+- **Depends on**: 000, 001
 - **Category**: dx
-- **Planned at**: commit `2157dc6`, 2026-07-31 — dependency contract is prospective.
+- **Planned at**: commit `7932c82`, 2026-07-31 — dependency contracts are prospective.
 
 ## Build sheet
 
@@ -43,7 +43,7 @@ Use Node 20+ and pnpm. Copy package scripts and strict TypeScript settings from
 `packages/theme` where applicable; the plugin is the documented exception that
 builds with `build.mjs`. Use named exports, no `any`, no non-null assertions,
 and colocated Vitest tests. Before every commit run
-`pnpm -r typecheck && pnpm -r lint && pnpm -r test`.
+`pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test`.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command or a named in-Figma check; it must produce the stated result before you
@@ -60,22 +60,24 @@ Import the plugin with Plugins → Development → Import plugin from manifest.
 
 | Path | Purpose | Task |
 |---|---|---|
-| `packages/plugin/package.json`, `tsconfig.json`, `build.mjs` | package + two-bundle esbuild | 1 |
+| `packages/plugin/package.json`, `tsconfig.sandbox.json`, `tsconfig.ui.json`, `vitest.config.ts`, `build.mjs` | package + isolated sandbox/UI types + two-bundle esbuild | 1 |
+| `packages/plugin/src/shared/messages.ts`, `messages.test.ts` | neutral sandbox↔UI bootstrap contract and first meaningful test | 1 |
 | `packages/plugin/manifest.json` | dual capability, no network | 2 |
-| `packages/plugin/src/main.ts` | sandbox entry, mode branching | 3 |
+| `packages/plugin/src/main.ts` | inert scaffold entry, then real mode branching | 1, 3 |
 | `packages/plugin/src/mode-dev.ts`, `mode-design.ts` | the two editor branches (stubs) | 3 |
 | `packages/plugin/src/setup.ts` + test | resolve → validate → store orchestration | 4 |
-| `packages/plugin/src/storage.ts` + test | 3-tier ladder, gzip, chunking | 5 |
-| `packages/plugin/src/ui/index.html`, `main.tsx`, `styles.css` | setup UI, 6 states | 6 |
+| `packages/plugin/src/storage.ts`, `storage-types.ts` + tests | complete 3-tier contract, private data, gzip, chunking | 5 |
+| `packages/plugin/src/ui/index.html`, `main.tsx`, `styles.css` | inert scaffold UI, then setup UI with 6 states | 1, 6 |
 | `eslint.config.js` (edit) | write-safety rule | 7 |
 | `packages/plugin/src/write-safety.test.ts` | bundle audit | 7 |
+| `packages/plugin/notes/storage-matrix.md` | durable tier/cross-account verification | 8 |
 | `README.md` (section only) | installing locally | 9 |
 
 ### Dependencies
 
 ```bash
-pnpm add --filter @fig-tail/plugin fflate
-pnpm add --filter @fig-tail/plugin -D @figma/plugin-typings esbuild
+pnpm add --filter @fig-tail/plugin --save-exact fflate
+pnpm add --filter @fig-tail/plugin -D --save-exact @figma/plugin-typings esbuild
 ```
 
 Plus `@fig-tail/theme` as `workspace:*`.
@@ -84,14 +86,14 @@ Plus `@fig-tail/theme` as `workspace:*`.
 
 | # | Do this | Files it may touch | Done when |
 |---|---|---|---|
-| 1 | Scaffold the package and `build.mjs` (two esbuild passes; the UI must be inlined into one HTML file). | `package.json`, `tsconfig.json`, `build.mjs` | `pnpm --filter @fig-tail/plugin build` → exit 0; `dist/main.js` and `dist/ui.html` exist; `dist/ui.html` has `<script>` with **no** `src=` |
-| 2 | Register a development plugin in Figma to obtain a real ID, then write `manifest.json` as Step 2 specifies, including both capabilities. | `manifest.json` | Import into Figma desktop with no manifest errors, and all three entry surfaces are reachable |
+| 1 | Scaffold the package and `build.mjs` with inert but real sandbox/UI entries and a neutral message-contract test. Split sandbox and iframe TypeScript configs; DOM types are UI-only and Figma globals sandbox-only. | package, both tsconfigs, Vitest config, build, scaffold entries, `src/shared/**` | test and build succeed; both artifacts exist; negative type fixtures prove `document` fails in sandbox code and `figma` fails in UI code; UI remains one inlined HTML file |
+| 2 | Reuse plan 000's registered development-plugin ID, then write `manifest.json` as Step 2 specifies, including both capabilities. | `manifest.json` | Import into Figma desktop with no manifest errors; the plugin appears in the design list and both Dev Mode surface selectors, and invoking it loads the compiled scaffold without a missing-artifact error |
 | 3 | Branch on both `figma.editorType` **and** `figma.mode`; add design, codegen, and inspect stubs. Never call `figma.showUI` inside `generate`. | `src/main.ts`, `mode-dev.ts`, `mode-design.ts` | By hand: Code section shows the codegen stub; the action opens setup; Inspect mode shows the iframe placeholder; design editor opens setup |
-| 4 | Config ingestion. Run `resolveTheme` **in the UI iframe**, not the sandbox. Handle `missing-import` by asking for the named file. | `src/setup.ts` + test | Unit tests for all 4 resolver outcomes pass; each plan-001 fixture config dropped in produces that fixture's known result |
-| 5 | Storage: the **three-tier ladder** (document / user / none), stable document config ID, gzip + base64 + ≤80 kB chunks, meta written last, stale chunks cleared, module-level cache. | `src/storage.ts` + test | Unit tests pass: 250 kB round-trip; stable document ID; 4→2 shrink clears stale chunks; truncated read degrades with a diagnostic. Then reload in Figma and verify the same token count |
-| 6 | Setup UI, **six** states. Must open from Dev Mode as well as the design editor. Include the credential scan and the `unknownNamespaces` callout. | `src/ui/**` | All six states walked by hand in Figma, incl. the credential warning on a config containing `apiKey: "sk-live-abc123"` |
-| 7 | Write-safety: the ESLint rule **and** the bundle test. Exactly **one** allowlist entry (`setSharedPluginData`). | `eslint.config.js`, `src/write-safety.test.ts` | Both pass. Then add `figma.currentPage.selection[0].name = 'x'` to `main.ts` → **both fail**. Remove → both pass. Record this in the commit message. |
-| 8 | Verify the ladder: every tier and transition in Step 8(a) by hand; then the cross-user read in 8(b). | none (verification only) | 8(a) fully verified and recorded. 8(b) passed **or** explicitly recorded as unverified — either is acceptable |
+| 4 | Config ingestion. Run `resolveTheme` in the UI iframe. Accept exact version evidence from a dropped `package.json`; handle missing files by name. Redact diagnostics and pass only resolved data/source metadata to storage. | `src/setup.ts` + test | resolver outcomes pass; exact/missing/skewed versions show correct default status; a secret marker inside an unresolved expression is absent from every sandbox message and diagnostic |
+| 5 | Implement the exact `StoredConfig`, `ReadConfigResult`, and `WriteResult` contracts below. Three tiers, private `setPluginData`, stable document ID, ≤80 kB chunks, meta last, stale cleanup, diagnostics, cache. Never persist raw config. | storage files + tests | contract/type tests pass; 250 kB round-trip; 4→2 cleanup; corrupt reads retain diagnostics/fallback; unresolved-expression canary absent from document and client storage |
+| 6 | Setup UI, six states. Must open from Dev Mode and design editor. Show exact-version/default coverage, `unknownNamespaces`, `partialNamespaces`, unresolved diagnostics, source filenames/hashes, and the fact that raw source is discarded. | `src/ui/**` | all states walked by hand, including missing package.json, minor skew, no edit access, both tiers, and Remove |
+| 7 | Write-safety: ESLint and a bundle test whose package script always builds first. Exactly one allowlist entry (`setPluginData`). | `eslint.config.js`, `src/write-safety.test.ts`, package test script | `pnpm --filter @fig-tail/plugin test -t write-safety` builds current source and passes; a deliberate node-name mutation fails both guards; remove and re-run |
+| 8 | Verify every tier/transition and the production cross-account read; write the results to `notes/storage-matrix.md`. | `notes/storage-matrix.md` | all one-user transitions recorded; second-account read passed or explicitly UNVERIFIED. UNVERIFIED adds the plan-010 publication gate |
 | 9 | README "Installing the plugin" section (~25 lines). | `README.md` | You followed your own README from a clean checkout and reached a loaded config in Dev Mode without opening another file |
 
 **Task 7 is the one a reviewer will check hardest.** A guard nobody has watched
@@ -160,11 +162,10 @@ list in the same commit.
    `figma.showUI`. This is the supported way to give a codegen plugin a settings
    modal, and it is how a Dev Mode user reaches setup. —
    [CodegenPreference](https://developers.figma.com/docs/plugins/api/CodegenPreference/)
-7. **`setSharedPluginData` enforces a 100 kB limit per entry** (namespace + key +
-   value combined), enforced from 17 March 2025. Chunking across keys is the
-   documented workaround. —
-   [Update 109](https://developers.figma.com/docs/plugins/updates/2025/03/17/version-1-update-109/)
-   · [setSharedPluginData](https://developers.figma.com/docs/plugins/api/properties/nodes-setsharedplugindata)
+7. **`setPluginData` is private to the plugin ID and enforces a 100 kB limit per
+   entry.** Other plugins cannot read it; collaborators running the same plugin
+   are the intended readers. Chunking across keys is still required. —
+   [setPluginData](https://developers.figma.com/docs/plugins/api/properties/nodes-setplugindata/)
 8. **`figma.clientStorage` has a 5 MB total limit**, is per-user and per-plugin,
    and is not shared between collaborators. **It needs no edit access**, which is
    what makes the developer-pastes-it-themselves fallback work. —
@@ -184,10 +185,9 @@ list in the same commit.
 
 ### The config-source ladder — this plan's core design
 
-There is one unverified platform question here: **whether a Dev Mode user
-without edit access can read `figma.root.getSharedPluginData(...)`.** Reading
-ought to be permitted for anyone who can open the file, but it is unconfirmed
-in-product for a Dev-seat viewer.
+Plan 000 records whether a Dev Mode user without edit access can read
+`figma.root.getPluginData(...)` written by the same plugin ID. Re-read that
+evidence before implementation; plan 003 repeats it against production storage.
 
 It does not block anything, because this plan builds a **three-tier ladder**
 rather than a single path. Every tier produces usable output, and every tier is
@@ -195,7 +195,7 @@ labelled so the user knows which one they are on.
 
 | Tier | Source | Who sets it | Needs edit access | Label shown |
 |---|---|---|---|---|
-| 1 (preferred) | Document storage — `setSharedPluginData` on `figma.root` | whoever owns the file, once | yes, to **write** | "Using the config saved on this file" |
+| 1 (preferred) | Private document storage — `setPluginData` on `figma.root` | whoever owns the file, once | yes, to **write** | "Using the config saved on this file" |
 | 2 (fallback) | Per-user storage — `figma.clientStorage` | any user, including a Dev-seat viewer | **no** | "Using your personal config — this file has no shared one" |
 | 3 (degraded) | No config at all | — | — | "No Tailwind config — generic Tailwind syntax; project prefix/settings may require changes. Add your config for confirmed names." |
 
@@ -219,8 +219,9 @@ team's shared truth is the default. The UI shows a one-line notice and a switch
 override is possible but never accidental. Store the user's choice in
 `clientStorage`.
 
-Step 8 still tests the read question, because knowing the answer shapes plan
-010's documentation. A negative result costs convenience, not function.
+Step 8 repeats the read question on production code. A negative result costs
+convenience, not function. An UNVERIFIED result blocks plan 010's team-sharing
+claim and Community submission.
 
 ### The write-safety invariant (program-wide, set by the repo owner)
 
@@ -229,7 +230,7 @@ Restated here because this plan is where it gets enforced:
 > fig-tail never mutates the Figma document except when a human clicks an
 > explicit "Apply" in the setup UI, having first seen a dry-run diff. The only
 > document-write APIs permitted anywhere in this codebase are
-> `figma.root.setSharedPluginData` (this plan) and
+> `figma.root.setPluginData` (this plan) and
 > `Variable.setVariableCodeSyntax('WEB', …)` (plan 007). Variable **names** are
 > never written.
 
@@ -247,22 +248,18 @@ available. During development the plugin runs as an unpublished local plugin
 (Figma **desktop** app → Plugins → Development → Import plugin from manifest).
 You need the desktop app to test anything in this plan.
 
-### What gets stored, and why both
+### What gets stored — data minimization is the contract
 
-Store **two** things:
+Store the resolved `TokenSet`, the complete unresolved/warning report, exact
+version/default-coverage provenance, source filenames, byte counts, and SHA-256
+hashes. **Never store raw config source in v1**, in document or personal storage.
+The source may contain private file globs, internal package names, comments, or
+credentials. The resolver processes it locally in the iframe and discards it.
 
-1. **The resolved `TokenSet`** — what plans 004–008 actually read. Large
-   (up to ~120 kB), so it is gzipped and chunked.
-2. **The original config source text** — small (a few kB), and worth keeping for
-   three reasons: the setup UI can show what was provided; a future resolver
-   improvement can re-resolve without asking the designer for the file again; and
-   a support conversation can start from the actual input.
-
-Both go under the `figtail` namespace. Neither contains secrets — a Tailwind
-config is design tokens and file globs. **Add a guard anyway**: before storing
-source text, scan for anything resembling a credential (`process.env`,
-`api_key`, `token`, long base64-ish literals) and warn the user, since the source
-becomes readable by everyone with file access. See Step 6.
+The setup UI can show the report and metadata immediately after resolution. On a
+later replacement it asks for the files again; that small inconvenience is the
+cost of not embedding source code in a design document. A future opt-in source
+archive requires a separate privacy/security plan, not a boolean added here.
 
 ### Package layout to create
 
@@ -271,9 +268,12 @@ packages/plugin/
 ├── manifest.json
 ├── package.json
 ├── build.mjs                  # esbuild: sandbox bundle + inlined UI HTML
+├── tsconfig.sandbox.json      # ES2020 + Figma types, no DOM
+├── tsconfig.ui.json           # ES2020 + DOM, no Figma global
 ├── src/
 │   ├── main.ts                # sandbox entry — the `figma` global lives here
-│   ├── storage.ts             # chunked read/write + clientStorage fallback
+│   ├── storage.ts             # private chunked read/write + clientStorage fallback
+│   ├── storage-types.ts       # persisted/read/write contracts
 │   ├── setup.ts               # resolve + validate + store orchestration
 │   ├── mode-design.ts         # figma.editorType === 'figma'
 │   ├── mode-dev.ts            # figma.editorType === 'dev' (stubs here)
@@ -345,7 +345,7 @@ Needed on hand:
 - The real Inspect-panel surface — plan 005. This plan renders a placeholder.
 - The linter UI — plan 006.
 - Any call to `setVariableCodeSyntax` — plan 007. This plan writes **only**
-  `figma.root.setSharedPluginData('figtail', …)`.
+  private fig-tail keys via `figma.root.setPluginData(...)`.
 - Subtree walking — plan 008. The CLI — plan 009. Publishing — plan 010.
 - Network access. The manifest sets `"networkAccess": { "allowedDomains": ["none"] }`
   and it stays that way.
@@ -368,16 +368,36 @@ passes: `src/main.ts` → `dist/main.js` (format `iife`, target `es2017`, platfo
 `browser`, no Node polyfills), and the UI → a single inlined `dist/ui.html`. Add
 a `--watch` flag; the reload loop is frequent.
 
-**Check**: `pnpm --filter @fig-tail/plugin build` → exit 0; both files exist;
-`dist/ui.html` contains its CSS and JS inline (grep for `<script` with no `src=`).
+Create two non-overlapping TypeScript projects. `tsconfig.sandbox.json` includes
+sandbox/storage/mode code, `lib: ["es2020"]`, and Figma plugin typings. It must
+not see DOM globals. `tsconfig.ui.json` includes only iframe/setup UI code and
+uses `lib: ["es2020", "dom", "dom.iterable"]`; it must not include the Figma
+plugin typings. Shared message types live in a third neutral include path that
+typechecks under both. The package `typecheck` script runs both projects.
+
+Create the build's real entry files in this task. The sandbox entry performs no
+document work and closes with a scaffold-only message; the UI entry renders a
+plain scaffold label. Task 3 replaces the sandbox branch and task 6 replaces the
+UI. Define a minimal discriminated sandbox↔UI message in `src/shared/messages.ts`
+and test its type guard at runtime so `passWithNoTests: false` is satisfied by a
+real boundary test, not an empty-suite exemption.
+
+From this first plugin commit onward, define the plugin package's `test` script
+as build-then-Vitest. That invariant lets the later write-safety suite inspect a
+fresh current-source bundle even when a caller runs only
+`pnpm --filter @fig-tail/plugin test`; a clean checkout must not need a manual
+pre-build.
+
+**Check**: test, typecheck, and build pass; the message guard test is collected;
+both artifacts exist; `dist/ui.html` has no external script. Temporary negative
+fixtures using `document` in sandbox code and `figma` in UI code each fail the
+correct TypeScript project.
 
 ### Step 2: Write the manifest with both Dev Mode capabilities
 
-Before hand-writing the manifest, use Figma desktop's development-plugin flow
-to create/register **fig-tail** and let Figma generate a manifest with the real
-development plugin ID. Copy that exact ID into the repository manifest. A
-guessed value or publish-time placeholder is not importable and is not an
-acceptable intermediate state.
+Reuse the exact development-plugin ID registered and proven by plan 000. Do not
+register a second identity: private plugin data is keyed by plugin ID, so changing
+the ID invalidates the storage evidence and makes existing document data unreadable.
 
 ```jsonc
 {
@@ -458,11 +478,18 @@ plugin opens the same setup UI. Confirm all four by hand.
 iframe**:
 
 1. The UI accepts one or more files by paste or drop, keeping each file's name.
-2. It calls `resolveTheme({ sources })` from `@fig-tail/theme`.
+   It also accepts `package.json` solely as version evidence. Only an exact
+   `x.y.z` dependency is confirmed; `^`, `~`, ranges, tags, and workspace specs
+   are visibly unconfirmed and never authorize bundled-default merging.
+2. It calls `resolveTheme({ sources, tailwindVersion })` from `@fig-tail/theme`.
 3. On a `missing-import` or unresolved `@config` entry, it **asks for the named
    file** rather than failing — a v4 setup often needs `app.css` plus
    `tailwind.config.js`, and the report says exactly which.
-4. It posts `{ tokens, unresolved, warnings, sources }` to the sandbox.
+4. It hashes each source in the iframe, redacts diagnostics, then posts `{ tokens, unresolved,
+   warnings, sourceMetadata }` to the sandbox. `sourceMetadata` contains name,
+   SHA-256, and byte count — never source text. The posted `unresolved` entries
+   are `PersistedDiagnostic[]`: copy path/reason/source/line/message, but drop
+   the resolver-only `snippet` before crossing the iframe boundary.
 5. The sandbox validates with `validateTokenSet` and stores (Step 5).
 
 Time the resolve step and show a spinner past 300 ms. A large config with a full
@@ -472,41 +499,95 @@ default theme is real work.
 resolve stores; a resolve with `ok: false` stores nothing and surfaces the report;
 a `missing-import` result triggers the "provide this file too" path; a resolve
 returning tokens that fail `validateTokenSet` stores nothing and reports. Then in
-Figma: drop each of plan 001's fixture configs in and confirm the outcome matches
-that fixture's known resolution result.
+Figma: drop each plan-001 fixture with matching, missing, and deliberately skewed
+`package.json` evidence and confirm the expected default-coverage result. Include
+a unique canary specifically inside an unresolved expression and assert it never
+crosses the iframe message, including through any diagnostic field.
 
 ### Step 5: Implement chunked document storage
 
-`src/storage.ts`:
+`src/storage-types.ts` is authoritative; do not invent result shapes at call
+sites:
 
 ```ts
-const NAMESPACE = 'figtail'
-// Keys: `meta`, `tokens.0`, `tokens.1`, …, `source.0`, …
-const CHUNK_BYTES = 80_000   // headroom under the 100 kB per-entry cap
+export type PersistedDiagnostic = Omit<Unresolved, 'snippet'> & {
+  /** Compile-time guard: raw resolver snippets never cross or persist. */
+  snippet?: never
+}
 
-export async function writeConfig(payload: StoredConfig): Promise<WriteResult>
-export async function readConfig(): Promise<StoredConfig | null>
-export async function clearConfig(): Promise<void>
+export type StoredConfig = {
+  formatVersion: 1
+  tokens: TokenSet
+  resolution: { unresolved: PersistedDiagnostic[]; warnings: string[] }
+  provenance: ConfigProvenance
+}
+
+export type StorageFailure = {
+  tier: 'document' | 'user'
+  reason: 'missing' | 'no-access' | 'invalid-meta' | 'missing-chunk'
+        | 'checksum' | 'decompress' | 'parse' | 'schema'
+  detail: string
+}
+
+export type ReadConfigResult = {
+  active: null | {
+    config: StoredConfig
+    tier: 'document' | 'user'
+    documentConfigId: string | null
+  }
+  available: { document: boolean; user: boolean }
+  preferred: 'document' | 'user'
+  overridden: boolean
+  failures: StorageFailure[]
+}
+
+export type WriteResult =
+  | { ok: true; writtenTo: 'document' | 'user'; documentConfigId: string | null }
+  | { ok: false; writtenTo: null; reason: 'no-edit-access' | 'validation'
+        | 'quota' | 'write-failed'; needsPersonalConfirmation: boolean;
+        errors: string[] }
+
+export async function writeConfig(
+  payload: StoredConfig,
+  options: { target: 'document' | 'user' },
+): Promise<WriteResult>
+export async function readConfig(): Promise<ReadConfigResult>
+export async function clearConfig(target: 'document' | 'user'): Promise<WriteResult>
+```
+
+`src/storage.ts` uses:
+
+```ts
+const PREFIX = 'figtail'
+// Private plugin-data keys: `figtail.meta`, `figtail.payload.0`, …
+const CHUNK_BYTES = 80_000
+
 ```
 
 Write path:
 
-1. Validate the `TokenSet` with `validateTokenSet`. Reject with a readable error
-   listing the first three failures.
+1. Validate the `TokenSet` with `validateTokenSet`, provenance with
+   `validateConfigProvenance`, and the redacted diagnostic shape. Reject with a
+   readable error listing the first three failures.
 2. `JSON.stringify` → gzip (`fflate`) → base64.
-3. Split into ≤80 kB chunks; write each as `tokens.<i>` / `source.<i>`.
-4. Write `meta` **last**, containing `{ schemaVersion, documentConfigId,
-   tokenChunks, sourceChunks, byteLength, checksum, storedAt, tailwindMajor,
-   tokenCount, unresolvedCount }`.
+3. Assert the serialized object contains no `sourceText`, `sources[].text`,
+   diagnostic `snippet`, or configured canary; split into ≤80 kB chunks as
+   `figtail.payload.<i>`.
+4. For document target, call `figma.root.setPluginData` only. Write
+   `figtail.meta` **last**, containing `{ formatVersion, documentConfigId,
+   chunks, byteLength, checksum, storedAt, tailwindMajor, tokenCount,
+   unresolvedCount }`.
    Writing meta last makes a partial write detectable.
 5. **Clear stale chunks**: if a previous write used more chunks, overwrite the
    extras with `''`. Forgetting this leaves garbage a future read may
    concatenate.
 
-Read path: read `meta`, read the stated chunk counts, concatenate,
-base64-decode, gunzip, parse, validate. Any failure returns `null` **plus a
-diagnostic reason** — never throw into the codegen callback, whose conservative
-budget is 3 seconds and which has no error UI.
+Read path: read meta, stated chunks, checksum, decode, decompress, parse, then
+validate the complete stored envelope including provenance and the absence of
+diagnostic snippets.
+It always returns `ReadConfigResult`; tier 3 is `active: null`, never bare null.
+Every corrupt/unavailable tier contributes a typed `StorageFailure`, then falls
+through. Never throw into Codegen.
 
 `documentConfigId` is a random stable ID generated on the first successful
 document write and preserved on replacements. Public plugins cannot rely on
@@ -520,10 +601,9 @@ for per-document dismissal state when a shared config exists.
   `{ writtenTo: null, reason: 'no-edit-access', needsPersonalConfirmation: true }`.
   The UI then offers the personal target and writes there only after a second,
   explicit click. Never silently change the requested storage scope.
-- `readConfig()` reads document storage first, then user storage, and **always
-  returns the tier it used**: `{ tokens, source: 'document' | 'user',
-  overridden: boolean }`. Return `null` only when neither exists — that is
-  tier 3, and plans 004/005 handle it by emitting arbitrary values with a banner.
+- `readConfig()` reads document storage first, then user storage, and returns the
+  full `ReadConfigResult`. `active: null` is tier 3; callers still retain failure
+  diagnostics for the banner/debug view.
 - When **both** exist, document wins by default. Store the user's override choice
   under a `preferUserConfig` key in `clientStorage` and honour it when set.
 - Never throw for a missing or unreadable tier. A failed document read falls
@@ -533,12 +613,12 @@ for per-document dismissal state when a shared config exists.
 Cache the parsed result in a module-level variable, invalidated on write — gunzip
 plus parse on every selection change would eat the codegen budget.
 
-**Check**: unit tests with a mocked Figma API — a 250 kB payload round-trips
-exactly; a payload shrinking from 4 chunks to 2 leaves no readable `tokens.2`; a
-truncated read (meta says 4, three present) returns `null` with a diagnostic;
-cache invalidates on write. Then in Figma desktop: drop in a fixture config,
-reload the plugin, confirm `readConfig()` returns the same token set (log
-`Object.keys(tokens.colors).length` and compare to the fixture snapshot).
+**Check**: mocked Figma tests cover a 250 kB exact round-trip; 4→2 cleanup;
+missing-chunk, checksum, decompression, parse, and schema diagnostics; document
+failure with user fallback; stable ID; override; and cache invalidation. A raw
+source canary placed inside an unresolved expression is absent from the iframe
+message, every persisted diagnostic, every `setPluginData` call, and every
+clientStorage value. Reload Figma and compare the token count to the fixture snapshot.
 
 ### Step 6: Build the setup UI
 
@@ -550,27 +630,28 @@ design-editor one.
 Six states in the iframe:
 
 1. **Empty** — two sentences on what this is, then a drop zone and textarea:
-   "Drop your `tailwind.config.js` (v3) or your CSS entry with `@theme` (v4)."
+   "Drop your `tailwind.config.js` (v3) or CSS entry with `@theme` (v4). Add
+   `package.json` to confirm the exact Tailwind defaults." Explain that source is
+   processed locally and discarded after resolution.
 2. **Resolving** — spinner past 300 ms.
-3. **Review** — before storing, show what was found: Tailwind version, token
-   counts per category, **which bundled default-theme version was merged in**
-   (`source.defaultThemeVersion` — a public user on an older Tailwind should be
-   able to see the skew), and — prominently — **the `unresolved` report**, each
-   entry with its path, plain-language message, and remedy.
+3. **Review** — before storing, show what was found: exact version evidence (or
+   missing evidence), token counts, whether bundled defaults were confirmed or
+   withheld, and — prominently — the complete `unresolved` report.
 
    Call out `unknownNamespaces` separately and more loudly than the rest of the
    report, because it is the one that changes output quality most: "fig-tail
    could not read your **colours**, so it will show raw values like `#3b82f6`
    for them rather than token names." Name the affected namespaces. This is the
-   whole payoff of plan 001 Step 8; do not bury it. Before the document-target
+   whole payoff of plan 001 Step 8; do not bury it. Name `partialNamespaces`
+   separately: explicit tokens work, but default tokens were withheld. Before the document-target
    button (label it **Apply to file**, not the generic **Save**), show the exact
    dry-run storage diff: namespace, keys added/replaced/cleared, compressed byte
-   counts, and stored source filenames. Offer Apply to file, Save personally,
-   and Cancel as distinct actions.
+   counts, and stored source filenames/hashes. State "Raw config source will not
+   be saved." Offer Apply to file, Save personally, and Cancel as distinct actions.
 4. **Configured** — the same summary, plus **which tier is in use**, stated
    plainly ("Saved on this file — everyone inspecting it gets this" versus
    "Saved in your settings — only you see this"), a **staleness warning when
-   `storedAt` is over 30 days old**, the name of each stored source file, and
+   `storedAt` is over 30 days old**, the name/hash of each source file, and
    Replace / Remove buttons. Remove confirms.
 5. **No edit access** — do not present this as an error. Say that saving to the
    file needs edit access, and offer saving to personal settings as the ordinary
@@ -579,20 +660,16 @@ Six states in the iframe:
 6. **Both tiers present** — a one-line notice naming which is active and a
    switch to use the other. Never switch silently.
 
-Add the **credential scan** from "Context" before storing source text: if the
-config contains anything credential-shaped, warn clearly and let the user store
-tokens **without** the source.
-
 Plain and clear beats polished. This screen is used once per file per config
 change.
 
 **Check**: in Figma desktop on the scratch file, walk all six states by hand:
 drop a clean fixture (→ review → configured); drop a fixture with a known
 function-valued theme key (→ the report names it with an actionable message);
-drop a v4 CSS with `@config` (→ asks for the second file); paste random text (→ a
-clear parse error, not a stack trace); paste a config containing
-`apiKey: "sk-live-abc123"` (→ the credential warning appears); Remove (→ back to
-empty).
+drop a v4 CSS with `@config` (→ asks for the second file); omit `package.json`
+(→ defaults withheld and labelled); use a skewed version (→ no same-major
+merge); paste random text (→ clear parse error); include a unique secret-like
+canary and verify the resulting metadata/payload contains no canary; Remove.
 
 ### Step 7: Enforce the write-safety invariant mechanically
 
@@ -608,24 +685,31 @@ document-mutation API: `setPluginData`, `appendChild`, `remove`, `create*`,
 `.strokes`, `.cornerRadius`, `.padding*` on any node or variable.
 
 Allow exactly one thing for now, with a targeted `eslint-disable-next-line`
-comment naming this plan: `figma.root.setSharedPluginData` in `src/storage.ts`.
+comment naming this plan: `figma.root.setPluginData` in `src/storage.ts`.
 (Plan 007 adds the second and only other entry.)
 
-**b) Bundle test.** A vitest test reading the built `dist/main.js` and asserting
+**b) Bundle test.** The plugin package's `test` script first runs `build`, then a
+Vitest test reads that same invocation's `dist/main.js` and asserts
 none of the banned identifiers appear except the allowlisted one. This catches
 anything arriving via a dependency or a dynamic property access the linter cannot
 see. Write the failure message so it says what was found and why it is banned,
-referencing the invariant.
+referencing the invariant. Do not make callers pre-build and do not accept only
+a stored source hash: `pnpm --filter @fig-tail/plugin test` must be sufficient
+from a clean checkout and must always compile current source before inspection.
 
 **Check**: `pnpm --filter @fig-tail/plugin lint` → exit 0;
-`pnpm --filter @fig-tail/plugin test -t write-safety` → passes. Then deliberately
+`pnpm --filter @fig-tail/plugin test -t write-safety`
+→ passes. The test must refuse to run against a missing/stale bundle (record a
+source/build hash as a secondary assertion after the unconditional build). Then deliberately
 add `figma.currentPage.selection[0].name = 'x'` to `main.ts`, confirm **both**
 guards fail, remove it, confirm both pass. Note this verification in the commit
 message — a guard nobody has watched fail is not a guard.
 
 ### Step 8: Verify the config-source ladder, including cross-user read
 
-Two things to establish, and only the second needs a second account.
+Write all results to `packages/plugin/notes/storage-matrix.md`; this is a durable
+verification task, not an empty commit. Two things to establish, and only the
+second needs a second account.
 
 **a) The ladder works for one user.** On the scratch file, verify each tier and
 each transition by hand:
@@ -646,14 +730,14 @@ reports the config as loaded.
 *If no second account is available*: approximate by sharing the file to a team
 where you hold a View seat. Plugin development requires the desktop app, so this
 may only be testable with a real second account. **If you cannot test it, do not
-guess** — record it as unverified in the commit message and in
-`plans/README.md`. This does **not** block: if cross-user read turns out not to
+guess** — record it as UNVERIFIED in the note and in `plans/README.md`. This does
+not block implementation: if cross-user read turns out not to
 work, tier 2 already covers that developer, and the only casualty is the
-convenience of one-person setup. Plan 010's docs need the answer; the code does
-not.
+convenience of one-person setup. It does block plan 010 Community publication
+and the "configure once for the team" claim until resolved.
 
-**Check**: every transition in (a) verified by hand and recorded. (b) passed, or
-explicitly recorded as unverified with the reason.
+**Check**: `notes/storage-matrix.md` records every transition in (a). (b) passed,
+or is explicitly UNVERIFIED with the reason and the plan-010 gate.
 
 ### Step 9: Document local installation
 
@@ -668,13 +752,13 @@ Any step you had to figure out is a step that is missing.
 
 ## Validation plan
 
-- **Unit tests** (`figma` global mocked): storage chunk round-trip, stale-chunk
-  cleanup, truncated-read detection, validation rejection messages, cache
-  invalidation, setup orchestration for all four resolver outcomes, the
-  credential scan.
+- **Unit tests** (`figma` global mocked): complete storage-contract shapes,
+  private chunk round-trip, stale cleanup, every typed read failure, tier
+  fallback/override, raw-source canary exclusion, cache invalidation, setup
+  orchestration, and exact-version/default coverage.
 - **Bundle write-safety test**: Step 7.
 - **Manual in-product checklist**, run on the scratch file in Figma desktop and
-  recorded in the commit description:
+  recorded in `notes/storage-matrix.md`:
   - [ ] Plugin imports with no manifest errors
   - [ ] Appears in the design editor's plugin list
   - [ ] Appears in Dev Mode's Code-section language dropdown as "Tailwind"
@@ -686,7 +770,7 @@ Any step you had to figure out is a step that is missing.
   - [ ] Config persists across a **Figma restart**
   - [ ] The setup UI opens from **Dev Mode**, not only the design editor
   - [ ] Every tier transition in Step 8(a) behaves as described
-  - [ ] A second user in Dev Mode reads it (or: recorded as unverified)
+  - [ ] A second user in Dev Mode reads it (or: durable UNVERIFIED release gate)
   - [ ] Removing the config returns all Dev Mode stubs to the empty message
 - **Size check**: `dist/main.js` under 250 kB, `dist/ui.html` under 400 kB. Both
   grow in plans 004 and 005; leaving headroom now matters.
@@ -695,7 +779,7 @@ Any step you had to figure out is a step that is missing.
 
 ALL must hold.
 
-- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r test` → exit 0
+- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test` → exit 0
 - [ ] `pnpm --filter @fig-tail/plugin build` produces `dist/main.js` and a fully
       inlined `dist/ui.html`
 - [ ] The manifest declares `capabilities: ["codegen","inspect"]`,
@@ -705,21 +789,28 @@ ALL must hold.
 - [ ] A dropped `tailwind.config.js` resolves in-plugin and stores; a v4 CSS
       entry does too, asking for `@config`/`@import` files by name when needed
 - [ ] The unresolved report is displayed to the user before saving
-- [ ] The credential scan warns before storing source text
+- [ ] Exact Tailwind version evidence controls bundled defaults; missing or
+      skewed evidence is labelled and never same-major merged
+- [ ] Raw config source is discarded after resolution and a canary test proves
+      it is absent from document storage, clientStorage, sandbox messages, and
+      persisted unresolved diagnostics (the canary lives inside an unresolved expression)
 - [ ] Config round-trips through document storage, surviving a Figma restart
 - [ ] Stale chunks are cleared on a shrinking rewrite (tested)
 - [ ] All three config-source tiers work, each with its own visible label
 - [ ] Tier 2 (personal config) is reachable **from Dev Mode**, needs no edit
       access, and is presented as routine rather than as an error
-- [ ] `readConfig()` always reports which tier it used; it returns `null` only
-      when no config exists anywhere
+- [ ] `readConfig()` always returns the complete `ReadConfigResult`, including
+      active tier, availability, preference, override, and typed failures;
+      tier 3 is `active: null`
 - [ ] With both tiers present, document wins by default and the switch persists
 - [ ] Both write-safety guards are in place and were **verified to fail** on a
       deliberate violation
-- [ ] The only document write in the bundle is `figma.root.setSharedPluginData`
-      under the `figtail` namespace
-- [ ] The manual checklist is complete, with the cross-user read test passed or
-      explicitly recorded as unverified — either outcome is acceptable
+- [ ] The only document write in the bundle is `figma.root.setPluginData` under
+      fig-tail-prefixed keys
+- [ ] Sandbox and UI TypeScript projects have non-overlapping DOM/Figma globals,
+      proved by negative type fixtures
+- [ ] `notes/storage-matrix.md` contains the manual matrix; an UNVERIFIED
+      cross-user result explicitly blocks Community publication in plan 010
 - [ ] No files outside the in-scope list were changed
 - [ ] `plans/README.md` status row for 003 updated
 

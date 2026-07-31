@@ -19,7 +19,7 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**: this plan was written at commit `2157dc6`, before
+> **Drift check (run first)**: this revision was written at commit `7932c82`, before
 > plan 005 existed. Confirm 005 is `DONE`, locate its landing commit with
 > `git log --oneline -- plans/005-devmode-inspect-panel-surface.md packages/plugin/src`,
 > and compare `pipeline.ts`, `hints.ts`, render types, and UI routing with the
@@ -34,14 +34,14 @@
   The Scope section draws that line deliberately; hold it.
 - **Depends on**: 005
 - **Category**: dx
-- **Planned at**: commit `2157dc6`, 2026-07-31 — dependency contract is prospective.
+- **Planned at**: commit `7932c82`, 2026-07-31 — dependency contract is prospective.
 
 ## Build sheet
 
 Use Node 20+ and pnpm. Preserve plan 005's package scripts and strict TypeScript
 settings; use named exports, no `any`, no non-null assertions, and colocated
 Vitest tests. Before every commit run
-`pnpm -r typecheck && pnpm -r lint && pnpm -r test`.
+`pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test`.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command or a named in-Figma check; it must produce the stated result before you
@@ -61,12 +61,12 @@ Route every node through `src/pipeline.ts`. **Do not call
 | Path | Purpose | Task |
 |---|---|---|
 | `packages/plugin/src/tree/walk.ts` + test | iterative traversal, caps, cancel | 1 |
-| `packages/plugin/src/hints.ts` (edit) | shared variable cache | 2 |
-| `packages/plugin/src/pipeline.ts` (edit), `tree/resolve.ts` + test | shared context + chunked resolution | 3 |
+| `packages/plugin/src/tree/resolve.ts` + test | reuse plan 005 context/scheduler for subtree resolution | 2, 3 |
 | `packages/plugin/src/tree/emit/html.ts`, `jsx.ts`, `outline.ts` + tests | the three emitters | 4 |
 | `packages/plugin/src/render.ts` (edit) | the Subtree section, both surfaces | 5 |
 | `packages/plugin/src/mode-dev.ts` (edit) | one absolute Codegen deadline | 6 |
 | `packages/plugin/manifest.json` (edit) | format + cap preferences | 5 |
+| `packages/plugin/notes/subtree-performance.md` | durable deadline, cancellation, and bundle-delta evidence | 6 |
 | `README.md` (section only) | what it is and is not | 7 |
 
 No new dependencies.
@@ -76,11 +76,11 @@ No new dependencies.
 | # | Do this | Files it may touch | Done when |
 |---|---|---|---|
 | 1 | The walker: **iterative stack, never recursion.** Inspect defaults: depth 6 / 150 nodes. Codegen defaults: depth 5 / 40 nodes. Skip invisible, flatten `GROUP`. Returns a flat array + `truncated` + reason. | `src/tree/walk.ts` + test | Tests cover both surface profiles and caps, invisible exclusion (incl. children), group flattening with reparenting, and a 500-node tree not blowing the stack |
-| 2 | Add a per-call `Map<variableId, Variable>` cache to `buildHints`, with a backwards-compatible signature (optional param, fresh map default). | `src/hints.ts` + test | 100 nodes binding the same variable → exactly **1** `getVariableByIdAsync` call. Plan 004's existing hints tests still pass unchanged |
-| 3 | Extend `resolveNode` with an optional shared cache/deadline context, then resolve in chunks (~10 at a time) with cancel support. Returns the intermediate tree. | `src/pipeline.ts`, `src/tree/resolve.ts` + tests | Existing single-node callers/tests pass unchanged; mocked concurrency never exceeds the chunk size; calls equal nodes completed before deadline/cancel. Timing in commit message |
+| 2 | Prove subtree resolution passes one plan-005 `ResolutionContext` through the whole operation; do not edit hints/pipeline caching. | `src/tree/resolve.ts` + test | 100 nodes sharing one variable make one variable API call; storage is read once; one CSS call per node; plan-005 cache tests stay unchanged |
+| 3 | Resolve the flat walk with plan-005 `resolveNodes`, max concurrency 8, shared deadline/cancel, and return the intermediate tree. Do not implement another chunker. | `src/tree/resolve.ts` + tests | concurrency ≤8; output preserves tree order; no work starts after deadline/cancel; calls equal completed/started nodes; timing recorded |
 | 4 | The three emitters over the intermediate tree. Two-space indent. HTML-escape text **and** `data-name`. Byte-deterministic. | `src/tree/emit/**` + tests | Snapshots for all three formats, incl. nesting, escaping (`<`, `&`, `"`), the vector placeholder comment, and the truncation marker. Two runs → byte-identical |
 | 5 | Add Subtree to **both** surfaces only when the node has children. Codegen uses discrete native select preferences; Inspect adds progress/cancel and larger controls. Keep plan 004's single-node section **first**. | `src/render.ts`, `src/ui/inspect/**`, `manifest.json` | All three formats render; each surface's caps respected; truncation marker shown; leaf section absent; JSX parses as JSX |
-| 6 | Measure both profiles and the largest frame. Enforce one **2-second Codegen deadline from handler entry**; Inspect stays progressive/cancellable and may run longer. | `src/mode-dev.ts`, `src/tree/resolve.ts`, `src/ui/inspect/**` | Codegen always returns before 3 s and ordinarily before 2 s; temporarily lower guard to 100 ms → clean truncation. Inspect scans 150 nodes with progress and Cancel. Timings in commit message |
+| 6 | Measure both profiles and the largest frame. Enforce one **2-second Codegen deadline from handler entry**; Inspect stays progressive/cancellable and may run longer. Record timings, cancellation, plan-005 baseline sizes, current sizes, and signed deltas. | runtime/UI files, `notes/subtree-performance.md` | Codegen always returns before 3 s and ordinarily before 2 s; temporarily lower guard to 100 ms → clean truncation. Inspect scans 150 nodes with progress and Cancel. Durable note contains all evidence |
 | 7 | README section (~40 lines) with a real input/output example. Say plainly what it is **not**: no assets, no positioning, not a component. | `README.md` | A developer reading it correctly predicts what they will get and does **not** expect a working component |
 
 **If you find yourself reconstructing absolute positioning, stop.** That is out
@@ -113,8 +113,8 @@ tree without chasing them.
 - `src/hints.ts` — `buildHints(node): Promise<Record<string, VariableHint>>`.
 - `src/render.ts` — `MatchResult[]` → `CodegenResult[]`.
 - `src/storage.ts` — `readConfig()`, cached at module level.
-- `src/pipeline.ts` (plan 005) — `resolveNode(node, options)`, the single path
-  both Dev Mode surfaces use. Route per-node work through it.
+- `src/pipeline.ts` (plan 005) — `ResolutionContext`, `resolveNode`, and bounded
+  `resolveNodes`, the single path every multi-node feature uses.
 - `@fig-tail/match` — `matchDeclarations`, `toClassName`, `summarise`.
 - Manifest declares `codegenPreferences` including an `output` select.
 
@@ -151,12 +151,11 @@ Mitigations, in order of impact:
    either, emit what fits, then a truncation marker
    (`<!-- fig-tail: truncated at 40 nodes; use Inspect for a larger export -->`).
    Truncated-but-useful beats timed-out-and-empty.
-2. **Parallelise per node.** Walk the tree to collect nodes first, then call the
-   shared `resolveNode` pipeline in bounded chunks of ~10.
-3. **Cache variable resolution across the whole subtree.** A design system frame
-   hits the same twenty variables hundreds of times. A `Map<variableId, Variable>`
-   for the duration of one generate call is the single biggest win — build it in
-   `hints.ts` so plan 004's single-node path benefits too.
+2. **Use plan 005's bounded scheduler.** Walk first, then call `resolveNodes`
+   with max concurrency 8; no second queue/chunker belongs here.
+3. **Reuse plan 005's operation caches.** A design-system frame hits the same
+   variables hundreds of times; one `ResolutionContext` deduplicates in-flight
+   variable and per-node CSS reads and reads storage once.
 4. **Skip invisible nodes** (`node.visible === false`) — they contribute nothing.
 
 ### Structure mapping
@@ -204,14 +203,15 @@ nested components, and text. Add it to `fixtures/figma/README.md`.
 **In scope**:
 
 - `packages/plugin/src/tree/**` — traversal, caps, parallel resolution, emitters
-- `packages/plugin/src/hints.ts` — adding the per-call variable cache
-- `packages/plugin/src/pipeline.ts` — optional resolution context, preserving
-  existing single-node behavior
+- `packages/plugin/src/pipeline.ts` and `hints.ts` — consumption only; changes to
+  their context/cache contracts are out of scope and belong to plan 005
 - `packages/plugin/src/mode-dev.ts` — creating and passing the one absolute
   Codegen deadline
 - `packages/plugin/manifest.json` — discrete Codegen format/depth/node select preferences
 - `packages/plugin/src/ui/inspect/**` — larger-cap progress and cancel controls
 - `packages/plugin/src/render.ts` — adding the subtree section
+- `packages/plugin/notes/subtree-performance.md` — durable timing, cancellation,
+  and bundle-delta evidence
 - Tests, and a README section
 
 **Out of scope**:
@@ -255,25 +255,24 @@ level; count cap truncates at the right node and sets the flag; invisible nodes
 are excluded along with their children; groups are flattened with children
 reparented; a 500-node tree does not blow the stack.
 
-### Step 2: Add the shared variable cache to `hints.ts`
+### Step 2: Prove the shared operation context is reused
 
-Introduce a per-generate-call `Map<variableId, Variable>` so repeated bindings
-resolve once. Keep `buildHints`'s signature backwards-compatible for plan 004
-(an optional cache parameter that defaults to a fresh map).
+Create one `ResolutionContext` at subtree-operation entry and pass it unchanged
+through traversal resolution. Do not edit `hints.ts` or add a cache type: plan
+005 already owns both the promise cache and its single-node default.
 
-**Check**: a test where 100 nodes bind the same variable makes exactly one
-`getVariableByIdAsync` call. Plan 004's existing `hints.ts` tests still pass
-unchanged.
+**Check**: a test where 100 nodes bind the same variable makes exactly one API
+call, reads storage once, and calls CSS once per node. Plan 005 tests remain green.
 
 ### Step 3: Resolve CSS and matches in parallel
 
-`src/tree/resolve.ts`: given the flat node array, run plan 005's `resolveNode()`
-in chunks of ~10 with `Promise.all`, passing a shared variable cache plus an
-abort/deadline context. Returns the intermediate tree
+`src/tree/resolve.ts`: given the flat node array, run plan 005's `resolveNodes()`
+with the shared context, max concurrency 8, and the operation deadline/cancel.
+Returns the intermediate tree
 (`{ tag, classes, text, children, comment, nodeName }`).
 
-**Check**: a test asserting chunked parallelism (a mocked pipeline records that
-concurrency never exceeds the chunk size, total calls equal node count without a
+**Check**: a test asserting bounded parallelism (a mocked pipeline records that
+concurrency never exceeds 8, total calls equal node count without a
 deadline, and no new chunk starts after cancellation). Plan 005's test still
 asserts `matchDeclarations` has exactly one plugin import site. Timing on the
 complex fixture frame recorded in the commit message.
@@ -333,10 +332,12 @@ Codegen defaults.
 Inspect is progressive rather than deadline-bound: post completed/total after
 each chunk, keep Cancel responsive, and discard a cancelled run's late results.
 
-**Check**: measurements recorded in the commit message for both profiles. The
-Codegen guard is verified by temporarily lowering it to 100 ms and confirming a
-clean truncation marker. Inspect completes 150 nodes with visible progress and
-cancel works during the 400-node run.
+**Check**: measurements are recorded in
+`packages/plugin/notes/subtree-performance.md` for both profiles. The Codegen
+guard is verified by temporarily lowering it to 100 ms and confirming a clean
+truncation marker. Inspect completes 150 nodes with visible progress and cancel
+works during the 400-node run. The same note records plan-005 baseline and fresh
+main/UI byte counts with signed deltas.
 
 ### Step 7: Document it
 
@@ -352,13 +353,17 @@ what they expect.
 ## Validation plan
 
 - **Unit tests**: traversal caps, invisible skipping, group flattening,
-  variable-cache hit count, chunked parallelism, all three emitters' snapshots,
+  shared-context cache hit count, bounded parallelism, all three emitters' snapshots,
   HTML escaping.
 - **Determinism test**: emit the same tree twice; assert byte equality.
 - **Manual matrix** on the complex fixture: all three formats, both caps,
   truncation marker, leaf-node absence, JSX syntactic validity.
 - **Performance**: Step 6's Codegen deadline measurements plus Inspect
   progress/cancel verification.
+- **Fresh bundle budget**: after the feature build, `dist/main.js` remains under
+  400 kB and `dist/ui.html` remains under 500 kB; record byte counts beside the
+  profile timings plus plan-005 baseline and signed deltas so the subtree
+  feature's cost is explicit.
 - **Write-safety regression**: plan 003's guards pass unchanged, no new
   allowlist entries.
 
@@ -366,14 +371,18 @@ what they expect.
 
 ALL must hold.
 
-- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r test` → exit 0
+- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test` → exit 0
 - [ ] All three output formats render correctly in Dev Mode
 - [ ] Depth and node caps are enforced and configurable via preferences
 - [ ] Truncation always emits an explanatory marker
 - [ ] The Codegen runtime guard truncates cleanly before the conservative
       3-second limit and targets 2 seconds internally (verified)
 - [ ] Inspect exports 150 nodes with progress and working Cancel
-- [ ] The variable cache reduces resolution calls to one per unique variable
+- [ ] Fresh `dist/main.js` is under 400 kB and `dist/ui.html` is under 500 kB;
+      both byte counts, plan-005 baselines, and signed deltas are recorded in
+      `notes/subtree-performance.md`
+- [ ] The plan-005 operation context reduces calls to one per unique variable,
+      one storage read, and one CSS call per node; no duplicate cache exists
 - [ ] Output is byte-deterministic across runs
 - [ ] Text content and node names are HTML-escaped
 - [ ] The Subtree section is absent for leaf nodes
@@ -409,5 +418,5 @@ Stop and report back — do not improvise — if:
   is genuinely uncertain until people try it — ship it, then ask.
 - **Deliberately deferred**: asset export, absolute positioning, framework
   templates (Vue/Svelte), and any per-node result caching across generate calls
-  (the per-call cache from Step 2 is enough; a cross-call cache would need
+  (plan 005's operation cache is enough; a cross-call cache would need
   invalidation on document change, which is not worth it yet).

@@ -19,8 +19,8 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**: this plan was written at commit `2157dc6`.
-> Run `git log --oneline 2157dc6..HEAD`, read `plans/README.md`, and confirm
+> **Drift check (run first)**: this revision was written at commit `7932c82`.
+> Run `git log --oneline 7932c82..HEAD`, read `plans/README.md`, and confirm
 > which of plans 005–009 are DONE before writing a word of documentation —
 > documenting an unbuilt feature is the main failure mode here.
 >
@@ -34,16 +34,16 @@
 - **Effort**: S
 - **Risk**: MED — low technical risk, real reputational risk. This is the plan
   that makes the work public under the owner's name.
-- **Depends on**: 005 (with 001–004, the minimum shippable product). Plans
+- **Depends on**: 005 (with prerequisite 000 and plans 001–004, the minimum shippable product). Plans
   006–009 are documented if done and omitted if not.
 - **Category**: docs
-- **Planned at**: commit `2157dc6`, 2026-07-31 — dependencies are prospective.
+- **Planned at**: commit `7932c82`, 2026-07-31 — dependencies are prospective.
 
 ## Build sheet
 
 Use Node 20+ and pnpm. Preserve the landed workspace scripts and strict
 TypeScript settings. Before every commit run
-`pnpm -r typecheck && pnpm -r lint && pnpm -r test`.
+`pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test`.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command or a named in-Figma check; it must produce the stated result before you
@@ -60,11 +60,12 @@ ahead.
 
 | Path | Purpose | Task |
 |---|---|---|
+| `docs/release/feature-audit.md` | durable verification of what actually shipped | 1 |
 | `README.md` (full rewrite) | the front door | 2 |
 | `docs/setup.md`, `docs/troubleshooting.md` | the long versions | 2 |
 | `CONTRIBUTING.md` | incl. the write-safety invariant | 2 |
 | `CHANGELOG.md`, package metadata | release prep | 3 |
-| `.github/workflows/ci.yml`, `release.yml` | CI + tagged publish | 3 |
+| `.github/workflows/ci.yml` (edit), `release.yml` | harden existing CI + tagged publish | 3 |
 | `docs/community/**` listing copy, icon, cover, screenshots | approval packet | 3 |
 | `plans/README.md` (edit) | final statuses | 6 |
 
@@ -72,11 +73,11 @@ ahead.
 
 | # | Do this | Files it may touch | Done when |
 |---|---|---|---|
-| 1 | Audit what actually shipped. Read `plans/README.md`, then **verify each DONE plan's headline feature by hand in the built plugin**. Do not trust the table. | none (verification) | A written checklist of verified features in the commit message, matching `plans/README.md`. Any mismatch → **STOP** |
+| 1 | Audit what actually shipped. Verify each DONE plan's headline feature in the release build, including the second-account private-storage read. Write evidence, versions, accounts/seats, and outcomes to the release audit. | `docs/release/feature-audit.md` | audit matches statuses; cross-account read is PASS (UNVERIFIED/FAIL stops Community publication and team-sharing copy); any other mismatch → STOP |
 | 2 | Write all the docs, describing **only** what task 1 verified. Structure per Step 2, including the three config tiers and why unreadable config parts give raw values. | `README.md`, `docs/**`, `CONTRIBUTING.md` | **From a fresh clone on a clean machine**, follow the developer path and then the designer path literally. Both work end to end. Fix every place you had to improvise |
-| 3 | Version 0.1.0, changelog, package metadata, CI + OIDC trusted-publishing workflow. Prepare Community copy/assets, run filtered package dry-runs, and perform a quiet secret-presence audit. Then **stop and ask the owner** for separate npm and Community approvals. | `package.json`s, `CHANGELOG.md`, `.github/workflows/**`, `docs/community/**` | Each publishable tarball is clean; secret audit exits 1 without printing matches; approval packet is complete; **the owner explicitly approves each channel to use** |
+| 3 | Version 0.1.0, changelog, metadata, harden plan 001's CI, add OIDC release workflow, prepare Community assets, package dry-runs, and quiet secret audit. Verify all dist inspections rebuild first. Then request separate channel approvals. | release/package/CI/community files | frozen CI passes; publishable tarballs/bins clean; secret audit quiet; approval packet complete; owner explicitly approves each channel |
 | 4 | *(Only with npm approval.)* Tag and publish `@fig-tail/theme`, `@fig-tail/match`, and `@fig-tail/cli` if plan 009 shipped, using npm trusted publishing with provenance. | tag + release workflow | Every intended package is on npm at 0.1.0 with provenance; a clean-directory install works; tarballs contain no source |
-| 5 | *(Only with Community approval.)* Find and record the current official Figma publishing guide, re-check account/distribution options, and submit the already-approved assets. | listing submission only | Live in the Community, installable from a **different** account, and that account completes the README developer path. The development plugin ID already committed by plan 003 remains correct |
+| 5 | *(Only with Community approval and task-1 cross-account PASS.)* Find and record the current official Figma publishing guide, re-check distribution, and submit approved assets. | listing submission only | live, installable from a different account; that account reads the file config and completes README path; development/release plugin identity preserves private data access |
 | 6 | Update `plans/README.md`: DONE / TODO / REJECTED with one-line rationales, plus a "Shipped 0.1.0" note. | `plans/README.md` | Every row matches reality; nothing left IN PROGRESS |
 
 **Task 3 is a hard gate.** Nothing outward-facing ships without the owner saying
@@ -104,7 +105,8 @@ someone else can follow without asking questions.
 
 ### What ships
 
-Check `plans/README.md` for what is actually DONE. The minimum is 001–005:
+Check `plans/README.md` for what is actually DONE. Plan 000 must have passed its
+platform gates; the minimum shipped implementation is 001–005:
 
 - `@fig-tail/theme` — the Tailwind config resolver, v3 and v4 (published; the
   schema and validator are useful on their own)
@@ -156,7 +158,7 @@ Lead with the developer path. It is the larger audience and the shorter read.
 
 | Purpose | Command | Expected on success |
 |---|---|---|
-| Full check | `pnpm -r typecheck && pnpm -r lint && pnpm -r test` | exit 0 |
+| Full check | `pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test` | exit 0 |
 | Build all | `pnpm -r build` | every package's `dist/` present |
 | Theme dry-run | `pnpm --filter @fig-tail/theme publish --dry-run --no-git-checks` | clean file list |
 | Match dry-run | `pnpm --filter @fig-tail/match publish --dry-run --no-git-checks` | clean file list |
@@ -181,9 +183,10 @@ Needed on hand:
 - Root `README.md` — the full rewrite
 - `docs/setup.md`, `docs/troubleshooting.md`
 - `CONTRIBUTING.md`, `CHANGELOG.md`
-- `package.json` metadata for the three published packages (description,
+- `package.json` metadata for the two required published packages and
+  `@fig-tail/cli` only when plan 009 is DONE (description,
   keywords, repo, license, `files`, `exports`)
-- `.github/workflows/ci.yml` — typecheck, lint, test, build on push and PR
+- `.github/workflows/ci.yml` — typecheck, lint, build, test on push and PR
 - `.github/workflows/release.yml` — npm trusted publishing on tag using OIDC and
   provenance, limited to the explicit publishable packages
 - Figma Community listing assets: icon, cover, screenshots, description
@@ -213,15 +216,21 @@ Needed on hand:
 ### Step 1: Audit what actually shipped
 
 Read `plans/README.md` and confirm each plan's status against the code — do not
-trust the table alone. For each DONE plan, verify its headline feature works in
-the built plugin. Write the result as a checklist in the commit message.
+trust the table alone. For each DONE plan, verify its headline feature in the
+fresh release build. Write the versions, commands, manual steps, screenshots,
+and result to `docs/release/feature-audit.md`, not only a commit message.
+
+Repeat private document-storage reading from a genuinely different account with
+view-only or Dev-seat access. PASS is required before Community submission or
+copy that promises one-person team setup. FAIL/UNVERIFIED leaves npm publication
+available and the personal-config path usable, but Community submission stops.
 
 Anything the table calls DONE that does not work is a STOP condition: either the
 status is wrong or the feature regressed, and both need the owner before you
 document anything.
 
-**Check**: a written list of shipped features, each verified by hand, matching
-`plans/README.md`.
+**Check**: the committed audit lists every shipped feature and the release-build
+cross-account matrix, matching `plans/README.md`.
 
 ### Step 2: Write the documentation
 
@@ -236,8 +245,9 @@ document anything.
    actually has to do — do not write this from memory.
    Cover **both** surfaces: the Code section and the Inspect panel.
 4. **"For designers / setting it up"** — drop in `tailwind.config.js` (v3) or
-   your CSS entry (v4), review what fig-tail could and could not read, save. No
-   CLI, no install.
+   CSS entry (v4), plus `package.json` for version evidence; explain that only an
+   exact `x.y.z` spec confirms defaults and ranges leave them unconfirmed, and that
+   raw source is processed locally and discarded. Review and save. No CLI.
 5. **"If you can't save to the file"** — the three config-source tiers from plan
    003, in one short table: saved on the file (everyone gets it), saved in your
    settings (just you, needs no edit access), or no config (raw values plus a
@@ -270,7 +280,8 @@ symptom text a user sees:
   fix it
 - Validation errors on drop (which file is the right one; v4 needing two files)
 - Classes look wrong / arbitrary values everywhere (usually a stale or wrong
-  config)
+   config). Explain that bundled defaults are withheld without exact version
+   evidence, even within the same major.
 - The plugin does not appear in Dev Mode's language dropdown
 - The plugin does not appear in the Inspect panel
 - A second developer cannot see the config
@@ -292,7 +303,10 @@ improvise and fix it before moving on.
   shipped.
 - Add package metadata: description, keywords, `repository`, `license`, `files`
   (dist + README + LICENSE only), `exports`.
-- Add `.github/workflows/ci.yml`: typecheck, lint, test, build on push and PR.
+- Harden plan 001's existing `.github/workflows/ci.yml`: exact Corepack/pnpm,
+  `pnpm install --frozen-lockfile`, typecheck, lint, build, tests with configured
+  coverage thresholds, and all fresh bundle probes on push and PR. Do not
+  replace it with a looser release-only workflow.
 - Add `.github/workflows/release.yml`: tag-triggered, least-privilege
   permissions (`contents: read`, `id-token: write`), pinned supported Node/npm,
   `npm publish --access public --provenance`, and explicit steps for only the packages that
@@ -304,6 +318,8 @@ improvise and fix it before moving on.
   Never use recursive publish, which would include private/plugin workspaces.
   Read every file list; confirm no TypeScript source, fixtures, `plans/`, or
   `spike/` directories are included.
+  Every size/safety inspection must invoke the relevant build first in the same
+  job; CI must fail if an artifact is stale or absent.
 - Prepare the full Community approval packet now, before asking: final listing
   copy, icon, cover, screenshots, support URL, declared capabilities, and the
   current manifest permission list. Store it under `docs/community/`. Step 5
@@ -390,7 +406,7 @@ matches the code, and nothing is left IN PROGRESS.
 
 ALL must hold.
 
-- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r test && pnpm -r build` → exit 0
+- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test` → exit 0
 - [ ] README, `docs/setup.md`, `docs/troubleshooting.md`, `CONTRIBUTING.md`,
       `CHANGELOG.md` all exist and describe **only** shipped features
 - [ ] The docs describe all three config-source tiers, and present the
@@ -403,6 +419,8 @@ ALL must hold.
 - [ ] `CONTRIBUTING.md` states the write-safety invariant and points to plans
       003 and 007
 - [ ] Both README paths verified end to end from a fresh clone
+- [ ] `docs/release/feature-audit.md` contains durable evidence for every DONE
+      feature and a PASS/FAIL/UNVERIFIED second-account storage result
 - [ ] CI workflow runs on push and PR and is green
 - [ ] Release workflow uses least-privilege GitHub OIDC trusted publishing with
       provenance and contains no long-lived npm credential path by default
@@ -413,7 +431,8 @@ ALL must hold.
 - [ ] *(If npm approved)* every intended package (two, or three when plan 009
       shipped) lives on npm at 0.1.0 with provenance, verified by a clean install
 - [ ] *(If Community approved)* the plugin is live and installable from a
-      different account, mapped to plan 003's already-committed real manifest ID
+      different account, mapped to the proven plugin ID, and that account reads
+      the file's private config; Community cannot run on FAIL/UNVERIFIED
 - [ ] `plans/README.md` reflects reality with no IN PROGRESS rows
 - [ ] No files outside the in-scope list were changed
 
@@ -427,6 +446,9 @@ Stop and report back — do not improvise — if:
   rather than a documentation change.
 - The owner has not approved publication. **Nothing outward-facing ships without
   it** — this is the one plan whose actions cannot be quietly reverted.
+- The release-build cross-account private-storage read is FAIL or UNVERIFIED and
+  Community publication is requested. Stop Community submission; npm may proceed
+  if separately approved.
 - The npm scope `@fig-tail` is taken, or publishing rights are unavailable.
 - npm trusted publishing cannot be configured or the OIDC release fails. Stop
   and show the owner the failure; use a long-lived token only after a separate,

@@ -19,7 +19,7 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**: this plan was written at commit `2157dc6`, before
+> **Drift check (run first)**: this revision was written at commit `7932c82`, before
 > plans 001 and 003 existed. Confirm both are `DONE`, locate their landing
 > commits with `git log --oneline -- plans/001-in-plugin-tailwind-theme-resolver.md packages/theme`
 > and `git log --oneline -- plans/003-plugin-shell-and-config-storage.md packages/plugin/src/setup.ts`,
@@ -30,19 +30,20 @@
 
 - **Priority**: P3
 - **Effort**: M
-- **Risk**: LOW technically. The real risk is **positioning**: if the CLI creeps
-  into the normal setup path, it breaks the program's central promise. The Scope
-  section draws that line; hold it.
+- **Risk**: MED. Positioning remains the product risk; v4 compiler APIs and
+  packaging are also version-sensitive and are gated by task 0. If CLI guidance
+  leaks into the normal setup path, it breaks the program's central promise. The
+  Scope section draws that line; hold it.
 - **Depends on**: 001, 003
 - **Category**: dx
-- **Planned at**: commit `2157dc6`, 2026-07-31 — dependency contracts are prospective.
+- **Planned at**: commit `7932c82`, 2026-07-31 — dependency contracts are prospective.
 
 ## Build sheet
 
 Use Node 20+ and pnpm. Preserve the landed workspace scripts and strict
 TypeScript settings; use named exports, no `any`, no non-null assertions, and
 colocated Vitest tests. Before every commit run
-`pnpm -r typecheck && pnpm -r lint && pnpm -r test`.
+`pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test`.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command or a named in-Figma check; it must produce the stated result before you
@@ -61,6 +62,7 @@ If a task seems to require making the CLI a required step, stop and report.
 
 | Path | Purpose | Task |
 |---|---|---|
+| `packages/cli/spike/v4-api/FINDINGS.md` + probes | version-bounded compiler/package API decision | 0 |
 | `packages/cli/package.json`, `tsconfig.json` | package setup | 1 |
 | `packages/theme/src/index.ts` (edit) | **export-only** exposure of conversion helpers | 1 |
 | `packages/cli/src/v3.ts` + test | real `resolveConfig` evaluation | 2 |
@@ -70,13 +72,13 @@ If a task seems to require making the CLI a required step, stop and report.
 | `packages/cli/src/equivalence.test.ts` | CLI output == browser output | 4 |
 | `packages/cli/src/index.ts` | the `export` command | 5 |
 | `fixtures/projects/no-tailwind/package.json` | deterministic negative CLI fixture | 5 |
-| `packages/plugin/src/setup.ts`, `storage.ts` (edit) | validate/import the export envelope and preserve provenance | 6 |
+| `packages/plugin/src/setup.ts`, `storage.ts`, `storage-types.ts`, `src/ui/**` (edit) | validate/import the export envelope, preserve shared provenance, add conditional escape-hatch action | 6 |
 | `README.md` (section only) | placed **after** normal setup | 7 |
 
 ### Dependencies
 
 ```bash
-pnpm add --filter @fig-tail/cli jiti cac
+pnpm add --filter @fig-tail/cli --save-exact jiti cac
 ```
 
 The CLI resolves the **target project's** Tailwind packages, never a bundled
@@ -89,12 +91,13 @@ CLI package.
 
 | # | Do this | Files it may touch | Done when |
 |---|---|---|---|
-| 1 | Scaffold `packages/cli`. Export the conversion helpers from `@fig-tail/theme` **without changing their behaviour**. | `packages/cli/*`, `packages/theme/src/index.ts` | `pnpm -r typecheck && pnpm -r test` → exit 0 **and** plan 001's snapshot files show an empty `git diff`. If a snapshot moved, you changed behaviour — revert |
+| 0 | Spike the target-installed v4 package graph and public Node/compiler API across the bounded version matrix below. Record imports, callbacks, result shape, error modes, and supported exact range before production code. | `packages/cli/spike/v4-api/**` | FINDINGS names exact tested package versions/APIs and ends GO with a bounded range or NO-GO with evidence; no private unversioned deep import is proposed |
+| 1 | Scaffold `packages/cli` with explicit npm `bin`, output shebang, declarations/build config, and tarball smoke test. Export theme conversion helpers without behaviour change. | cli package/config/tests, theme index export only | packed tarball installs in a clean temp project; `fig-tail --help` works through the bin; output begins with a Node shebang; theme snapshots unchanged |
 | 2 | The v3 path: resolve the project's `tailwindcss`, `require()` the config via `jiti`, run its `resolveConfig`, hand the result to the shared helpers. Build the fixture project. | `src/v3.ts` + test, `fixtures/projects/tw3-preset/**` | `test -t v3` passes, asserting in **one test** both that the CLI resolves the preset/fn/plugin values **and** that the browser resolver reports them unresolvable for the same config |
-| 3 | The v4 path: use the target project's v4 Node compiler/design-system API with filesystem `@import`/`@config` callbacks. Never route v4 through v3 `resolveConfig`. | `src/v4.ts` + test, `fixtures/projects/tw4-config/**` | `test -t v4` passes, and generated token values are cross-checked against utilities produced by that same target compiler |
+| 3 | The v4 path: implement only the public package/API and exact supported range approved by task 0, with filesystem callbacks. Never route through v3 or an unversioned private deep path. | v4 source/test, fixture | v4 tests pass at lower/upper supported bounds; one just-outside version fails with an actionable compatibility message; tokens cross-check against same compiler |
 | 4 | The equivalence suite: for every fully-resolvable plan-001 fixture, compare the defined semantic projection; verify route-specific provenance separately. | `src/equivalence.test.ts` | `test -t equivalence` passes for every fully-resolvable fixture; the count is in the commit message. **Do not add value tolerances** — find which path is wrong |
-| 5 | The `export` command: detect major by **installed version**, require explicit `--allow-config-execution` before loading JS/TS, dispatch, validate, write, and print a stderr summary whose last line says to drop the file into the plugin setup screen. | `src/index.ts` | All commands in Step 5 behave as stated, including refusal without the trust flag and an actionable non-zero exit on a non-Tailwind directory |
-| 6 | Make setup accept the versioned CLI export envelope, validate its nested `TokenSet`, preserve import provenance separately, and show the CLI as the source. | `packages/plugin/src/setup.ts`, `storage.ts`, `src/ui/**` | Drop a CLI-produced file in Figma → stores, Configured names CLI/target versions, Dev Mode produces classes. Malformed provenance or tokens are rejected. Raw config still shows its unresolved report |
+| 5 | The `export` command: detect installed version, enforce `--allow-config-execution` **before any import/compiler callback**, dispatch, validate, write, and summarize to stderr. | command/tests | refusal test proves a side-effect config was not executed; trust path works; non-Tailwind/unsupported versions fail; packed bin behaves identically |
+| 6 | Make setup accept the versioned CLI export envelope, validate its nested `TokenSet` and shared `ConfigProvenance`, store that provenance in the authoritative contract, show the CLI as the source, and add the CLI action only to unresolved-report UI now that this optional feature exists. | plugin setup/storage/storage-types/UI | Drop a CLI-produced file in Figma → stores, Configured names CLI/target versions, Dev Mode produces classes. Malformed provenance or tokens are rejected. Raw config still shows its unresolved report plus the escape-hatch action; normal setup does not |
 | 7 | README section, placed **after** the normal setup instructions. | `README.md` | A reader following the normal setup path never meets an instruction to install the CLI |
 
 ---
@@ -201,22 +204,26 @@ and source/provenance fields whose truth legitimately differs by route.
 The file written by the CLI is a versioned envelope, not a schema mutation:
 
 ```ts
+import type { ConfigProvenance } from '@fig-tail/theme'
+
+type CliProvenance = Extract<ConfigProvenance, { kind: 'cli' }>
+
 type FigTailExport = {
   formatVersion: 1
   tokens: TokenSet
-  provenance: {
-    kind: 'cli'
-    cliVersion: string
-    tailwindVersion: string
-    projectName: string          // target-root basename only; never an absolute path
-    entry: string                // path relative to target root
-    inputsSha256: string          // hash of sorted relative paths + bytes + resolved package versions
-  }
+  provenance: CliProvenance
 }
 ```
 
+Populate every shared field exactly: `sources` contains relative display names,
+hashes, and byte lengths; `resolvedAt` is the export time; `inputSha256` hashes
+sorted relative paths + bytes + resolved package versions;
+`targetTailwindVersion` is the exact installed version; `projectName` is the
+target-root basename; and `entry` is target-relative. Do not introduce aliases
+such as `inputsSha256`, `tailwindVersion`, or `importProvenance`.
+
 Separately assert those CLI provenance fields and the browser TokenSet's own
-`source.entry`/`defaultThemeVersion`. Keep CLI-only fields outside `TokenSet` so
+`source.entry`, version evidence, and `source.defaults` status. Keep CLI-only fields outside `TokenSet` so
 plan 001's schema and validator remain unchanged. Never export an absolute local
 path, which could leak a username or workstation layout when the file is stored
 on Figma. A byte-identical whole object would incorrectly require truthful
@@ -261,8 +268,9 @@ No accounts or credentials. This plan is pure Node.
 - `fixtures/projects/**` — real installable projects for testing (distinct from
   plan 001's `fixtures/configs/`, which are config files only)
 - A README section, framed per "The one-line rule"
-- The plugin's unresolved-report messages already point at the CLI (plan 001
-  Step 5) — update the wording if the command name differs
+- `packages/plugin/src/setup.ts`, `storage.ts`, `storage-types.ts`, and `src/ui/**`
+  in task 6 only — import the envelope through the authoritative storage
+  contract and add a contextual escape-hatch action to unresolved reports
 
 **Out of scope**:
 
@@ -285,9 +293,38 @@ No accounts or credentials. This plan is pure Node.
 
 ## Steps
 
+### Step 0: Prove the v4 compiler/package contract
+
+Do not write `src/v4.ts` from remembered Tailwind APIs. Create isolated exact-
+version probes for the lowest v4 version you intend to support, the plan fixture's
+version, the newest stable v4 available when this task executes, and one version
+just outside the proposed range.
+
+For each, resolve from the target fixture (never the CLI dependency tree) and
+record in `spike/v4-api/FINDINGS.md`: installed `tailwindcss` and companion Node/
+compiler package versions; public export/import path; compile/design-system
+function signature; filesystem callback contract for `@import` and `@config`;
+theme/token result shape; utility-generation oracle; and exact errors. Link the
+official docs or package source for every API used.
+
+Choose a contiguous exact semver range with feature detection, an explicit
+exact-version allowlist, or NO-GO. Never rely on a private deep path that can
+change without a package export contract. If the public API changes inside the
+proposed range, split the adapter by detected version or narrow the range.
+
+**Check**: pasted probe output and a final support matrix let task 3 implement
+without rediscovering package/API names.
+
 ### Step 1: Scaffold the CLI and export the shared helpers
 
-Create `packages/cli` with the workspace conventions. Identify the conversion
+Create `packages/cli` with the workspace conventions. Its `package.json` includes
+`"bin": { "fig-tail": "./dist/index.js" }` and `files: ["dist", "README.md"]`.
+Configure the build to preserve `#!/usr/bin/env node` as the first output line,
+emit ESM plus declarations, and exclude fixtures/spikes. Pack it, install the
+exact tarball in a clean temporary project, and run `fig-tail --help`. Testing
+only `pnpm exec` inside the workspace does not prove npm packaging.
+
+Identify the conversion
 helpers inside `packages/theme`'s adapters (colour conversion, rem→px, key
 flattening including `DEFAULT`, namespace mapping, `TokenSet` assembly) and
 export them without changing them.
@@ -321,13 +358,14 @@ in the suite.
 
 ### Step 3: Implement the v4 evaluation path
 
-Locate the CSS entry and use the target project's installed v4 Node
-compiler/design-system API. Supply explicit filesystem module/stylesheet
+Implement exactly the public package/API route and supported range approved by
+task 0. Locate the CSS entry and resolve the target project's installed v4 Node
+compiler/design-system package. Supply explicit filesystem module/stylesheet
 loaders rooted at the importing file for `@import`, `@plugin`, and `@config`.
 Extract the compiler's resolved design-system token entries and hand them to the
-shared conversion helpers. Feature-detect the exact API and reject unsupported
-minor versions with a clear support message; never import private files by an
-unversioned deep path and never call v3 `resolveConfig` for a v4 project.
+shared conversion helpers. Reject versions outside task 0's support matrix
+before compilation with a message naming the tested range; never import private
+files by an unversioned deep path or call v3 `resolveConfig` for v4.
 
 Build `fixtures/projects/tw4-config/` — a v4 project using `@config` to pull in a
 v3 config with a preset.
@@ -360,7 +398,8 @@ fully-resolvable fixture. Record the count in the commit message.
    project root and reading `version` — **by installed version, not by which
    files exist**, since a v4 project may still have a `tailwind.config.js` via
    `@config`.
-3. Before loading any JS/TS config, preset, or plugin, require
+3. Determine whether the route can execute JS/TS. **Before** importing a config
+   or invoking any compiler callback that may load one, require
    `--allow-config-execution`; otherwise exit non-zero with the trusted-checkout
    warning. Then dispatch, validate with `validateTokenSet`, create and validate
    the versioned `FigTailExport` envelope, and write `figtail.tokens.json` (or
@@ -382,15 +421,22 @@ pnpm --filter @fig-tail/cli exec fig-tail export --cwd ../../fixtures/projects/n
 pnpm --filter @fig-tail/cli exec fig-tail export --cwd ../../fixtures/projects/tw3-preset --allow-config-execution --stdout | head -c 200   # JSON on stdout; summary remains on stderr
 ```
 
-plus: the summary's closing line names the plugin setup screen as the next step.
+Add a canary fixture whose config creates a marker if evaluated. Running without
+the trust flag must exit non-zero with no marker. Repeat the refusal and success
+paths through the installed packed-tarball `fig-tail` bin so the real
+distribution entry point, shebang, and trust gate are all proven.
+
+The summary's closing line must name the plugin setup screen as the next step.
 
 ### Step 6: Confirm the plugin accepts the CLI's output
 
 Plan 003's setup UI accepts config source text. It must also accept a
 pre-resolved `figtail.tokens.json`: validate `formatVersion` and every provenance
 field, validate the nested `tokens` with `validateTokenSet`, then store the
-TokenSet directly with no resolution step and store `importProvenance`
-alongside it in `StoredConfig`. Do not add CLI fields to the TokenSet schema. If
+TokenSet directly with no resolution step and assign the validated CLI
+provenance directly to `StoredConfig.provenance`. `storage-types.ts` remains
+authoritative and imports `ConfigProvenance` from `@fig-tail/theme`; there is no
+parallel `importProvenance` field. Do not add CLI fields to the TokenSet schema. If
 plan 003 already wired a preliminary raw-TokenSet import, migrate it to this
 versioned envelope and reject the ambiguous old shape with an actionable
 regeneration message.
@@ -400,6 +446,12 @@ The Configured state must show **where the tokens came from** — "resolved from
 Tailwind 4.3.1)" — so a future maintainer knows why re-dropping the raw config
 might behave differently. The envelope and Figma UI contain only the target
 root's basename and a relative entry path, never an absolute local path.
+
+Plan 001 intentionally keeps resolver copy capability-neutral because this plan
+is optional. Now that the CLI exists, add a contextual "Use the CLI escape
+hatch" action to the plugin's unresolved-report UI, linking to the README
+section from task 7. It appears only after an unresolved browser resolution; it
+does not appear in empty, normal, or successful setup states.
 
 **Check**: in Figma desktop, drop a CLI-produced `figtail.tokens.json` into the
 setup UI. It stores without a resolution step, the Configured state names the CLI
@@ -434,23 +486,30 @@ led to this section from the plugin's own message.
 
 ALL must hold.
 
-- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r test` → exit 0
+- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test` → exit 0
 - [ ] Changes to `packages/theme` are **export-only**; plan 001's snapshots are
       byte-identical
 - [ ] The CLI resolves presets, function-valued theme keys, plugin-contributed
       values, and `.ts` configs
+- [ ] Task 0 records the exact supported v4 package/API matrix; supported bounds
+      pass and an outside version fails before compilation
+- [ ] The packed tarball installs cleanly, exposes `fig-tail` through
+      `package.json.bin`, preserves the Node shebang, and runs `--help`
 - [ ] The equivalence suite passes for every fully-resolvable plan 001 fixture
 - [ ] CLI provenance records exact target/CLI versions, entry, and checksum;
-      it remains outside `TokenSet`, and browser source metadata remains
-      truthful to its own route
+      it uses the shared `ConfigProvenance` field names, remains outside
+      `TokenSet`, and browser source metadata remains truthful to its own route
 - [ ] A single test asserts the CLI resolves what the browser resolver reports as
       unresolvable
 - [ ] `fig-tail export` succeeds on both project fixtures and fails with an
       actionable message elsewhere
 - [ ] JS/TS config execution is refused without `--allow-config-execution`, and
-      docs say this is for trusted checkouts only
+      docs say this is for trusted checkouts only; the canary proves refusal did
+      not evaluate config, including through the packed bin
 - [ ] The CLI's summary tells the user what to do with the output file
 - [ ] The plugin accepts `figtail.tokens.json` and shows the CLI as its source
+- [ ] Unresolved-report UI gains the CLI action in this plan; normal and
+      successful setup paths never show it
 - [ ] The README presents the CLI **after** normal setup, framed as an escape
       hatch
 - [ ] No Figma credentials or REST API usage anywhere in this plan
@@ -474,6 +533,8 @@ Stop and report back — do not improvise — if:
   extracting canonical resolved tokens. Do not substitute v3 `resolveConfig`
   or a hand-rolled approximation; report the exact export surface and narrow
   the supported v4 version range or split v4 support into a follow-up decision.
+- Task 0 can reach the fixture only through a private unversioned deep import.
+  Mark v4 CLI support NO-GO; do not guess a package/path contract.
 - A step's check fails twice after a reasonable attempt.
 
 ## Handoff / after it lands

@@ -19,7 +19,7 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**: this plan was written at commit `2157dc6`, before
+> **Drift check (run first)**: this revision was written at commit `7932c82`, before
 > plan 006 existed. Confirm 006 is `DONE`, locate its landing commit with
 > `git log --oneline -- plans/006-readonly-drift-linter.md packages/plugin/src/lint`,
 > and compare its proposal/result types with the contracts below. A mismatch is
@@ -39,16 +39,16 @@
   only code that changes design-variable data rather than namespaced plugin
   metadata. A bug here damages real design work that may not be recoverable
   through undo.
-- **Depends on**: 006
+- **Depends on**: 000, 006
 - **Category**: dx
-- **Planned at**: commit `2157dc6`, 2026-07-31 — dependency contract is prospective.
+- **Planned at**: commit `7932c82`, 2026-07-31 — dependency contracts are prospective.
 
 ## Build sheet
 
 Use Node 20+ and pnpm. Preserve plan 006's package scripts and strict TypeScript
 settings; use named exports, no `any`, no non-null assertions, and colocated
 Vitest tests. Before every commit run
-`pnpm -r typecheck && pnpm -r lint && pnpm -r test`.
+`pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test`.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command or a named in-Figma check; it must produce the stated result before you
@@ -69,6 +69,8 @@ Re-read "Hard constraints" in full before writing any code. The short version:
 - Never assign `variable.name`. Never touch values, modes, scopes, description,
   or the `ANDROID`/`iOS` platforms.
 - Nothing is written without a rendered diff, per-row opt-in, and a confirm.
+- Apply runs only in the design editor. Dev Mode may hand off variable IDs, never
+  a trusted proposal or write payload.
 - Add **exactly one** ESLint allowlist entry. If you want a second, stop.
 
 ### Files this plan creates
@@ -78,9 +80,12 @@ Re-read "Hard constraints" in full before writing any code. The short version:
 | `packages/plugin/spike/codesyntax.ts`, `spike/FINDINGS.md` | throwaway spike + findings | 1 |
 | `packages/plugin/src/lint/variables.ts` (edit) | validated reusable token-key proposals | 2 |
 | `packages/plugin/src/ui/stamp/**` | dry-run diff screen | 3 |
+| `packages/plugin/src/stamp/pending.ts` + test | untrusted Dev→design variable-ID handoff | 3 |
+| `packages/plugin/src/mode-design.ts` (edit) | guaranteed design-editor stamping route | 3 |
 | `packages/plugin/src/stamp/apply.ts` + test | **the single write site** | 4 |
 | `eslint.config.js` (edit) | one new allowlist entry | 4 |
 | `packages/plugin/src/stamp/guardrails.test.ts` | the six guardrail tests | 6 |
+| `packages/plugin/notes/stamping-verification.md` | durable guardrail mutation checks and bundle delta | 6 |
 | `README.md` (section only) | what stamping does, and that it writes | 7 |
 
 No new dependencies.
@@ -91,10 +96,10 @@ No new dependencies.
 |---|---|---|---|
 | 1 | **Spike.** Answer the 6 questions in Step 1 on the throwaway file, with pasted output and a screenshot for Q1. | `spike/**` | `spike/FINDINGS.md` answers all 6 with evidence. **If Q1 is false — Figma does not show code syntax in Inspect — STOP and report.** |
 | 2 | Tighten proposals to validated, utility-agnostic token keys (`brand-500`, `4`, `lg`). Each proposal gains a plain-language **reason**. Read-only change. | `src/lint/variables.ts` + test | Tests cover colour/spacing/radius keys, one token used across multiple property contexts, invalid/stale existing syntax, and a conflict proposing nothing |
-| 3 | The dry-run diff screen. **Every row starts unchecked.** Rows with existing code syntax are disabled until "overwrite" is ticked. Conflict rows cannot be selected. Proposed values are editable. | `src/ui/stamp/**` | Walked by hand, **and** a before/after snapshot of every variable's `codeSyntax` proves nothing was written by merely opening the screen |
-| 4 | The apply path: confirm dialog with the exact count, re-validate each proposal against the live variable (skip if changed), assert target/platform/value-shape before each write, batch, report applied/skipped/failed. **One write site, one eslint-disable comment naming plan 007.** | `src/stamp/apply.ts` + test, `eslint.config.js` | Apply 3 selected → exactly 3 changed, verified by re-reading; all other variables byte-identical to a pre-apply snapshot (name, value, scopes, description, modes, ANDROID/iOS). Then edit one in Figma, re-open a stale diff → that row is **skipped** |
+| 3 | Build a guaranteed design-editor stamping route. Dev Mode may store only selected variable IDs as short-lived untrusted clientStorage; design mode re-reads variables, config, and proposals before rendering the all-unchecked dry-run diff. | stamp UI, pending handoff, `mode-design.ts` | works whether linter lives in design or Dev Mode; pending payload contains no token keys/values; expired/missing IDs degrade cleanly; opening writes nothing |
+| 4 | Design-only apply: assert `figma.editorType === 'figma'` and edit access, confirm exact count, re-read/revalidate live variables, then batch/report. One write site/comment. | apply + tests, ESLint | Dev/no-edit attempts perform zero writes; Apply 3 changes exactly 3; all other fields identical; stale row skipped |
 | 5 | Establish and document undo. Apply 10, undo, compare against a pre-apply snapshot. Put the recovery text **on the result screen**, not just the README. | `src/ui/stamp/**` | The documented undo procedure, followed literally, restores the file — verified by snapshot comparison |
-| 6 | Write the six guardrail tests from Step 6. Then **break each of 1–3 and 6 deliberately and confirm the test fails.** | `src/stamp/guardrails.test.ts` | All six pass; each deliberate violation was observed failing; the verification is recorded in the commit message |
+| 6 | Write the six guardrail tests from Step 6. Then **break each of 1–3 and 6 deliberately and confirm the test fails.** Record commands/results plus plan-006 baseline and current bundle bytes in the durable note. | guardrail test, `notes/stamping-verification.md` | All six pass; each deliberate violation was observed failing; the note records the evidence and signed main/UI bundle deltas |
 | 7 | README section (~60 lines). **Lead with the fact that it writes to your Figma file.** | `README.md` | A designer reading only that section can answer: does this change my variable names? (No.) Can I undo it? (Yes, this way.) Does it happen automatically? (No.) |
 
 **If any task appears to need a write other than `codeSyntax.WEB`, STOP.** That
@@ -134,7 +139,8 @@ in the Done criteria.
    tells it to.** No write on load, on scan, on selection change, on navigation,
    or as a side effect of any other action. The *only* write path begins at a
    click on a button labelled Apply, on a screen showing exactly what will
-   change.
+   change. It also asserts `figma.editorType === 'figma'`; Dev Mode can never
+   enter the write function.
 2. **Tailwind names go into the variable's Code syntax field, never into the
    variable's name.** `variable.name` is never assigned, anywhere, for any
    reason. The only shipped write API this plan may use is
@@ -163,13 +169,28 @@ condition, not a judgement call.
   name-matching against the theme, returning `high` confidence when both agree,
   `medium` when only one produces an answer, and `conflict` when they disagree
   (in which case it proposes nothing).
-- `src/lint/types.ts` defines `Finding` with `variableId`, `variableName`, and
-  `suggestion`.
-- The linter lives in the UI route selected by plan 006's API spike, with a
+- `src/lint/types.ts` defines `Finding` with `variableId`, `variableName`, and an
+  explicit `VariableProposal`; conflicts/skips carry `tokenKey: null`.
+- The linter lives in the UI route selected by plan 000's API evidence, with a
   Markdown export.
 - Tier-1 dismissals use `documentConfigId`; tier-2/3 dismissals are session-only.
 - Plan 003's write-safety ESLint rule and bundle test are in place and currently
-  allow exactly one write: `figma.root.setSharedPluginData` in `storage.ts`.
+  allow exactly one write: `figma.root.setPluginData` in `storage.ts`.
+
+### Guaranteed apply route
+
+Dev Mode is read-only for general document changes. Stamping therefore never
+inherits plan 006's chosen surface. The Apply flow is always mounted from
+`mode-design.ts` and begins by asserting `figma.editorType === 'figma'`.
+
+If a Dev Mode linter launches stamping, it may store only
+`{ formatVersion: 1, variableIds: string[], createdAt: string }` in per-user
+`clientStorage`. No proposed token, value, confidence, overwrite decision, or
+diff crosses the invocation boundary. On design-mode launch, expire payloads
+after ten minutes, re-read the active config and variables, recompute proposals,
+discard missing IDs, and render a new all-unchecked diff. Asking the user to run
+fig-tail in the design editor is acceptable launch UX; attempting a Dev write is
+not.
 
 ### The Figma API this plan uses
 
@@ -250,6 +271,7 @@ Needed on hand:
 - `eslint.config.js` — **exactly one** new allowlist entry for
   `setVariableCodeSyntax`
 - Tests, including the guardrail tests in Step 6
+- `packages/plugin/notes/stamping-verification.md` — durable mutation-check and bundle-delta evidence
 - A README section covering what stamping does, that it writes to the file, and
   how to undo it
 
@@ -312,8 +334,8 @@ In `src/lint/variables.ts`, make every proposal a reusable token key validated
 against the active config and live variable value. Keep the file read-only —
 this step adds no writes.
 
-Each proposal gains: the proposed token key for `codeSyntax.WEB`, the confidence
-(`high` / `medium` / `conflict`), and a **reason** string explaining how it was
+Use plan 006's `VariableProposal` union directly: proposed token key, status
+(`high` / `medium` / `conflict` / `skipped`), typed evidence, and a **reason** explaining how it was
 derived ("value matches configured colour token `brand-500`; usable as text,
 fill, or border according to node context"). The reason is displayed in the
 diff and is what makes the review meaningful.
@@ -325,8 +347,12 @@ multi-scope and `ALL_SCOPES` variables still receive a bare key; and a
 
 ### Step 3: Build the dry-run diff screen
 
-A third route in plan 006's selected UI surface, reachable from the lint view's
-`unmapped-variable` findings.
+A design-editor route mounted from `mode-design.ts`. When the linter already
+lives in design mode, navigate directly with selected IDs. When it lives in Dev
+Mode, store only the versioned ID/timestamp envelope described in "Guaranteed
+apply route", tell the user to run fig-tail in the design editor, then recompute
+every proposal there. Never persist token keys, values, confidence, overwrite
+choices, or a rendered diff across invocations.
 
 Show a table, one row per variable:
 
@@ -376,15 +402,18 @@ variable.setVariableCodeSyntax('WEB', value)
 
 Before writing anything:
 
-1. **Confirmation dialog** stating the exact count and that it modifies this
+1. **Editor/access assertion**: reject unless `figma.editorType === 'figma'` and
+   the live variables are editable. A Dev/no-edit attempt reports the route and
+   performs zero writes.
+2. **Confirmation dialog** stating the exact count and that it modifies this
    Figma file: "Write Tailwind code syntax to 12 variables in this file?" with
    Cancel and Apply. Cancel is the default focus.
-2. **Re-validate every selected proposal against the live variable.** If a
+3. **Re-validate every selected proposal against the live variable.** If a
    variable's `codeSyntax.WEB`, name, resolved default-mode value, scopes, or
    collection changed since the diff was generated (someone else edited it, or
    the designer left the screen open), skip it and report it as skipped. Never
    apply a proposal whose evidence changed under you.
-3. **Assert the invariant in code** before each write: the target is a
+4. **Assert the invariant in code** before each write: the target is a
    `Variable`, the platform is exactly `'WEB'`, the config checksum still
    matches the diff, and the proposed key still exists in the correct token
    namespace with a value equal to the live variable. Validate through the
@@ -432,7 +461,7 @@ These are the mechanical proof of the Hard constraints, and they stay in the
 suite permanently.
 
 1. **Allowlist count test**: parse `eslint.config.js` and assert exactly **two**
-   write allowlist entries exist — `setSharedPluginData` (plan 003) and
+   write allowlist entries exist — `setPluginData` (plan 003) and
    `setVariableCodeSyntax` (this plan). Fails if a third is ever added.
 2. **Single write-site test**: scan TypeScript AST/source under `src/` and assert
    exactly one call expression targets `setVariableCodeSyntax`, in
@@ -450,10 +479,17 @@ suite permanently.
 6. **Platform test**: assert every call site passes `'WEB'`. No `ANDROID`, no
    `iOS`.
 
+Add two route tests beside the six mutation guardrails: a Dev Mode invocation
+and a no-edit design invocation both stop before the write site; and a pending
+handoff is rejected if expired, malformed, or if it contains fields other than
+version/IDs/timestamp.
+
 **Check**: all six pass. Then, for each of tests 1–3 and 6, deliberately
 introduce the violation it guards against and confirm the test **fails**;
-remove it and confirm it passes. Record this verification in the commit message.
-A guardrail nobody has watched fail is not a guardrail.
+remove it and confirm it passes. Record the command, expected failure, observed
+failure, restoration pass, plan-006 baseline bundle bytes, fresh bytes, and
+signed deltas in `packages/plugin/notes/stamping-verification.md`. A guardrail
+nobody has watched fail is not a guardrail.
 
 ### Step 7: Document stamping
 
@@ -491,22 +527,34 @@ automatically? (No, never.)
   confirm both Dev Mode surfaces report `exact-variable` only when the stamped
   key and value validate against the active config, and
   that Figma's own Inspect panel shows the code syntax.
+- **Fresh bundle budget**: after the feature build, `dist/main.js` remains under
+  400 kB and `dist/ui.html` remains under 500 kB. If stamping breaks either
+  ceiling, stop before shipping the write path and report the measured delta.
+  The durable verification note records baseline, current, and signed delta for
+  both artifacts.
 
 ## Done criteria
 
 ALL must hold.
 
-- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r test` → exit 0
+- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test` → exit 0
 - [ ] Static source/AST audit finds exactly one shipped
       `setVariableCodeSyntax` call, in `src/stamp/apply.ts`; bundle audit agrees
 - [ ] Every call site passes platform `'WEB'`
 - [ ] `variable.name` is never assigned anywhere in the codebase
 - [ ] Nothing is written without: a rendered diff, per-row opt-in, and a
       confirmation dialog stating the count
+- [ ] Apply is reachable only in the design editor; Dev/no-edit routes perform
+      zero writes, and Dev handoff contains only short-lived untrusted IDs
+- [ ] Design mode re-reads config/variables and recomputes proposals before diff;
+      no proposal or overwrite decision is trusted across invocations
 - [ ] All rows start unchecked; existing code syntax requires explicit overwrite
 - [ ] Conflict proposals cannot be applied
 - [ ] Stale proposals are skipped rather than overwritten
 - [ ] The full manual apply matrix passes, verified by before/after snapshots
+- [ ] Fresh `dist/main.js` is under 400 kB and `dist/ui.html` is under 500 kB
+- [ ] `notes/stamping-verification.md` records each deliberately failing
+      guardrail plus plan-006 baseline/current bundle bytes and signed deltas
 - [ ] All six guardrail tests pass, and each was observed to fail on a
       deliberate violation
 - [ ] The ESLint allowlist contains exactly two entries

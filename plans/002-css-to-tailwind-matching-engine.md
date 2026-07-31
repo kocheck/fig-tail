@@ -19,9 +19,9 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**: this plan was written at commit `2157dc6`, before
-> plan 001's package existed. Confirm plan 001 is `DONE`, then run
-> `git diff --stat 2157dc6..HEAD -- packages/theme` and compare the live exports
+> **Drift check (run first)**: this revision was written at commit `7932c82`, before
+> plan 001's package existed. Confirm plans 000 and 001 are `DONE`, then run
+> `git diff --stat 7932c82..HEAD -- packages/theme fixtures/figma/css` and compare the live exports
 > with the contracts quoted below. A non-empty diff is expected; a contract
 > mismatch is a STOP condition.
 
@@ -33,9 +33,9 @@
 - **Risk**: MED — the risk is not "does it run" but "does it produce the right
   class". Wrong-but-plausible output is worse than no output, which is why the
   confidence ladder in Step 2 exists.
-- **Depends on**: 001
+- **Depends on**: 000, 001
 - **Category**: dx
-- **Planned at**: commit `2157dc6`, 2026-07-31 — dependency contract is prospective.
+- **Planned at**: commit `7932c82`, 2026-07-31 — dependency contracts are prospective.
 
 ## Build sheet
 
@@ -43,7 +43,7 @@ Use Node 20+ and pnpm. Copy the package scripts and strict TypeScript settings
 from `packages/theme/package.json` and `packages/theme/tsconfig.json`, changing
 only the package name and entry paths. Use named exports, no `any`, no non-null
 assertions, and colocated Vitest tests. Before every commit run
-`pnpm -r typecheck && pnpm -r lint && pnpm -r test`.
+`pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test`.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command; it must produce the stated result before you start the next task.
@@ -54,9 +54,11 @@ section when a task points you at it.
 
 | Path | Purpose | Task |
 |---|---|---|
-| `packages/match/package.json`, `tsconfig.json` | package setup | 1 |
+| `packages/match/package.json`, `tsconfig.json`, `tsdown.config.ts`, `vitest.config.ts` | package, build, enforced coverage | 1 |
 | `packages/match/src/types.ts` | `MatchResult`, `Confidence`, `MatchOptions`, `VariableHint` | 1 |
-| `packages/match/fixtures/css/card.json`, `text.json`, `sized.json` | captured `getCSSAsync()` output | 1 |
+| `packages/match/src/types.test.ts` | executable public-contract smoke test | 1 |
+| `packages/match/fixtures/css/*.json` | copied verbatim from plan 000's real `getCSSAsync()` captures | 1 |
+| `packages/match/scripts/browser-bundle-probe.mjs` | fully bundled browser-size probe | 1 |
 | `packages/match/src/normalise.ts` + test | shorthand expansion, colour canonicalisation, collapse rules | 2 |
 | `packages/match/src/matchers/color.ts` + test | colour matcher, ΔE, alpha modifier | 3 |
 | `packages/match/src/matchers/length.ts` + test | spacing, sizing, radius, border width | 4 |
@@ -69,8 +71,8 @@ section when a task points you at it.
 ### Dependencies
 
 ```bash
-pnpm add --filter @fig-tail/match culori
-pnpm add --filter @fig-tail/match -D fast-check @vitest/coverage-v8
+pnpm add --filter @fig-tail/match --save-exact culori
+pnpm add --filter @fig-tail/match -D --save-exact fast-check @vitest/coverage-v8 esbuild
 ```
 
 `@fig-tail/theme` is a workspace dependency (`workspace:*`), types only.
@@ -79,14 +81,14 @@ pnpm add --filter @fig-tail/match -D fast-check @vitest/coverage-v8
 
 | # | Do this | Files it may touch | Done when |
 |---|---|---|---|
-| 1 | Scaffold the package. Write the public types **first** — plans 004–008 depend on them. Save the 3 CSS fixtures verbatim from the Step-1 examples. | `package.json`, `tsconfig.json`, `src/types.ts`, `fixtures/css/*` | `pnpm --filter @fig-tail/match typecheck` → exit 0; placeholder test asserting `matchDeclarations({}, null) === []` passes |
+| 1 | Scaffold the package. Write the public types first, including provenance, hint status, and ambiguity, plus an executable contract test. Copy real CSS captures from plan 000; do not transcribe the prose examples. Configure failing coverage thresholds and the fully bundled browser probe. | package/build/test config, `src/types.ts`, `src/types.test.ts`, `fixtures/css/*`, browser-probe script | typecheck passes; copied fixture hashes equal plan 000 originals; a threshold probe makes coverage fail; the contract test proves an exact result may carry a class while a nearest result must carry `className: null` |
 | 2 | Shorthand expansion, colour canonicalisation, reset-utility preservation, and collapse rules (`p-6` not four longhands). | `src/normalise.ts` + test | `test -t expand` → passes, incl. 1/2/3/4-value shorthands, the `border` shorthand, 5 colour notations, reset utilities, and the 3-match-1-miss non-collapse case |
 | 3 | Colour matcher: property→utility map, equality-first matching, CIEDE2000 for near misses, alpha modifier, and validated `codeSyntax` token hints. | `src/matchers/color.ts` + test | `test -t color` → passes, incl. all cases named in Step 3 |
 | 4 | Length matchers. **v4 divides by `spacing.base`; v3 looks up `spacing.scale`.** Branch on which is populated, not on `source.major`. | `src/matchers/length.ts` + test | `test -t length` → passes against **both** fixture token sets, incl. all 5 cases in Step 4 |
 | 5 | Typography. Pair `font-size` with `line-height` when the token defines one. | `src/matchers/typography.ts` + test | `test -t typography` → passes, incl. paired, unpaired, and font-stack cases |
 | 6 | Layout (static tables), shadow (normalised whole-string), effects. | `src/matchers/{layout,shadow,effects}.ts` + tests | `test -t layout`, `-t shadow`, `-t effects` → all pass, incl. the colour-notation shadow case |
-| 7 | Compose `matchDeclarations`, apply collapse + dedupe + canonical sort, write `toClassName`. Snapshot the 3 fixtures. | `src/index.ts`, `src/order.ts`, `src/integration.test.ts` | `test -t integration` → passes, asserting the **exact** class string and its order for the card fixture |
-| 8 | `summarise`, plus safety tests for no config, unknown namespace, unknown prefix, and disabled core utilities. | `src/summarise.ts` + tests | `test -t summarise`, `-t no-config`, `-t unknown-namespace`, `-t availability` → pass; `test -- --coverage` ≥90% in `src/matchers`; `wc -c < packages/match/dist/index.js` under 61440 |
+| 7 | Compose `matchDeclarations`, apply collapse + dedupe + canonical sort, write `toClassName`. Near matches are structurally excluded. Implement duplicate-value precedence and ambiguity reporting. Snapshot the real fixtures. | `src/index.ts`, `src/order.ts`, `src/integration.test.ts` | integration passes with exact order; a near result cannot enter `toClassName`; duplicate values resolve deterministically and expose all tied candidates |
+| 8 | `summarise`, plus safety tests for no config, unknown/partial namespace, unknown prefix, and disabled core utilities. | `src/summarise.ts` + tests | named suites pass; Vitest enforces statements/lines/functions ≥90% and branches ≥85%; a fresh fully bundled browser probe is under 61440 bytes |
 
 **Task 8's unknown-namespace test is the safety-critical one.** If it regresses,
 fig-tail emits class names that do not exist in strangers' codebases.
@@ -124,8 +126,9 @@ bundleable into a Figma plugin, so: no Node built-ins, no `fs`, no `process`.
 
 ### Input: what Figma actually gives you
 
-Plan 004 will call `node.getCSSAsync()`, which returns the same CSS the Dev Mode
-Inspect panel displays, as a flat string→string object. Real examples:
+Plan 000 called `node.getCSSAsync()` in both supported editor routes and stored
+verbatim outputs under `fixtures/figma/css/`. Those captures are the test oracle.
+The following are explanatory excerpts only:
 
 ```js
 // A card frame with auto-layout
@@ -196,6 +199,8 @@ So the engine's entry point takes an optional per-property hint:
 
 ```ts
 type VariableHint = {
+  /** Stable variable ID; downstream must distinguish no hint from a failed hint. */
+  variableId: string
   /** Variable.codeSyntax.WEB if present — a candidate token key, never trusted blindly. */
   codeSyntax?: string
   /** Variable.name, e.g. "brand/500" or "spacing/gutter". */
@@ -272,11 +277,24 @@ must still resolve exactly. Step 7 tests this.
 
 ### Never promote a near-miss
 
-`nearest` **must never be silently promoted to a class**. The result carries
-both the suggested class *and* the fact that it is not an exact match; it is
-plan 004's, 005's and 006's job to display that difference. A caller that ignores
-confidence gets a correct-looking wrong answer, so make the type force the
-issue — return the class and the confidence together, never a bare string.
+`nearest` **must never be promoted to a class**. Its `className` is always null;
+the candidate exists only in `nearest` report data. There is no option, overload,
+preference, or internal escape hatch that changes this. Plans 004–006 display
+the candidate as drift, never in a copyable class string.
+
+### Exact-value ties and provenance
+
+Several tokens may intentionally share a value. Resolve exact ties in this order:
+
+1. a validated `codeSyntax.WEB` hint;
+2. a validated variable-name hint;
+3. shortest token key, then bytewise lexicographic order.
+
+The first two are intent evidence. The third is only a deterministic fallback:
+populate `ambiguity` with every tied candidate
+and add a visible note so the choice is never silent. `provenance.hintStatus`
+also states when a hint was absent, stale, unresolvable, or conflicting. Plan 006
+consumes this status directly and must not reverse-engineer it from confidence.
 
 ### Colour distance
 
@@ -356,8 +374,8 @@ utility prefix — do not take a dependency on the Prettier plugin.
 |---|---|---|
 | Typecheck | `pnpm -r typecheck` | exit 0 |
 | Test this package | `pnpm --filter @fig-tail/match test` | all pass |
-| Coverage | `pnpm --filter @fig-tail/match test -- --coverage` | ≥90% statements in `src/matchers` |
-| Bundle size probe | `pnpm --filter @fig-tail/match build && wc -c < packages/match/dist/index.js` | under 60 kB minified |
+| Coverage | `pnpm --filter @fig-tail/match coverage` | configured thresholds: statements/lines/functions ≥90%, branches ≥85% |
+| Browser bundle probe | `pnpm --filter @fig-tail/match probe:browser` | builds runtime dependencies into one minified file, then asserts under 60 kB |
 
 Reference documentation:
 
@@ -374,9 +392,10 @@ v4) are this plan's primary test input.
 **In scope**:
 
 - `packages/match/**` — the entire package: source, tests, build config
-- `packages/match/fixtures/**` — captured `getCSSAsync()` outputs used as test
-  input (hand-written JSON is fine; see Step 1)
-- Adding `@fig-tail/match` to the workspace and root scripts
+- `packages/match/fixtures/**` — plan 000's captured `getCSSAsync()` outputs used
+  as test input; hand-written replacements are forbidden
+- The existing `packages/*` workspace glob and recursive root scripts consume
+  the new package without a root-file edit
 
 **Out of scope**:
 
@@ -414,8 +433,22 @@ export type Confidence =
   | 'exact-variable' | 'exact-value' | 'name-match'
   | 'nearest' | 'arbitrary' | 'none'
 
+export type MatchProvenance = {
+  source: 'code-syntax' | 'variable-name' | 'token-value' | 'static-lookup'
+        | 'near-token' | 'arbitrary' | 'unsupported'
+  hintStatus: 'none' | 'valid-code-syntax' | 'valid-name'
+            | 'stale-code-syntax' | 'unresolvable' | 'conflict'
+  token?: { namespace: string; key: string; value: string }
+}
+
+export type MatchAmbiguity = {
+  chosen: string
+  candidates: string[]
+  rule: 'shortest-then-lexicographic'
+}
+
 export type MatchResult = {
-  /** The Tailwind class, e.g. "bg-brand-500". Null when confidence is 'none'. */
+  /** Copyable class. Always null for `nearest` and `none`. */
   className: string | null
   confidence: Confidence
   /** The CSS property this came from, post-shorthand-expansion. */
@@ -426,6 +459,10 @@ export type MatchResult = {
   note?: string
   /** For 'nearest': what it nearly matched, and how far off. */
   nearest?: { token: string; tokenValue: string; distance: number; unit: 'deltaE' | 'px' | 'ratio' }
+  /** Why this result exists; downstream code never infers it from confidence. */
+  provenance: MatchProvenance
+  /** Present when several live tokens remain tied after intent precedence. */
+  ambiguity?: MatchAmbiguity
 }
 
 export type MatchOptions = {
@@ -433,8 +470,6 @@ export type MatchOptions = {
   allowArbitrary: boolean
   /** Emit classes for layout props (flex, items-center…). Default true. */
   includeLayout: boolean
-  /** Treat 'nearest' as a match and emit the class. Default FALSE. */
-  acceptNearest: boolean
   /** ΔE and px tolerances; defaults per "Context". */
   tolerance: { colorNearest: number; lengthExactPx: number; lengthNearestPx: number }
 }
@@ -447,11 +482,8 @@ export function matchDeclarations(
   hints?: Record<string, VariableHint>,   // keyed by CSS property
 ): MatchResult[]
 
-/** Sorted, deduped class string. Excludes `nearest` unless explicitly opted in. */
-export function toClassName(
-  results: MatchResult[],
-  options?: { acceptNearest?: boolean },
-): string
+/** Sorted, deduped class string. `nearest` is structurally ineligible. */
+export function toClassName(results: MatchResult[]): string
 ```
 
 Prefixing and core-plugin availability come from `tokens.source`, never from a
@@ -462,11 +494,18 @@ Before returning either a named or arbitrary class, map the CSS property to its
 v3 core-plugin name and honor `source.corePlugins`; a disabled/unknown utility
 returns `none` without suppressing other utilities that share the token map.
 
-Also create `packages/match/fixtures/css/*.json` — start with the three real
-`getCSSAsync()` outputs quoted in "Context" above, saved verbatim.
+Copy `packages/match/fixtures/css/*.json` from plan 000's recorded Dev Mode
+captures and retain source hashes in a fixture manifest. Prose examples are not
+an acceptable substitute.
 
-**Check**: `pnpm --filter @fig-tail/match typecheck` → exit 0, and a placeholder
-test asserting `matchDeclarations({}, null)` returns `[]` passes.
+Create `src/types.test.ts` rather than pretending the task-7 engine exists. It
+constructs fully populated exact and nearest `MatchResult` values, asserts the
+exact result may carry a class, and asserts the nearest result has
+`className: null` plus distance and provenance. This gives Vitest a meaningful
+first test while leaving implementation ownership with tasks 2–7.
+
+**Check**: `pnpm --filter @fig-tail/match typecheck` and the contract test pass;
+temporarily giving the nearest fixture a class makes the contract test fail.
 
 ### Step 2: Implement shorthand expansion and the confidence plumbing
 
@@ -561,12 +600,12 @@ the Figma value differ only in colour notation
 ### Step 7: Wire `matchDeclarations` and `toClassName`, and sort output
 
 Compose the matchers, apply collapse rules, dedupe, and sort by the canonical
-ordinal table. `toClassName` joins with single spaces, filters `nearest` unless
-the caller explicitly opts in, and applies the major-specific prefix exactly
-once.
+ordinal table. `toClassName` joins with single spaces, always excludes `nearest`,
+and applies the major-specific prefix exactly once. Implement the documented tie
+precedence and preserve ambiguity/provenance in the result list.
 
-Then run the whole thing against the three captured fixtures from Step 1 and
-snapshot the results.
+Then run the whole thing against every copied plan-000 CSS fixture and snapshot
+the results; the three prose excerpts remain the named smoke cases.
 
 **Check**: `pnpm --filter @fig-tail/match test -t integration` → passes. The card
 fixture from "Context" must produce exactly:
@@ -599,27 +638,32 @@ fig-tail starts emitting dead classes into other people's codebases. This is pla
 003's tier 3, and it is the difference between "the plugin works with no setup"
 and "the plugin crashes with no setup".
 
+Add a **partial-namespace test** from plan 001's exact-version gate: explicit
+project tokens in that namespace may match, but absent bundled defaults must fall
+to arbitrary output with a note that defaults were withheld.
+
 **Check**: `pnpm --filter @fig-tail/match test -t summarise` and
 `-t no-config`, `-t unknown-namespace`, and `-t availability` → pass. The
 availability suite covers known v3 and v4 prefixes, unknown prefix, a disabled
 `backgroundColor` with an enabled `textColor`, and `corePlugins.mode: unknown`.
-Then `pnpm --filter @fig-tail/match test -- --coverage`
-reports ≥90% statement coverage in `src/matchers`.
+Then `pnpm --filter @fig-tail/match coverage` enforces statements, lines, and
+functions ≥90% plus branches ≥85% over `src/**/*.ts` (excluding tests).
 
 ## Validation plan
 
 - **Unit tests per matcher**, as each step's Check describes. Table-driven —
   a `cases.ts` array of `{input, tokens, expected}` per matcher keeps them
   dense and readable.
-- **Integration snapshots** against the three captured `getCSSAsync()` fixtures,
+- **Integration snapshots** against every copied plan-000 `getCSSAsync()` fixture,
   run against both the v3 and the v4 token set.
 - **Property-based test** (fast-check, dev dependency): for any colour in the
   token set, feeding its own hex back in must produce `exact-value` and the
   correct class. Same for every length token. This catches whole classes of
   rounding and key-flattening bugs that hand-written cases miss.
-- **Bundle size probe**: `wc -c < packages/match/dist/index.js` under 60 kB
-  minified. If culori pulls in too much, switch to importing from `culori/fn`
-  and re-measure.
+- **Bundle size probe**: run `probe:browser`, which freshly bundles all runtime
+  dependencies into one minified browser artifact, then asserts under 60 kB.
+  The publishable library output may externalize dependencies and is not a valid
+  plugin-cost measurement.
 - **No-Figma assertion**: a test that greps the built bundle for the strings
   `figma.` and `@figma/` and fails if either appears. This package must stay
   runnable in plain Node.
@@ -628,7 +672,7 @@ reports ≥90% statement coverage in `src/matchers`.
 
 ALL must hold.
 
-- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r test` → exit 0
+- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test` → exit 0
 - [ ] Every property group in the "Property coverage" table is implemented, or
       explicitly returns `none` with a note explaining why
 - [ ] All six confidence levels are reachable and each has at least one test
@@ -636,17 +680,22 @@ ALL must hold.
       values, still resolves layout utilities, and never throws
 - [ ] A namespace in `unknownNamespaces` yields arbitrary values **even when
       matching tokens are present in the map** — tested explicitly
+- [ ] A partial namespace matches explicit project tokens but never an absent
+      bundled default, and labels that reduced coverage
 - [ ] A namespace unknown because its core plugin is disabled yields `none`, not
       an arbitrary value
 - [ ] An unresolved `prefix` never produces unprefixed class names
 - [ ] v3 and v4 prefixes render with their distinct documented syntax, and a
       disabled core plugin suppresses only its own utility family
-- [ ] `nearest` results always populate the `nearest` field, and never emit a
-      class unless `acceptNearest: true`
+- [ ] `nearest` results populate report data, always have `className: null`, and
+      cannot enter `toClassName` through any public or internal option
+- [ ] Every result carries typed provenance/hint status; duplicate exact values
+      follow the documented precedence and expose ambiguity after fallback ties
 - [ ] The integration snapshot for the card fixture matches the exact expected
       class string, in canonical order
-- [ ] Statement coverage in `src/matchers` ≥90%
-- [ ] `packages/match/dist/index.js` is under 60 kB minified
+- [ ] Vitest fails below statements/lines/functions 90% or branches 85%
+- [ ] The fresh fully bundled browser probe, including runtime dependencies, is
+      under 60 kB minified
 - [ ] The bundle contains no reference to `figma.` or `@figma/`
 - [ ] `packages/theme` is unchanged
       (`git diff --exit-code "$(git merge-base HEAD main)"..HEAD -- packages/theme`

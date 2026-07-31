@@ -18,10 +18,13 @@ specific. Say so in your commit message when it happens.
    batch, do not start task 4 while task 3 is unverified.
 3. After each task, run its **Done when** command. It must produce the stated
    result before you move on.
-4. Commit after each task (format in §7).
+4. Commit after each task (format in §7). A verification-only task must write a
+   durable evidence note named by the plan; commit that note. Never create an
+   empty commit merely to satisfy this rule.
 5. When every task is done, work through your plan's **Done criteria** checklist
    and confirm each item literally. Then update your plan's row in
-   `plans/README.md` to `DONE`.
+   `plans/README.md` to `DONE`. Editing that status row is a universal scope
+   exception even when a task's file list does not repeat it.
 
 **Do not** reorganise the plan, combine tasks, or "improve" the approach. If the
 plan seems wrong, finish what is unambiguous and report the rest (§6).
@@ -35,7 +38,7 @@ seems to need.
 
 | # | Rule | What it means in code |
 |---|---|---|
-| 1 | **Never write to the Figma document** except the two sanctioned shipped paths | Only `figma.root.setSharedPluginData` (plan 003) and `Variable.setVariableCodeSyntax('WEB', …)` (plan 007) may enter production bundles. Plan 007's isolated throwaway API spike is explicitly scoped to a disposable file. |
+| 1 | **Never write to the Figma document** except the two sanctioned shipped paths | Only `figma.root.setPluginData` (plan 003) and `Variable.setVariableCodeSyntax('WEB', …)` (plan 007) may enter production bundles. Plan 007's isolated throwaway API spike is explicitly scoped to a disposable file. |
 | 2 | **Never write `variable.name`** | Tailwind names go in Code syntax. No exceptions. |
 | 3 | **The plugin and browser resolver never execute user config** | No `eval`, `new Function`, or dynamic import in browser/plugin code. Plan 009's optional Node CLI is the only exception: it executes config only from a trusted checkout after the caller supplies the explicit trust flag. |
 | 4 | **Never make a network request** | The manifest is `networkAccess: { allowedDomains: ["none"] }`. No `fetch`, no telemetry, no analytics. |
@@ -56,6 +59,10 @@ pnpm install
 
 Node 20 or newer. If `pnpm` is missing after `corepack enable`, install it with
 `npm i -g pnpm` and note that in your commit message.
+
+Plan 001 pins the exact pnpm release in root `packageManager` and commits
+`pnpm-lock.yaml`. Do not regenerate it with a different pnpm release. CI uses
+`corepack` and `pnpm install --frozen-lockfile` from the first production commit.
 
 ---
 
@@ -90,7 +97,7 @@ fig-tail/
   "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
   "files": ["dist", "README.md"],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --minify",
+    "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint src"
@@ -101,7 +108,11 @@ fig-tail/
 `@fig-tail/plugin` differs: it builds with `node build.mjs` and is **not**
 published. Its plan says so.
 
-### `tsconfig.base.json`
+Library packages use `tsdown`, the maintained successor recommended by tsup's
+own repository. Keep a checked-in `tsdown.config.ts` per publishable package so
+entry points, ESM output, minification, declarations, and externals are explicit.
+
+### TypeScript configs
 
 ```jsonc
 {
@@ -122,7 +133,16 @@ published. Its plan says so.
 }
 ```
 
-Each package's `tsconfig.json` extends it and sets `include`/`outDir`.
+Each library package's `tsconfig.json` extends it and sets `include`/`outDir`.
+The plugin keeps runtime types separate:
+
+- `tsconfig.sandbox.json` keeps `lib: ["es2020"]`; it may include Figma plugin
+  typings and must not include DOM types.
+- `tsconfig.ui.json` uses `lib: ["es2020", "dom", "dom.iterable"]`; it must not
+  include the `figma` global.
+
+The plugin `typecheck` script runs both. A permanent negative type fixture proves
+`document` fails in sandbox code and `figma` fails in iframe code.
 
 ### TypeScript rules
 
@@ -172,10 +192,13 @@ These are the only commands you need. Run them from the repo root.
 | Coverage | `pnpm --filter @fig-tail/<name> test -- --coverage` | see plan's bar |
 | Byte size of a build | `wc -c < packages/<name>/dist/index.js` | see plan's budget |
 
+Any command that inspects `dist/**` must build it in the same command first.
+Reading a pre-existing bundle is not verification.
+
 **Before every commit**, run:
 
 ```bash
-pnpm -r typecheck && pnpm -r lint && pnpm -r test
+pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test
 ```
 
 If that fails, the commit is not ready.
@@ -305,7 +328,7 @@ Terms used across the plans without re-definition.
 | Term | Meaning |
 |---|---|
 | **TokenSet** | The resolved Tailwind theme as plain JSON. Defined in plan 001 Step 2. The contract between every package. |
-| **Confidence ladder** | `exact-variable` → `exact-value` → `name-match` → `nearest` → `arbitrary` → `none`. Defined in plan 002. |
+| **Confidence ladder** | `exact-variable` → `exact-value` → `name-match` → `nearest` → `arbitrary` → `none`. `nearest` is report-only and never enters copyable class output. Defined in plan 002. |
 | **Unknown namespace** | A theme namespace the resolver could not read. Emits raw values, never defaults. Plan 001. |
 | **Config-source tier** | 1 = saved on the Figma file, 2 = saved in the user's own settings, 3 = no config at all. Plan 003. |
 | **Dev Mode** | Figma's developer-facing mode. `figma.editorType === 'dev'`. |
@@ -319,7 +342,7 @@ Terms used across the plans without re-definition.
 ## 11. Before you say you are done
 
 - [ ] Every task in the Build sheet is complete and its check passed
-- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r test` → exit 0
+- [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test` → exit 0
 - [ ] Every item in the plan's **Done criteria** is confirmed literally, not
       assumed
 - [ ] Every manual/in-Figma check the plan asks for was actually performed, and
