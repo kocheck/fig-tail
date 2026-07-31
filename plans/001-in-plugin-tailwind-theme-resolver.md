@@ -5,6 +5,13 @@
 > stop and report — do not improvise. When done, update the status row for this
 > plan in `plans/README.md`.
 >
+> **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
+> *not* listed there has a designed fallback: do the next-best thing, label it
+> visibly for the user, note it in your commit message, and keep going. Read
+> invariant 2 in `plans/README.md` before deciding something is blocked —
+> "partly working and clearly labelled" beats "stopped and waiting" everywhere
+> except write-safety and executing user input.
+>
 > **Drift check (run first)**: `git log --oneline -5`. This plan was written
 > against a repository containing only `LICENSE`, `README.md`, and `plans/` at
 > commit `e757f32`. If `packages/` already exists, someone has started this
@@ -446,18 +453,29 @@ channels) each failing with a distinguishable error.
    - Whether the TypeScript pre-pass handled the `.ts` config, and what it could
      not handle.
    - acorn's real minified+gzipped contribution to the bundle.
-4. **Decide** the acceptable coverage bar and write it down. Recommendation:
-   **at least 6 of 8 fully resolved, and 8 of 8 either resolved or reported with
-   an accurate, actionable message.** A config that fails must fail *loudly and
-   usefully*, never partially and silently.
+4. **Measure against the coverage bar and write down the result.**
+   Recommendation: **at least 6 of 8 fully resolved, and 8 of 8 either resolved
+   or reported with an accurate, actionable message.**
+
+**This bar is a reporting threshold, not a gate.** The fallback ladder is already
+designed and does not depend on hitting it: whatever cannot be evaluated is
+reported (Step 8), the resolvable parts still produce a usable `TokenSet`, and
+plan 009's CLI covers the rest. So if coverage comes in under the bar:
+
+- **Keep building.** Continue to Steps 4–8 as written.
+- **Report the number and the specific constructs that missed**, with examples,
+  so the owner can decide whether any of them is worth adding support for before
+  launch. Frame it as "these config patterns will need the CLI", not "this
+  approach failed".
+- Record the shortfall in `plans/README.md` alongside the 001 status row, so it
+  is visible when plan 010 writes the docs — the README has to be honest about
+  which configs work out of the box.
+
+The only genuinely blocking outcome here is being unable to parse *anything*.
 
 **Check**: `FINDINGS.md` answers all five points with pasted output and states
 the measured coverage against the bar. A reviewer reading only that file knows
-whether the approach is viable.
-
-**STOP and report** if fewer than 6 of 8 fully resolve. The fallbacks (require
-the CLI for setup; support a narrower config subset; ask users to inline their
-presets) are product decisions for the owner, not for you.
+what will and will not resolve in the browser.
 
 ### Step 4: Generate and bundle the default themes
 
@@ -593,8 +611,10 @@ ALL must hold.
 - [ ] `pnpm install && pnpm -r typecheck && pnpm -r lint && pnpm -r test` → exit 0
 - [ ] `packages/theme/spike/FINDINGS.md` records the Step 3 coverage measurement
       against the stated bar
-- [ ] At least 6 of 8 real-world v3 fixtures fully resolve; all 8 either resolve
-      or produce an accurate, actionable report
+- [ ] All 8 real-world v3 fixtures either fully resolve or produce an accurate,
+      actionable report — and the fully-resolved count is recorded in
+      `FINDINGS.md` and in `plans/README.md` (6+ is the target; a lower number is
+      a documented limitation, not a failure)
 - [ ] All 4 v4 fixtures resolve, including resets, aliasing, and `@config`
 - [ ] `resolveTheme` never throws, for any input, including deliberately hostile
       ones
@@ -614,8 +634,8 @@ ALL must hold.
 
 Stop and report back — do not improvise — if:
 
-- **Fewer than 6 of 8 real-world v3 configs fully resolve** (Step 3). The
-  alternatives are product decisions for the owner.
+- **No real-world config parses at all** (Step 3) — as distinct from partial
+  coverage, which is expected and handled by the report plus plan 009's CLI.
 - Any approach seems to require `eval`, `new Function`, or dynamic `import()`.
   This is a hard line, not a tradeoff.
 - The bundle cannot fit under **250 kB** minified even after trimming. That

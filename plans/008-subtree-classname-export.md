@@ -5,6 +5,13 @@
 > stop and report — do not improvise. When done, update the status row for this
 > plan in `plans/README.md`.
 >
+> **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
+> *not* listed there has a designed fallback: do the next-best thing, label it
+> visibly for the user, note it in your commit message, and keep going. Read
+> invariant 2 in `plans/README.md` before deciding something is blocked —
+> "partly working and clearly labelled" beats "stopped and waiting" everywhere
+> except write-safety and executing user input.
+>
 > **Drift check (run first)**:
 > `git diff --stat <SHA at which 004 completed>..HEAD -- packages/plugin/src`
 > This plan reuses `src/pipeline.ts` (extracted in plan 005) and `buildHints`.

@@ -5,6 +5,13 @@
 > stop and report — do not improvise. When done, update the status row for this
 > plan in `plans/README.md`.
 >
+> **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
+> *not* listed there has a designed fallback: do the next-best thing, label it
+> visibly for the user, note it in your commit message, and keep going. Read
+> invariant 2 in `plans/README.md` before deciding something is blocked —
+> "partly working and clearly labelled" beats "stopped and waiting" everywhere
+> except write-safety and executing user input.
+>
 > **Drift check (run first)**:
 > `git diff --stat <SHA at which plan 001 completed>..HEAD -- packages/theme`
 > This plan calls `resolveTheme()` and stores its `TokenSet`. If either has
@@ -14,9 +21,10 @@
 
 - **Priority**: P1
 - **Effort**: M
-- **Risk**: MED — concentrated in Step 5 (chunked document storage under a hard
-  100 kB per-entry cap) and Step 8 (read-back from a Dev Mode seat that may lack
-  edit access). Both are verifiable in-product before anything is built on them.
+- **Risk**: MED — concentrated in Step 5 (chunked storage under a hard 100 kB
+  per-entry cap). The cross-user read question in Step 8 used to be the big risk;
+  the three-tier config-source ladder demotes it to a convenience question, since
+  any developer can add the config themselves without edit access.
 - **Depends on**: 001
 - **Category**: dx
 - **Grounded at**: the commit at which plan 001 landed.
@@ -33,10 +41,13 @@ Two decisions carry that promise, and both live here.
 resolver on the pasted source. That is what removes the CLI from the developer's
 path entirely.
 
-**The result is stored on the Figma document**, not in per-user storage. Per-user
-storage would multiply setup friction by team size and guarantee the copies
-drift. Document storage makes the theme a property of the design file, which is
-the only version of this that scales past one person.
+**The result is stored on the Figma document by preference**, so one person's
+setup serves the whole team and the theme becomes a property of the design file.
+But that is a preference, not a requirement: a developer who cannot read the
+file's shared config — or who is looking at a file nobody has configured — can
+add the Tailwind config themselves in seconds, and a developer who does neither
+still gets arbitrary-value output rather than nothing. Three tiers, each
+labelled. Nobody is ever blocked; they just see which tier they are on.
 
 This is also where the program's write-safety invariant gets mechanically
 enforced rather than merely promised — which is why the ESLint rule and bundle
@@ -49,46 +60,94 @@ substrate they sit on.
 
 ### Verified Figma platform facts
 
-Checked against Figma's plugin documentation on 2026-07-31. These are
-load-bearing; if any turns out to be false, that is a STOP condition.
+Checked against Figma's plugin documentation on 2026-07-31, with sources below.
+**Open each linked page before implementing against the fact you depend on** —
+these summaries were gathered by search (the pages 403 automated fetching), so
+they are not quotations. If a page contradicts this list, the page wins: fix the
+list in the same commit.
 
 1. A single plugin may declare **both** `"codegen"` and `"inspect"` in
-   `manifest.capabilities`.
+   `manifest.capabilities`. Possible values: `codegen`, `inspect`, `textreview`,
+   `vscode`. — [Plugin manifest](https://developers.figma.com/docs/plugins/manifest)
 2. **`codegen`** runs in the **Code section** of the Dev Mode Inspect panel. The
    plugin appears in Figma's native language dropdown; once selected,
-   `figma.codegen.on('generate')` fires on every selection change.
+   `figma.codegen.on('generate')` fires on every selection change. —
+   [Codegen plugins](https://developers.figma.com/docs/plugins/codegen-plugins)
 3. **`inspect`** runs in the **Inspect panel** itself; its iframe takes the full
-   height and width of the panel.
-4. The `generate` callback has a **hard 15-second timeout**. It may be async.
+   height and width of the panel. —
+   [Working in Dev Mode](https://developers.figma.com/docs/plugins/working-in-dev-mode)
+4. The `generate` callback has a **hard 15-second timeout**. It may be async. —
+   [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on)
 5. **`figma.showUI` is not allowed inside the `generate` callback.** Call it
    outside and use `figma.ui.postMessage`, or call it from a `preferenceschange`
-   handler.
+   handler. — [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on)
+   · [figma.ui](https://developers.figma.com/docs/plugins/api/figma-ui/)
 6. `codegenPreferences` with `"itemType": "action"` adds a menu item that fires
    `figma.codegen.on('preferenceschange')`; **that** handler may call
    `figma.showUI`. This is the supported way to give a codegen plugin a settings
-   modal.
+   modal, and it is how a Dev Mode user reaches setup. —
+   [CodegenPreference](https://developers.figma.com/docs/plugins/api/CodegenPreference/)
 7. **`setSharedPluginData` enforces a 100 kB limit per entry** (namespace + key +
-   value combined), enforced since March 2025. Chunking across keys is the
-   documented workaround.
+   value combined), enforced from 17 March 2025. Chunking across keys is the
+   documented workaround. —
+   [Update 109](https://developers.figma.com/docs/plugins/updates/2025/03/17/version-1-update-109/)
+   · [setSharedPluginData](https://developers.figma.com/docs/plugins/api/properties/nodes-setsharedplugindata)
 8. **`figma.clientStorage` has a 5 MB total limit**, is per-user and per-plugin,
-   and is not shared between collaborators.
+   and is not shared between collaborators. **It needs no edit access**, which is
+   what makes the developer-pastes-it-themselves fallback work. —
+   [Update 109](https://developers.figma.com/docs/plugins/updates/2025/03/17/version-1-update-109/)
 9. **`"documentAccess": "dynamic-page"`** is required in the manifest for all new
    plugins. A Dev Mode plugin runs on the **current page only** unless pages are
-   explicitly loaded.
+   explicitly loaded. —
+   [Migrating to dynamic loading](https://www.figma.com/plugin-docs/migrating-to-dynamic-loading/)
 10. **`figma.editorType`** is `'dev'` in Dev Mode and `'figma'` in the design
-    editor. A plugin can declare `"editorType": ["figma", "dev"]` and branch.
+    editor. A plugin can declare `"editorType": ["figma", "dev"]` and branch. —
+    [figma.mode](https://developers.figma.com/docs/plugins/api/properties/figma-mode/)
 11. Users can **save** a plugin to their account for access across files. **Org
     admins** can additionally *pin* a Dev Mode plugin so it appears in the
-    Inspect panel for all users — an Organization/Enterprise feature.
+    Inspect panel for all users — an Organization/Enterprise feature. —
+    [Use plugins in files](https://help.figma.com/hc/en-us/articles/360042532714-Use-plugins-in-files)
+    · [Manage Dev Mode settings for an organization](https://help.figma.com/hc/en-us/articles/22927410880535-Manage-Dev-Mode-settings-for-an-organization)
 
-### What is NOT verified and must be checked in Step 8
+### The config-source ladder — this plan's core design
 
-**Whether a Dev Mode user without edit access can read
-`figma.root.getSharedPluginData(...)`.** Reading shared plugin data ought to be
-permitted for anyone who can open the file, but this has not been confirmed
-in-product for a Dev-seat viewer — and the entire paste-once architecture depends
-on it. Step 8 tests it directly. Step 5 builds a `clientStorage` fallback
-regardless, so a negative result degrades rather than blocks.
+There is one unverified platform question here: **whether a Dev Mode user
+without edit access can read `figma.root.getSharedPluginData(...)`.** Reading
+ought to be permitted for anyone who can open the file, but it is unconfirmed
+in-product for a Dev-seat viewer.
+
+It does not block anything, because this plan builds a **three-tier ladder**
+rather than a single path. Every tier produces usable output, and every tier is
+labelled so the user knows which one they are on.
+
+| Tier | Source | Who sets it | Needs edit access | Label shown |
+|---|---|---|---|---|
+| 1 (preferred) | Document storage — `setSharedPluginData` on `figma.root` | whoever owns the file, once | yes, to **write** | "Using the config saved on this file" |
+| 2 (fallback) | Per-user storage — `figma.clientStorage` | any user, including a Dev-seat viewer | **no** | "Using your personal config — this file has no shared one" |
+| 3 (degraded) | No config at all | — | — | "No Tailwind config — showing raw values. Add your config for real token names." |
+
+**Tier 2 is the answer to the unverified question.** The setup UI is reachable
+from Dev Mode (Step 3, via the `codegenPreferences` action), and `clientStorage`
+needs no edit access. So a developer who cannot read the file's shared config —
+for whatever reason — drops in the Tailwind config themselves, once, and
+everything works from then on. Paste-once-for-the-team is the *preferred* path,
+not a *required* one.
+
+**Tier 3 keeps the plugin useful with no setup whatsoever.** With no config, the
+matcher still runs with an empty token set and emits arbitrary values
+(`bg-[#3b82f6]`, `p-[24px]`) — which is exactly what every other Figma→Tailwind
+plugin produces, so fig-tail is never *worse* than the alternatives, and the
+banner tells the user how to make it better. Someone who installs the plugin out
+of curiosity gets something immediately.
+
+**Precedence when both tier 1 and tier 2 exist**: the document config wins, so a
+team's shared truth is the default. The UI shows a one-line notice and a switch
+("You also have a personal config — use that instead?"), so a deliberate
+override is possible but never accidental. Store the user's choice in
+`clientStorage`.
+
+Step 8 still tests the read question, because knowing the answer shapes plan
+010's documentation. A negative result costs convenience, not function.
 
 ### The write-safety invariant (program-wide, set by the repo owner)
 
@@ -360,10 +419,21 @@ base64-decode, gunzip, parse, validate. Any failure returns `null` **plus a
 diagnostic reason** — never throw into the codegen callback, which has a
 15-second budget and no error UI.
 
-Also implement the `clientStorage` fallback: if `writeConfig` fails for lack of
-edit access, fall back to `figma.clientStorage`; `readConfig` prefers document
-storage and falls back to client storage, recording which source was used so the
-UI can say "from this file" versus "from your local settings".
+**Implement the full three-tier ladder from "Context", not just a fallback:**
+
+- `writeConfig(payload, { target })` writes to `'document'` or `'user'`. Choosing
+  `'document'` without edit access does not error out — it writes to `'user'`
+  instead and returns `{ writtenTo: 'user', reason: 'no-edit-access' }`, so the
+  UI can explain rather than fail.
+- `readConfig()` reads document storage first, then user storage, and **always
+  returns the tier it used**: `{ tokens, source: 'document' | 'user',
+  overridden: boolean }`. Return `null` only when neither exists — that is
+  tier 3, and plans 004/005 handle it by emitting arbitrary values with a banner.
+- When **both** exist, document wins by default. Store the user's override choice
+  under a `preferUserConfig` key in `clientStorage` and honour it when set.
+- Never throw for a missing or unreadable tier. A failed document read falls
+  through to the user tier with the reason recorded; a failed user read falls
+  through to tier 3.
 
 Cache the parsed result in a module-level variable, invalidated on write — gunzip
 plus parse on every selection change would eat the codegen budget.
@@ -377,7 +447,12 @@ reload the plugin, confirm `readConfig()` returns the same token set (log
 
 ### Step 6: Build the setup UI
 
-Five states in the design-mode iframe:
+The setup UI must be reachable **from Dev Mode as well as the design editor** —
+via the `codegenPreferences` action wired in Step 3 — because a developer adding
+their own config (tier 2) never leaves Dev Mode. Verify that path, not just the
+design-editor one.
+
+Six states in the iframe:
 
 1. **Empty** — two sentences on what this is, then a drop zone and textarea:
    "Drop your `tailwind.config.js` (v3) or your CSS entry with `@theme` (v4)."
@@ -386,12 +461,17 @@ Five states in the design-mode iframe:
    counts per category, and — prominently — **the `unresolved` report**, each
    entry with its path, plain-language message, and remedy. This is the whole
    payoff of plan 001 Step 8; do not bury it. Offer Save and Cancel.
-4. **Configured** — the same summary plus storage location (this file vs local
-   settings), a **staleness warning when `storedAt` is over 30 days old**, the
-   name of each stored source file, and Replace / Remove buttons. Remove
-   confirms.
-5. **Read-only** — when the user lacks edit access: explain that saving to the
-   file needs edit access, and offer local settings instead.
+4. **Configured** — the same summary, plus **which tier is in use**, stated
+   plainly ("Saved on this file — everyone inspecting it gets this" versus
+   "Saved in your settings — only you see this"), a **staleness warning when
+   `storedAt` is over 30 days old**, the name of each stored source file, and
+   Replace / Remove buttons. Remove confirms.
+5. **No edit access** — do not present this as an error. Say that saving to the
+   file needs edit access, and offer saving to personal settings as the ordinary
+   next step, pre-selected. This is tier 2 and it should feel routine, because
+   it is.
+6. **Both tiers present** — a one-line notice naming which is active and a
+   switch to use the other. Never switch silently.
 
 Add the **credential scan** from "Context" before storing source text: if the
 config contains anything credential-shaped, warn clearly and let the user store
@@ -437,21 +517,37 @@ add `figma.currentPage.selection[0].name = 'x'` to `main.ts`, confirm **both**
 guards fail, remove it, confirm both pass. Note this verification in the commit
 message — a guard nobody has watched fail is not a guard.
 
-### Step 8: Verify cross-user read access
+### Step 8: Verify the config-source ladder, including cross-user read
 
-**The critical architectural test.** With a config saved on the scratch file,
-open the same file from a **second account** with view-only or Dev-seat access,
-open the plugin in Dev Mode, and confirm the Step 3 stub reports the config as
-loaded.
+Two things to establish, and only the second needs a second account.
+
+**a) The ladder works for one user.** On the scratch file, verify each tier and
+each transition by hand:
+
+- Tier 3 → the Dev Mode stubs report "no config" and say what to do.
+- Save to document → tier 1, labelled "saved on this file".
+- Remove the document config, save to personal settings → tier 2, labelled
+  "saved in your settings".
+- With both present → document wins, the notice appears, the switch works and
+  persists.
+- No edit access (simulate by opening a file you cannot edit) → the tier-2 path
+  is offered as routine, not as an error.
+
+**b) Cross-user read.** With a config saved on the scratch file, open it from a
+**second account** with view-only or Dev-seat access and confirm the Step 3 stub
+reports the config as loaded.
 
 *If no second account is available*: approximate by sharing the file to a team
-where you hold a View seat. Note that plugin development requires the desktop
-app, so this may only be testable with a real second account. **If you cannot
-test it at all, do not guess** — record it as unverified in the commit message
-and in `plans/README.md`, and raise it. Plans 004 and 005 depend on the answer.
+where you hold a View seat. Plugin development requires the desktop app, so this
+may only be testable with a real second account. **If you cannot test it, do not
+guess** — record it as unverified in the commit message and in
+`plans/README.md`. This does **not** block: if cross-user read turns out not to
+work, tier 2 already covers that developer, and the only casualty is the
+convenience of one-person setup. Plan 010's docs need the answer; the code does
+not.
 
-**Check**: a second user in Dev Mode reads the stored config — or the inability
-to test is explicitly recorded.
+**Check**: every transition in (a) verified by hand and recorded. (b) passed, or
+explicitly recorded as unverified with the reason.
 
 ### Step 9: Document local installation
 
@@ -482,6 +578,8 @@ Any step you had to figure out is a step that is missing.
   - [ ] The unresolved report is displayed, not swallowed
   - [ ] Config persists across a plugin reload
   - [ ] Config persists across a **Figma restart**
+  - [ ] The setup UI opens from **Dev Mode**, not only the design editor
+  - [ ] Every tier transition in Step 8(a) behaves as described
   - [ ] A second user in Dev Mode reads it (or: recorded as unverified)
   - [ ] Removing the config returns all Dev Mode stubs to the empty message
 - **Size check**: `dist/main.js` under 250 kB, `dist/ui.html` under 400 kB. Both
@@ -504,13 +602,18 @@ ALL must hold.
 - [ ] The credential scan warns before storing source text
 - [ ] Config round-trips through document storage, surviving a Figma restart
 - [ ] Stale chunks are cleared on a shrinking rewrite (tested)
-- [ ] The `clientStorage` fallback works when the user lacks edit access
+- [ ] All three config-source tiers work, each with its own visible label
+- [ ] Tier 2 (personal config) is reachable **from Dev Mode**, needs no edit
+      access, and is presented as routine rather than as an error
+- [ ] `readConfig()` always reports which tier it used; it returns `null` only
+      when no config exists anywhere
+- [ ] With both tiers present, document wins by default and the switch persists
 - [ ] Both write-safety guards are in place and were **verified to fail** on a
       deliberate violation
 - [ ] The only document write in the bundle is `figma.root.setSharedPluginData`
       under the `figtail` namespace
-- [ ] The manual checklist is complete, with the second-user test passed or
-      explicitly recorded as unverified
+- [ ] The manual checklist is complete, with the cross-user read test passed or
+      explicitly recorded as unverified — either outcome is acceptable
 - [ ] No files outside the in-scope list were changed
 - [ ] `plans/README.md` status row for 003 updated
 
@@ -520,23 +623,29 @@ Stop and report back — do not improvise — if:
 
 - **Figma rejects `capabilities: ["codegen", "inspect"]`**, or that combination
   with `editorType: ["figma", "dev"]`.
-- **A Dev Mode user without edit access cannot read shared plugin data.** This
-  breaks paste-once and forces a different architecture. The owner's call.
 - `figma.showUI` from the `preferenceschange` handler does not work as
   documented — there would then be no way to configure the plugin from Dev Mode.
-- The gzipped fixture token set still needs more than ~8 chunks. Read latency
-  inside a 15-second codegen budget becomes a real risk, and the fix is plan
-  001's `pruneDefaults` or a leaner schema, not more chunks.
-- Running `resolveTheme` in the UI iframe is blocked by the iframe's CSP or is
-  unacceptably slow (over ~3 s on a normal config).
-- Any of the eleven "Verified Figma platform facts" turns out to be false.
+- The gzipped fixture token set still needs more than ~8 chunks **and**
+  `pruneDefaults` does not bring it down. Read latency inside a 15-second codegen
+  budget becomes a real risk, and a leaner schema is a plan 001 change. (Fewer
+  than 8 chunks: proceed. This is a threshold, not a hard failure.)
+- Running `resolveTheme` in the UI iframe is blocked by the iframe's CSP. (If it
+  is merely *slow* — over ~3 s on a normal config — that is not a STOP: show
+  progress, resolve once at setup rather than per read, and record the timing.
+  Slowness at setup is acceptable; slowness per selection is not, and the cached
+  `readConfig` already prevents that.)
+- Any of the "Verified Figma platform facts" turns out to be false **and no
+  fallback covers it**. If a linked doc simply contradicts the summary, correct
+  the summary and carry on — that is expected maintenance, not a stop.
 - A step's check fails twice after a reasonable attempt.
 
 ## Handoff / after it lands
 
 - **Plan 004** replaces the codegen stub with real output. It calls `readConfig()`
   on every generate — the module-level cache from Step 5 is what keeps that
-  inside the 15-second budget. Do not remove it.
+  inside the 15-second budget. Do not remove it. Plans 004 and 005 are both
+  responsible for **surfacing the tier label**, and for handling tier 3 by
+  emitting arbitrary values with a banner rather than refusing to run.
 - **Plan 005** replaces the inspect-panel placeholder with the real surface, and
   reuses the same storage and the same UI shell.
 - **Plan 006** adds another view alongside setup; keep `mode-design.ts`
@@ -548,8 +657,9 @@ Stop and report back — do not improvise — if:
   setup UI must also accept a **pre-resolved token JSON** as an input type.
   Wire that acceptance path now if it is cheap; otherwise note it for 009.
 - **What a reviewer should scrutinise most**: Step 7, and the evidence that both
-  guards were observed failing. Second: Step 8, because the paste-once promise
-  rests on it.
+  guards were observed failing. Second: the tier ladder in Step 5 — specifically
+  that no tier transition can happen without the user seeing which tier they are
+  on.
 - **Deliberately deferred**:
   - *Detecting a stale config by comparing against the codebase.* Needs network
     access, which is ruled out. The 30-day staleness warning is the cheap

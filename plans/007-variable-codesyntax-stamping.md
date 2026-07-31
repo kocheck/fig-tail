@@ -5,6 +5,13 @@
 > stop and report — do not improvise. When done, update the status row for this
 > plan in `plans/README.md`.
 >
+> **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
+> *not* listed there has a designed fallback: do the next-best thing, label it
+> visibly for the user, note it in your commit message, and keep going. Read
+> invariant 2 in `plans/README.md` before deciding something is blocked —
+> "partly working and clearly labelled" beats "stopped and waiting" everywhere
+> except write-safety and executing user input.
+>
 > **Drift check (run first)**:
 > `git diff --stat <SHA at which 006 completed>..HEAD -- packages/plugin/src/lint`
 > This plan consumes plan 006's `unmapped-variable` findings and its proposal
@@ -105,7 +112,13 @@ v.setVariableCodeSyntax('WEB', 'bg-brand-500')
 
 Verified against Figma's plugin docs on 2026-07-31: `setVariableCodeSyntax`
 adds or modifies a platform definition on `codeSyntax`; valid platforms are
-`'WEB'`, `'ANDROID'`, `'iOS'`.
+`'WEB'`, `'ANDROID'`, `'iOS'`. —
+[setVariableCodeSyntax](https://www.figma.com/plugin-docs/api/properties/Variable-setvariablecodesyntax/)
+· [Working with variables](https://developers.figma.com/docs/plugins/working-with-variables)
+· [Update 75](https://www.figma.com/plugin-docs/updates/2023/08/21/version-1-update-75/)
+
+**Open those pages before writing the apply path.** They are summaries located by
+search, not quotations, and this is the one plan that writes to someone's file.
 
 Facts that are **not** verified and must be established in Step 1:
 
@@ -434,14 +447,18 @@ Stop and report back — do not improvise — if:
 - **Figma's Inspect panel does not display code syntax** (Step 1, question 1).
   Half the value evaporates and the owner should re-decide.
 - **There is no way to clear a code syntax entry.** Then stamping is effectively
-  irreversible through the plugin, and whether to ship it at all — or only with
-  a much louder warning — is the owner's call.
+  irreversible through the plugin. The fallback is Figma's own undo and version
+  history (Step 5), which may well be sufficient — but whether to ship on that
+  basis, and with how loud a warning, is the owner's call, not yours. This is one
+  of the few places in the program where blocking is correct: the write-safety
+  invariant outranks "keep moving".
 - Undo does not reliably restore the previous state.
 - **Any step seems to require writing something other than `codeSyntax.WEB`.**
   This is the hard line. Report what you think you need and why; do not write it.
 - Library variables cannot be stamped **and** the owner's files consume most
-  variables from a library — the feature would then apply to almost nothing in
-  practice, which changes its priority.
+  variables from a library. The fallback is real but limited — stamp in the
+  *library* file instead, and document that — so report the finding and let the
+  owner decide whether the feature is still worth shipping at that reach.
 - Applying to a realistic number of variables (200+) takes long enough to freeze
   Figma, or produces an undo history so fragmented that recovery is impractical.
 - A reviewer, teammate, or later instruction asks you to relax any of the Hard

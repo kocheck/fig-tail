@@ -5,6 +5,13 @@
 > stop and report — do not improvise. When done, update the status row for this
 > plan in `plans/README.md`.
 >
+> **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
+> *not* listed there has a designed fallback: do the next-best thing, label it
+> visibly for the user, note it in your commit message, and keep going. Read
+> invariant 2 in `plans/README.md` before deciding something is blocked —
+> "partly working and clearly labelled" beats "stopped and waiting" everywhere
+> except write-safety and executing user input.
+>
 > **Drift check (run first)**:
 > `git diff --stat <SHA at which 003 completed>..HEAD -- packages/plugin/src/storage.ts packages/plugin/src/mode-design.ts`
 > This plan adds another view to the design-mode UI and reuses `readConfig()`.
@@ -82,7 +89,9 @@ merged list of "issues" is not actionable.
 
 `documentAccess: "dynamic-page"` means pages load lazily. To scan beyond the
 current page you must `await figma.loadAllPagesAsync()`, which on a large file
-is slow and memory-hungry.
+is slow and memory-hungry. —
+[Migrating to dynamic loading](https://www.figma.com/plugin-docs/migrating-to-dynamic-loading/)
+· [Working in Dev Mode](https://developers.figma.com/docs/plugins/working-in-dev-mode)
 
 Therefore: **scan the current selection, or the current page. Never the whole
 document.** Offer "Selection" (default when something is selected) and
@@ -234,7 +243,8 @@ dedup path (three nodes with the same off-token hex → one finding with
 ### Step 3: Implement the variable mapping proposer
 
 `src/lint/variables.ts`. Read local variables with
-`figma.variables.getLocalVariablesAsync()`. For each, if `codeSyntax.WEB` is
+`figma.variables.getLocalVariablesAsync()`
+([Working with variables](https://developers.figma.com/docs/plugins/working-with-variables)). For each, if `codeSyntax.WEB` is
 absent, propose a Tailwind class from the theme by:
 
 1. **Value match** — resolve the variable's value for its default mode and match
@@ -371,15 +381,20 @@ ALL must hold.
 Stop and report back — do not improvise — if:
 
 - **The linter reports so many findings on a real file that it is unusable**
-  (say, several hundred on a normal page). That means the thresholds or the
-  finding definitions need rethinking with the owner — a report nobody can act
-  on is worse than no report. Bring the actual numbers.
+  (say, several hundred on a normal page). Do not stop building — **ship the
+  degraded version**: default the report to high-severity findings only, collapse
+  the rest behind a "show all (N)" toggle, and cap the initial render. Then bring
+  the owner the actual numbers, because thresholds that noisy usually mean the
+  finding definitions need rethinking, and that is their call. A report nobody
+  can act on is worse than no report; a report that opens on the worst twenty
+  things is actionable.
 - The write-safety lint rule flags `figma.currentPage.selection = …` or
   `scrollAndZoomIntoView` and narrowing it cleanly is not obvious. Do not add a
   broad exception to make it pass.
 - `getLocalVariablesAsync()` does not return variables from linked libraries and
-  the file's variables mostly live in a library. That would substantially limit
-  plan 007 and needs to be known before 007 starts, not during it.
+  the file's variables mostly live in a library. Keep going — local variables are
+  still worth linting — but report it, because it substantially limits plan 007
+  and needs to be known before 007 starts rather than during it.
 - Scanning a page requires `loadAllPagesAsync()` in practice (i.e. the current
   page's nodes are not fully available without it).
 - A finding type needs matching-engine support that plan 002 does not provide.

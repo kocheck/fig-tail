@@ -5,6 +5,13 @@
 > stop and report — do not improvise. When done, update the status row for this
 > plan in `plans/README.md`.
 >
+> **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
+> *not* listed there has a designed fallback: do the next-best thing, label it
+> visibly for the user, note it in your commit message, and keep going. Read
+> invariant 2 in `plans/README.md` before deciding something is blocked —
+> "partly working and clearly labelled" beats "stopped and waiting" everywhere
+> except write-safety and executing user input.
+>
 > **Drift check (run first)**: `git log --oneline -20` and read
 > `plans/README.md`. This plan documents whatever has actually shipped. Confirm
 > which of plans 005–009 are DONE before writing a word of documentation —
@@ -163,14 +170,20 @@ document anything.
 4. **"For designers / setting it up"** — drop in `tailwind.config.js` (v3) or
    your CSS entry (v4), review what fig-tail could and could not read, save. No
    CLI, no install.
-5. What the confidence levels mean, and specifically why a near-match is
+5. **"If you can't save to the file"** — the three config-source tiers from plan
+   003, in one short table: saved on the file (everyone gets it), saved in your
+   settings (just you, needs no edit access), or no config (raw values plus a
+   prompt). Frame tier 2 as an ordinary option, not a workaround — a developer
+   with a view-only seat should not feel locked out.
+6. What the confidence levels mean, and specifically why a near-match is
    reported rather than emitted.
-6. The linter and stamping, **if 006/007 shipped** — with stamping's write
+7. The linter and stamping, **if 006/007 shipped** — with stamping's write
    behaviour stated plainly and early.
-7. Privacy: no network access, nothing leaves Figma, no telemetry.
-8. Limitations, honestly: what it does not do (no component generation, no
-   assets, no responsive variants), and the Tailwind versions supported.
-9. Contributing, licence.
+8. Privacy: no network access, nothing leaves Figma, no telemetry.
+9. Limitations, honestly: what it does not do (no component generation, no
+   assets, no responsive variants), the Tailwind versions supported, and which
+   config patterns the in-plugin resolver cannot read (from plan 001 Step 9).
+10. Contributing, licence.
 
 **`docs/setup.md`** — the long version: monorepo setups, Tailwind v3 vs v4
 specifics, what the resolver can and cannot read from a config (from plan 001
@@ -291,6 +304,10 @@ ALL must hold.
 - [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r test && pnpm -r build` → exit 0
 - [ ] README, `docs/setup.md`, `docs/troubleshooting.md`, `CONTRIBUTING.md`,
       `CHANGELOG.md` all exist and describe **only** shipped features
+- [ ] The docs describe all three config-source tiers, and present the
+      personal-config tier as an ordinary option rather than a workaround
+- [ ] The docs are honest about which config patterns the in-plugin resolver
+      cannot read, and what to do about each
 - [ ] `CONTRIBUTING.md` states the write-safety invariant and points to plans
       003 and 007
 - [ ] Both README paths verified end to end from a fresh clone

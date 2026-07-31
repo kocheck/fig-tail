@@ -5,6 +5,13 @@
 > stop and report — do not improvise. When done, update the status row for this
 > plan in `plans/README.md`.
 >
+> **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
+> *not* listed there has a designed fallback: do the next-best thing, label it
+> visibly for the user, note it in your commit message, and keep going. Read
+> invariant 2 in `plans/README.md` before deciding something is blocked —
+> "partly working and clearly labelled" beats "stopped and waiting" everywhere
+> except write-safety and executing user input.
+>
 > **Drift check (run first)**:
 > `git diff --stat <the SHA at which plan 001 completed>..HEAD -- packages/theme`
 > If the token schema in `packages/theme` has changed since plan 001 landed,
@@ -141,6 +148,23 @@ Every match returns a confidence level. The ladder, highest to lowest:
 | `nearest` | No exact match, but a token is within tolerance. **This is the drift signal.** | `#3b82f1` → nearest `brand-500`, ΔE 0.4 |
 | `arbitrary` | No token is close. Fall back to Tailwind arbitrary-value syntax. | `bg-[#a1b2c3]` |
 | `none` | The property cannot be expressed in Tailwind at all. | an unsupported filter |
+
+### The empty token set must work
+
+Plan 003 defines a tier-3 state: **no Tailwind config at all**. In that state the
+plugin still runs, with an empty `TokenSet`, and every value falls through to
+`arbitrary` — `bg-[#3b82f6]`, `p-[24px]`. That is exactly what every other
+Figma→Tailwind plugin produces, so fig-tail is never *worse* than the
+alternatives for someone who has just installed it, and the surfaces show a
+banner explaining how to get real token names.
+
+So: `matchDeclarations` must accept a `TokenSet` with empty token maps and
+return sensible `arbitrary` results without special-casing at the call site. Do
+not throw, do not return `[]`, and do not require the caller to check first.
+Layout utilities (`flex`, `items-center`) are unaffected by an empty theme and
+must still resolve exactly. Step 7 tests this.
+
+### Never promote a near-miss
 
 `nearest` **must never be silently promoted to a class**. The result carries
 both the suggested class *and* the fact that it is not an exact match; it is
@@ -435,9 +459,16 @@ Export `summarise(results: MatchResult[]): MatchSummary` returning counts per
 confidence level and the list of unmatched properties. Plan 006's linter is
 built on this; plans 004 and 005 use it to decide whether to show a warning banner.
 
-**Check**: `pnpm --filter @fig-tail/match test -t summarise` → passes, and
-`pnpm --filter @fig-tail/match test -- --coverage` reports ≥90% statement
-coverage in `src/matchers`.
+Also add the **empty-token-set test** here: run `matchDeclarations` over all
+three captured fixtures with a `TokenSet` whose token maps are empty, and assert
+that every value produces an `arbitrary` result with a valid class, that layout
+utilities still resolve `exact-value`, and that nothing throws. This is plan
+003's tier 3, and it is the difference between "the plugin works with no setup"
+and "the plugin crashes with no setup".
+
+**Check**: `pnpm --filter @fig-tail/match test -t summarise` and
+`-t empty-tokens` → pass, and `pnpm --filter @fig-tail/match test -- --coverage`
+reports ≥90% statement coverage in `src/matchers`.
 
 ## Validation plan
 
@@ -465,6 +496,8 @@ ALL must hold.
 - [ ] Every property group in the "Property coverage" table is implemented, or
       explicitly returns `none` with a note explaining why
 - [ ] All six confidence levels are reachable and each has at least one test
+- [ ] An empty `TokenSet` produces `arbitrary` results for every value, still
+      resolves layout utilities exactly, and never throws
 - [ ] `nearest` results always populate the `nearest` field, and never emit a
       class unless `acceptNearest: true`
 - [ ] The integration snapshot for the card fixture matches the exact expected
@@ -488,9 +521,12 @@ Stop and report back — do not improvise — if:
   other, making `exact-value` ambiguous. That means the thresholds need
   redesigning (probably: prefer exact hex equality first, and only fall back to
   ΔE), which is a design decision to surface, not to guess at.
-- The bundle exceeds **100 kB** minified even after tree-shaking culori. That
-  threatens plan 003's plugin bundle and needs a decision about dropping
-  perceptual colour matching for a cheaper metric.
+- The bundle exceeds **100 kB** minified even after tree-shaking culori. The
+  fallback is a cheaper colour metric (weighted RGB distance) at the cost of
+  perceptual accuracy — implement it behind a flag so the measurement is real,
+  then report both numbers and let the owner choose. Do not silently downgrade
+  the metric; the ΔE thresholds in "Context" are calibrated for CIEDE2000 and
+  would need recalibrating.
 - Implementing the shadow matcher requires per-layer decomposition to be useful
   at all. Scope it out and report rather than growing the plan.
 - A step's check fails twice after a reasonable attempt.

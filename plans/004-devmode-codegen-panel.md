@@ -5,6 +5,13 @@
 > stop and report — do not improvise. When done, update the status row for this
 > plan in `plans/README.md`.
 >
+> **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
+> *not* listed there has a designed fallback: do the next-best thing, label it
+> visibly for the user, note it in your commit message, and keep going. Read
+> invariant 2 in `plans/README.md` before deciding something is blocked —
+> "partly working and clearly labelled" beats "stopped and waiting" everywhere
+> except write-safety and executing user input.
+>
 > **Drift check (run first)**:
 > `git diff --stat <SHA at which 002 and 003 completed>..HEAD -- packages/match packages/plugin`
 > This plan is the wiring between those two packages. If either has moved since,
@@ -99,20 +106,33 @@ true. That default is deliberate — see Step 4.
 
 ### Verified Figma platform facts this plan depends on
 
+Gathered from Figma's documentation on 2026-07-31. **Open the linked page before
+implementing against a fact you depend on** — these are summaries located by
+search, not quotations, and the pages 403 automated fetching. If a page
+contradicts a line here, the page wins; fix the line in the same commit.
+
 1. `figma.codegen.on('generate', cb)` fires on every Dev Mode selection change.
-   **The callback has a hard 15-second timeout.** It may be async.
-2. `figma.showUI` is **not allowed inside** the generate callback. Preference
-   actions (`preferenceschange`) may call it.
-3. `node.getCSSAsync()` returns the CSS the Inspect panel shows, as a flat
-   `Record<string, string>`. Dev Mode only.
+   **The callback has a hard 15-second timeout.** It may be async. —
+   [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on)
+   · [figma.codegen](https://developers.figma.com/docs/plugins/api/figma-codegen)
+2. `figma.showUI` is **not allowed inside** the generate callback; move it
+   outside and use `figma.ui.postMessage`. Preference actions
+   (`preferenceschange`) may call it. —
+   [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on)
+3. `node.getCSSAsync()` resolves to a JSON object of the node's CSS properties —
+   the same CSS the Inspect panel shows. Dev Mode only. —
+   [Update 68](https://developers.figma.com/docs/plugins/updates/2023/06/21/version-1-update-68)
+   · [Shared node properties](https://www.figma.com/plugin-docs/api/node-properties/)
 4. `figma.codegen.preferences` exposes the user's current preference values;
    `codegenPreferences` in the manifest declares them. `itemType` may be
-   `"select"`, `"unit"`, `"bool"`, or `"action"`.
+   `"select"`, `"unit"`, `"bool"`, or `"action"`. —
+   [CodegenPreference](https://developers.figma.com/docs/plugins/api/CodegenPreference/)
+   · [Plugin manifest](https://developers.figma.com/docs/plugins/manifest)
 5. A `CodegenResult` is `{ title: string, code: string, language: CodegenLanguage }`.
-   Returning several renders several titled sections in the Code panel.
-   `language` drives syntax highlighting; `'PLAINTEXT'`, `'HTML'`, `'CSS'`,
-   `'JSON'`, `'TYPESCRIPT'` are among the valid values.
-6. `variable.codeSyntax` is `{ WEB?: string; ANDROID?: string; iOS?: string }`.
+   Returning several renders several titled sections in the Code panel. —
+   [Codegen plugins](https://developers.figma.com/docs/plugins/codegen-plugins)
+6. `variable.codeSyntax` is `{ WEB?: string; ANDROID?: string; iOS?: string }`. —
+   [Working with variables](https://developers.figma.com/docs/plugins/working-with-variables)
 
 ### Bound variables — the highest-value input
 
@@ -227,34 +247,52 @@ Rewrite `src/mode-dev.ts`:
 ```ts
 figma.codegen.on('generate', async ({ node }) => {
   try {
-    const stored = await readConfig()
-    const tokens = stored?.tokens ?? null
-    if (!tokens) return notConfiguredResult()
+    const stored = await readConfig()          // { tokens, source } | null
+    const tokens = stored?.tokens ?? EMPTY_TOKEN_SET
     const css = await node.getCSSAsync()
     const results = matchDeclarations(css, tokens, optionsFromPreferences())
-    return renderSections(results, { node, tokens })
+    return renderSections(results, { node, tokens, source: stored?.source ?? null })
   } catch (err) {
     return errorResult(err)
   }
 })
 ```
 
-`notConfiguredResult()` must be actionable, and must **not** mention a CLI —
-the whole point is that a developer installs nothing else. Say that whoever owns
-the file needs to add the team's `tailwind.config.js` via fig-tail's setup
-screen, and name the "Configure Tailwind config…" action. A developer who hits
-this message has no idea what fig-tail is; write it for them.
+**Note what this does not do: it never returns early because there is no
+config.** Per plan 003's config-source ladder, "no config" is tier 3, not a
+failure. With an empty token set the matcher emits arbitrary values
+(`bg-[#3b82f6]`, `p-[24px]`) — which is what every other Figma→Tailwind plugin
+produces, so a developer who just installed fig-tail gets something useful
+immediately. Plan 002 Step 7 guarantees an empty `TokenSet` behaves this way.
+
+What tier 3 *does* get is a **banner**, prepended to the section body:
+
+```
+// No Tailwind config on this file. Showing raw values.
+// Add your tailwind.config.js via "Configure Tailwind config…" for real token names.
+```
+
+Two sentences, and it must name the action a developer can take **themselves** —
+tier 2 (personal config) needs no edit access, so this is never a dead end even
+for a Dev-seat viewer.
+
+Tiers 1 and 2 get a one-line source label instead, so nobody is ever guessing
+which config produced the output:
+
+- tier 1 → `// Tailwind config: saved on this file`
+- tier 2 → `// Tailwind config: your personal settings (this file has none shared)`
 
 `errorResult(err)` returns a `PLAINTEXT` section containing the message and a
 one-line "report this" pointer. **Never rethrow.**
 
-For this step, `renderSections` just returns one section with
+For this step, `renderSections` returns one section with the label/banner plus
 `toClassName(results)`.
 
-**Check**: in Figma desktop, in Dev Mode on the test file, select a simple frame
-→ the Code panel's Tailwind section shows a class string. Remove the config via
-the setup UI → the same panel shows the actionable "not configured" message.
-Confirm both by hand.
+**Check**: in Figma desktop, in Dev Mode on the test file, verify all three
+tiers by hand — with a config saved on the file, the panel shows classes plus
+the tier-1 label; with the file's config removed but a personal config saved,
+classes plus the tier-2 label; with neither, **arbitrary-value classes plus the
+banner**, not an error and not an empty panel. Confirm each by hand.
 
 ### Step 2: Resolve bound variables into hints
 
@@ -430,12 +468,14 @@ session.
 ## Validation plan
 
 - **Unit tests** (`figma` global mocked): `buildHints` for every mapping-table
-  row plus the TextNode and dedupe cases; `renderSections` for the four
-  scenarios (configured + clean, configured + drift, not configured, error);
-  `optionsFromPreferences` mapping every preference to `MatchOptions`.
-- **Error-path tests**: `getCSSAsync` rejecting, `readConfig` returning `null`,
-  a corrupt token set, an unresolvable variable alias — each must return a
-  `CodegenResult`, never throw.
+  row plus the TextNode and dedupe cases; `renderSections` for six scenarios
+  (tier 1 clean, tier 1 with drift, tier 2, tier 3, config with unresolved
+  entries, error); `optionsFromPreferences` mapping every preference to
+  `MatchOptions`.
+- **Error-path and fallback tests**: `getCSSAsync` rejecting, `readConfig`
+  returning `null` (→ arbitrary values plus banner, **not** an error), a corrupt
+  token set, an unresolvable variable alias (→ falls back to value matching with
+  the confidence lowered) — each must return a `CodegenResult`, never throw.
 - **The Step 6 manual matrix** — nine nodes, each with a recorded expected
   output. This is the real acceptance test.
 - **Write-safety regression**: plan 003's lint rule and bundle test must still
@@ -456,8 +496,12 @@ ALL must hold.
       reported in the drift section with token, value, and distance
 - [ ] The drift section is absent when there is nothing to report
 - [ ] All five codegen preferences work live without a plugin reload
-- [ ] The "not configured" message is actionable, names the setup action, and
-      does **not** tell a developer to install or run anything
+- [ ] With no config at all, the panel emits arbitrary-value classes plus the
+      banner — it never errors, empties, or refuses
+- [ ] The config-source tier is labelled on every render (tier 1, 2, or the
+      tier-3 banner)
+- [ ] The tier-3 banner names an action the developer can take themselves, and
+      does **not** tell them to install or run anything
 - [ ] No exception escapes the generate callback (error-path tests pass)
 - [ ] Warm selection-change latency under 200 ms; cold under 1 s; measurements
       recorded

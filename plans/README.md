@@ -49,52 +49,73 @@ side effect.
 
 ---
 
-## Verified Figma platform facts
+## Verified Figma platform facts, with sources
 
 Checked against Figma's documentation on 2026-07-31. Individual plans restate
-the ones they depend on. **If any of these turns out to be false during
-execution, that is a STOP condition for the plan that relies on it.**
+the ones they depend on and carry the same links.
 
-1. A single plugin may declare **both** `"codegen"` and `"inspect"` in
-   `manifest.capabilities`.
-2. **`codegen`** runs in the **Code section** of the Dev Mode Inspect panel. The
-   plugin appears in Figma's native language dropdown; once selected,
-   `figma.codegen.on('generate')` fires on every selection change.
-3. **`inspect`** runs in the **Inspect panel** itself. Its iframe takes the full
-   height and width of the panel.
-4. The `generate` callback has a **hard 15-second timeout** and may be async.
-5. **`figma.showUI` is not allowed inside the `generate` callback.** Call it
-   outside and use `figma.ui.postMessage`, or call it from a
-   `preferenceschange` handler.
-6. `codegenPreferences` with `"itemType": "action"` adds a menu item that fires
-   `preferenceschange`; that handler **may** call `figma.showUI`.
-7. **`setSharedPluginData` enforces 100 kB per entry** (namespace + key + value),
-   enforced since March 2025. Chunking across keys is the documented workaround.
-8. `figma.clientStorage` has a 5 MB total limit and is **per-user**.
-9. `"documentAccess": "dynamic-page"` is required for all new plugins. A Dev
-   Mode plugin runs on the **current page only** unless pages are explicitly
-   loaded.
-10. `node.getCSSAsync()` returns the CSS the Inspect panel displays.
-11. `variable.setVariableCodeSyntax('WEB' | 'ANDROID' | 'iOS', value)` writes a
-    variable's Code syntax — which Figma's own Inspect panel displays.
-12. Users can **save** a plugin to their account for access across files.
-13. **Org admins** can *pin* a Dev Mode plugin so it appears in the Inspect panel
-    for all users, and can set a default code language. Both are
-    Organization/Enterprise features.
+> **How these were gathered, and what you owe them.** These facts come from
+> Figma's published documentation, located by search. The pages themselves
+> returned HTTP 403 to automated fetching, so the wording below is a summary,
+> not a quotation. **Open the linked page before implementing against any fact
+> you depend on** — the API may have moved, and a summary is not a spec. If a
+> page contradicts this table, the page wins: correct the table in the same
+> commit and note it.
 
-### Not verified — and it matters
+| # | Fact | Source |
+|---|---|---|
+| 1 | A single plugin may declare **both** `"codegen"` and `"inspect"` in `manifest.capabilities`. Possible values are `codegen`, `inspect`, `textreview`, `vscode`. | [Plugin manifest](https://developers.figma.com/docs/plugins/manifest) |
+| 2 | **`codegen`** runs in the **Code section** of the Dev Mode Inspect panel; the plugin appears in Figma's native language dropdown. | [Codegen plugins](https://developers.figma.com/docs/plugins/codegen-plugins) · [Working in Dev Mode](https://developers.figma.com/docs/plugins/working-in-dev-mode) |
+| 3 | **`inspect`** runs in the **Inspect panel** itself; a Dev Mode plugin's iframe takes the full height and width of the panel. | [Working in Dev Mode](https://developers.figma.com/docs/plugins/working-in-dev-mode) |
+| 4 | `figma.codegen.on('generate')` fires on every selection change; the callback has a **hard 15-second timeout** and may be async. | [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on) · [figma.codegen](https://developers.figma.com/docs/plugins/api/figma-codegen) |
+| 5 | **`figma.showUI` is not allowed inside the `generate` callback.** Move it outside and use `figma.ui.postMessage`. A hidden iframe is created with `figma.showUI(…, { visible: false })`. | [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on) · [figma.ui](https://developers.figma.com/docs/plugins/api/figma-ui/) |
+| 6 | `codegenPreferences` with `"itemType": "action"` adds a menu item that fires `preferenceschange`; **that** handler may call `figma.showUI`. Item types: `select`, `unit`, `bool`, `action`. | [CodegenPreference](https://developers.figma.com/docs/plugins/api/CodegenPreference/) · [Plugin manifest](https://developers.figma.com/docs/plugins/manifest) |
+| 7 | **`setSharedPluginData` enforces 100 kB per entry** (namespace + key + value), enforced from 17 March 2025. Chunking across keys is the documented workaround. | [Update 109](https://developers.figma.com/docs/plugins/updates/2025/03/17/version-1-update-109/) · [setSharedPluginData](https://developers.figma.com/docs/plugins/api/properties/nodes-setsharedplugindata) |
+| 8 | `figma.clientStorage` has a **5 MB** total limit (raised from 1 MB) and is per-user, per-plugin. | [Update 109](https://developers.figma.com/docs/plugins/updates/2025/03/17/version-1-update-109/) |
+| 9 | `"documentAccess": "dynamic-page"` is required for all new plugins. A Dev Mode plugin runs on the **current page only** unless pages are loaded explicitly. | [Migrating to dynamic loading](https://www.figma.com/plugin-docs/migrating-to-dynamic-loading/) · [Working in Dev Mode](https://developers.figma.com/docs/plugins/working-in-dev-mode) |
+| 10 | `node.getCSSAsync()` resolves to a JSON object of the node's CSS properties — the same CSS the Inspect panel shows. Dev Mode only. | [Update 68](https://developers.figma.com/docs/plugins/updates/2023/06/21/version-1-update-68) · [Shared node properties](https://www.figma.com/plugin-docs/api/node-properties/) |
+| 11 | `variable.setVariableCodeSyntax(platform, value)` adds or modifies a platform definition on `codeSyntax`; platforms are `'WEB'`, `'ANDROID'`, `'iOS'`. | [setVariableCodeSyntax](https://www.figma.com/plugin-docs/api/properties/Variable-setvariablecodesyntax/) · [Working with variables](https://developers.figma.com/docs/plugins/working-with-variables) |
+| 12 | `networkAccess.allowedDomains` restricts outbound requests; the keyword `"none"` blocks all network access. | [Plugin manifest](https://developers.figma.com/docs/plugins/manifest) |
+| 13 | `figma.editorType` is `'dev'` in Dev Mode and `'figma'` in the design editor. | [figma.mode](https://developers.figma.com/docs/plugins/api/properties/figma-mode/) |
+| 14 | Users can **save** a plugin to their account (the ribbon icon) for access across files. | [Use plugins in files](https://help.figma.com/hc/en-us/articles/360042532714-Use-plugins-in-files) |
+| 15 | **Org admins** can *pin* a Dev Mode plugin so it appears in the Inspect panel for all users, and can set a default code language. Both are Organization/Enterprise features. | [Manage Dev Mode settings for an organization](https://help.figma.com/hc/en-us/articles/22927410880535-Manage-Dev-Mode-settings-for-an-organization) |
+| 16 | Language/plugin selection in the Code section happens via the dropdown at its top right. | [Use code snippets in Dev Mode](https://help.figma.com/hc/en-us/articles/15023202277399-Use-code-snippets-in-Dev-Mode) |
 
-**Whether the Code-section language selection persists per user across files and
-sessions.** No documentation found either way. If it does not persist, a
-developer must pick "Tailwind" from the dropdown on every file — which is
-exactly the hunting this program exists to eliminate.
+### Further reading for implementers
 
-This is why plan 005 builds the **Inspect panel surface** in addition to the
-Code section: the inspect panel is a persistent, pinnable surface that does not
-depend on a dropdown selection. Plan 005 Step 1 tests the persistence question
-directly and records the answer in
-`packages/plugin/notes/devmode-discovery.md`, which plan 010's documentation is
-then written from.
+- [Codegen plugins guide](https://developers.figma.com/docs/plugins/codegen-plugins) — the primary reference for plans 003–005.
+- [Figma blog: codegen plugins for automating design to code](https://www.figma.com/blog/figma-dev-mode-codegen-plugins/) — practical framing.
+- [Guide to Dev Mode](https://help.figma.com/hc/en-us/articles/15023124644247-Guide-to-Dev-Mode) — the user-facing view of what developers see.
+- [Plugin quickstart](https://developers.figma.com/docs/plugins/plugin-quickstart-guide/) — scaffolding and local install.
+- [Tailwind v3 theme configuration](https://v3.tailwindcss.com/docs/theme) and [Tailwind v4 theme variables](https://tailwindcss.com/docs/theme) — the two resolution models plan 001 implements.
+
+### Not verified — and how each is de-risked
+
+Neither of these blocks the program. Both have a designed fallback, per the
+"Degrade, don't block" invariant below.
+
+**A. Whether the Code-section language selection persists per user across files
+and sessions.** No documentation found either way.
+
+*Fallback*: plan 005 builds the **Inspect panel surface** alongside the Code
+section. The inspect panel is persistent and org-pinnable, and does not depend
+on a dropdown selection. Whichever way the persistence question resolves, at
+least one surface works without hunting. Plan 005 Step 1 tests it and records
+the answer in `packages/plugin/notes/devmode-discovery.md`; plan 010's docs are
+written from that.
+
+**B. Whether a Dev-seat user without edit access can read
+`getSharedPluginData`.** Reading ought to be permitted for anyone who can open
+the file, but it is unconfirmed in-product.
+
+*Fallback*: **the developer adds the config themselves.** The setup UI is
+reachable from Dev Mode (plan 003 Step 3), and per-user storage
+(`figma.clientStorage`) needs no edit access at all. So if document storage is
+unreadable for them, they paste the config once into their own settings and
+everything works — labelled as a personal config so they know where it came
+from. Paste-once-for-the-team is the *preferred* path, not a *required* one.
+Plan 003 Step 8 still tests it, because knowing the answer shapes the docs, but
+a negative result costs convenience rather than function.
 
 ---
 
@@ -112,7 +133,35 @@ require a developer to run a command, the design is wrong.
 (Plan 009's CLI is an escape hatch for *setup*, run once by whoever configures
 the file — never by a developer inspecting a design.)
 
-### 2. Write-safety (non-negotiable — set by the repo owner)
+### 2. Degrade, don't block — and always label the fallback
+
+When fig-tail cannot do the best version of something, it does the **next best
+version and says so**. It never silently substitutes, and it never refuses to
+work because one input was imperfect. A developer should always get *something*
+usable, and should always be able to tell how good it is.
+
+The fallback ladders this program commits to:
+
+| When | Falls back to | Label the user sees |
+|---|---|---|
+| Config only partly readable | Everything that did resolve; defaults for the rest | "N settings in your config could not be read" + what each was |
+| No config on the document | The developer's own pasted config (`clientStorage`) | "Using your personal config — this file has no shared one" |
+| No config at all | **Arbitrary-value output** (`bg-[#3b82f6]`, `p-[24px]`) | "No Tailwind config — showing raw values. Add your config for real token names." |
+| Variable bound but unresolvable (e.g. from an unavailable library) | Value matching against the theme | confidence drops from `exact-variable` to `exact-value` |
+| No token matches a value | Arbitrary value | `arbitrary` confidence badge |
+| Value is *near* a token | **Nothing is emitted for it** — the near-miss is reported instead | "no exact token; nearest is `brand-500`, ΔE 0.4" |
+| Subtree too large or too slow | A truncated tree | an explicit truncation marker saying why |
+| Config resolution fails entirely | The CLI escape hatch (plan 009) | the plugin's own message points there |
+
+Every fallback carries a visible label naming **what was used**, **why**, and
+**what to do to get the better version**. A fallback the user cannot see is a
+silent wrong answer, which invariant 6 forbids.
+
+**Two things are refusals, not degradations**, and correctly block: writing to
+the document outside the sanctioned path (invariant 3), and executing user
+input (plan 001). Do not "fall back" past either.
+
+### 3. Write-safety (non-negotiable — set by the repo owner)
 
 fig-tail **never mutates the Figma document** except when a human clicks an
 explicit "Apply" in the setup UI, having first seen a dry-run diff of exactly
@@ -131,27 +180,28 @@ what will change.
 Enforced mechanically: plan 003 Step 7 (ESLint `no-restricted-properties` rule
 plus a bundle-level test), extended by plan 007 Step 6.
 
-### 3. Dry-run first
+### 4. Dry-run first
 
 Any feature that *could* write runs in dry-run mode by default and produces a
 reviewable diff. Applying is a separate, explicit, second action.
 
-### 4. No network
+### 5. No network
 
 The plugin ships with `"networkAccess": { "allowedDomains": ["none"] }`. The
 config arrives by paste or file-drop. No telemetry, no config fetching, no
 external calls. This is a permanent decision and a documented feature, not a
 backlog item.
 
-### 5. Never guess silently
+### 6. Never guess silently
 
 When the resolver cannot fully evaluate a config, or the matcher cannot find a
 token, fig-tail says so precisely. A plausible wrong answer is worse than a
 visible gap. This applies to the resolver (plan 001's unresolved-feature
 report), the matcher (plan 002's confidence ladder), and every surface that
-displays their output.
+displays their output. It is the counterweight to invariant 2: **degrade
+freely, but never quietly.**
 
-### 6. No secrets in this repo
+### 7. No secrets in this repo
 
 No Figma personal access tokens, no plugin API keys, no `.env` with real values.
 Plans reference credential *locations and types* only.
@@ -187,6 +237,13 @@ each plan's Done criteria; it is the subset a demo will expose.
       answer that costs trust.
 - [ ] A cold start works: install the plugin on a machine that has never had it,
       open the file, read a class name. Do this once, for real, before the demo.
+- [ ] You know which **config tier** the demo file is on, and the label the
+      audience will see says so. A developer noticing "your personal settings"
+      mid-demo, when you meant to show the shared path, is an avoidable
+      distraction.
+- [ ] Someone in the room can try it on their own machine and it works — which,
+      given tier 2, only requires them to install the plugin and drop in the
+      config. Have the config file to hand.
 - [ ] Nothing writes to the design file. If plan 007 has shipped, it has been
       run deliberately beforehand, not during the demo.
 

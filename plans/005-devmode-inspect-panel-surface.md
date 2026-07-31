@@ -5,6 +5,13 @@
 > stop and report — do not improvise. When done, update the status row for this
 > plan in `plans/README.md`.
 >
+> **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
+> *not* listed there has a designed fallback: do the next-best thing, label it
+> visibly for the user, note it in your commit message, and keep going. Read
+> invariant 2 in `plans/README.md` before deciding something is blocked —
+> "partly working and clearly labelled" beats "stopped and waiting" everywhere
+> except write-safety and executing user input.
+>
 > **Drift check (run first)**:
 > `git diff --stat <SHA at which plan 004 completed>..HEAD -- packages/plugin/src`
 > This plan reuses plan 004's resolution and rendering pipeline. If
@@ -52,34 +59,55 @@ and records it.
 
 ### Verified Figma platform facts
 
-Checked against Figma's documentation on 2026-07-31.
+Gathered from Figma's documentation on 2026-07-31. **Open the linked page before
+implementing against a fact you depend on** — these are summaries located by
+search, not quotations, and the pages 403 automated fetching. If a page
+contradicts a line here, the page wins; fix the line in the same commit.
 
-1. `manifest.capabilities` may contain **both** `"codegen"` and `"inspect"`.
-   Plan 003 already declares both.
-2. **`inspect`** means the plugin runs in the **Inspect panel** in Dev Mode.
-   When it opens an iframe, **the iframe takes the full height and width of the
-   Inspect panel**.
+1. `manifest.capabilities` may contain **both** `"codegen"` and `"inspect"`;
+   possible values are `codegen`, `inspect`, `textreview`, `vscode`. Plan 003
+   already declares both. —
+   [Plugin manifest](https://developers.figma.com/docs/plugins/manifest)
+2. **`inspect`** means the plugin runs in the **Inspect panel** in Dev Mode. When
+   it opens an iframe, **the iframe takes the full height and width of the
+   Inspect panel**. —
+   [Working in Dev Mode](https://developers.figma.com/docs/plugins/working-in-dev-mode)
 3. **`codegen`** means the plugin runs in the **Code section** of that panel and
-   appears in Figma's native language dropdown.
+   appears in Figma's native language dropdown; selection happens via the
+   dropdown at the section's top right. —
+   [Codegen plugins](https://developers.figma.com/docs/plugins/codegen-plugins)
+   · [Use code snippets in Dev Mode](https://help.figma.com/hc/en-us/articles/15023202277399-Use-code-snippets-in-Dev-Mode)
 4. A Dev Mode plugin runs on the **current page only** by default; other pages
    must be loaded explicitly. This plan never needs another page — it responds to
-   the current selection.
-5. Users can **save** a plugin to their account for access across files. **Org
-   admins** can *pin* a Dev Mode plugin so it appears in the Inspect panel for
-   all users, and can set a default code language. Both are
-   Organization/Enterprise features.
-6. The **15-second `generate` timeout applies to codegen only.** This surface has
+   the current selection. —
+   [Working in Dev Mode](https://developers.figma.com/docs/plugins/working-in-dev-mode)
+5. Users can **save** a plugin to their account (the ribbon icon) for access
+   across files. —
+   [Use plugins in files](https://help.figma.com/hc/en-us/articles/360042532714-Use-plugins-in-files)
+6. **Org admins** can *pin* a Dev Mode plugin so it appears in the Inspect panel
+   for all users, and can set a default code language. Both are
+   Organization/Enterprise features. —
+   [Manage Dev Mode settings for an organization](https://help.figma.com/hc/en-us/articles/22927410880535-Manage-Dev-Mode-settings-for-an-organization)
+7. The **15-second `generate` timeout applies to codegen only.** This surface has
    no such hard limit — but it must stay responsive, and it shares the sandbox
-   with Figma's own UI.
+   with Figma's own UI. —
+   [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on)
 
-### Not verified — Step 1 settles it
+Background reading: [Guide to Dev Mode](https://help.figma.com/hc/en-us/articles/15023124644247-Guide-to-Dev-Mode)
+for the user-facing view of what a developer actually sees.
+
+### Not verified — and why it does not block
 
 **Whether the Code-section language selection persists per user across files and
-sessions.** No documentation found either way. Step 1 tests it directly on two
-accounts and records the result. The answer does not change *whether* this plan
-ships — both surfaces are worth having — but it changes what the README tells
-developers to do first, and it is worth knowing before writing those docs in plan
-010.
+sessions.** No documentation found either way. Step 1 tests it and records the
+result.
+
+This is deliberately non-blocking, because **this plan is the fallback.**
+Whichever way persistence resolves, the Inspect panel is a persistent surface
+that does not depend on a dropdown, so at least one route always works without
+hunting. The answer changes what the README tells developers to do *first*
+(plan 010), not whether anything ships. If Step 1 cannot be run at all — no
+second account, say — record that and carry on.
 
 ### What exists after plan 004
 
@@ -181,7 +209,8 @@ Needed on hand:
 
 - **Changing what fig-tail reports.** This plan changes presentation only. If a
   class or a confidence level looks wrong, that is a plan 002 or 004 bug — report
-  it, do not patch it here.
+  it, do not patch it here. (The config-status line and the tier-3 banner are
+  presentation of state plans 003 and 004 already produce, not new reporting.)
 - **Any document write.** Plan 003's guards must pass unchanged, with no new
   allowlist entries. Note that setting `figma.currentPage.selection` (for the
   multi-select stepper) is *not* a document mutation — it changes no persisted
@@ -266,9 +295,19 @@ records. Any difference is a refactor bug, not an improvement.
 
 The panel, rendering a `NodeResult`. Sections top to bottom:
 
-1. **Config banner** — only when `configWarnings` is non-empty: "Your Tailwind
-   config was partly readable — N settings could not be resolved", expandable,
-   with a pointer to the setup UI. Absent when the config resolved cleanly.
+1. **Config status** — always present, one line, naming which tier of plan 003's
+   config-source ladder is in use:
+   - tier 1 → "Tailwind config: saved on this file"
+   - tier 2 → "Tailwind config: your personal settings (this file has none shared)"
+   - tier 3 → a prominent banner, "No Tailwind config — showing raw values",
+     with an **Add your config** button that opens the setup UI inline. Tier 3
+     is not an error state and must not look like one: the panel below it still
+     shows complete, copyable arbitrary-value classes, and the button works
+     without edit access.
+
+   Plus, on any tier, when `configWarnings` is non-empty: "N settings in your
+   config could not be read", expandable to the per-entry reasons and remedies
+   from plan 001's resolver report.
 2. **Header** — node name and type. When multiple layers are selected: "3 layers
    selected — showing Card" with previous/next controls.
 3. **All classes** — the full string with one copy button and a format toggle
@@ -282,7 +321,9 @@ The panel, rendering a `NodeResult`. Sections top to bottom:
    each naming the nearest token and the distance. Absent when empty; never a
    permanent zero-count section.
 6. **Empty state** — when nothing is selected: one line explaining that selecting
-   a layer shows its classes.
+   a layer shows its classes. Distinct from tier 3, which is about the config,
+   not the selection — a user with no config **and** no selection should see the
+   config banner and the selection hint, not one masking the other.
 
 Wire selection: `figma.on('selectionchange')` in the sandbox, debounced at
 ~120 ms, resolving and posting a `NodeResult`.
@@ -315,10 +356,12 @@ Measure on the test file and on the largest frame available:
   Figma stays responsive.
 - Cold first render after opening the panel — target under 1 s.
 
-Then verify failure modes explicitly: no config stored (→ an actionable message
-naming the setup step, on both surfaces); corrupt stored config (→ a readable
-error, not a blank panel); a node whose `getCSSAsync()` rejects (→ that node
-reports an error, the panel keeps working on the next selection).
+Then verify the fallback and failure modes explicitly: no config stored (→
+arbitrary-value classes plus the tier-3 banner, on **both** surfaces — never an
+error or a blank panel); corrupt stored config (→ a readable message, and fall
+through to tier 2 or tier 3 rather than dying); a node whose `getCSSAsync()`
+rejects (→ that node reports an error, the panel keeps working on the next
+selection).
 
 **Check**: measurements recorded in the commit message. All three failure modes
 produce readable output rather than a blank or frozen panel.
@@ -359,14 +402,18 @@ ALL must hold.
 - [ ] `matchDeclarations` is imported in exactly one file (`src/pipeline.ts`),
       asserted by a test
 - [ ] Plan 004's nine-node matrix produces identical output after the refactor
-- [ ] The Inspect panel renders every state in Step 3, including the config
-      banner, multi-select, and empty selection
+- [ ] The Inspect panel renders every state in Step 3, including all three
+      config tiers, the unresolved-config warning, multi-select, and empty
+      selection
+- [ ] Tier 3 shows usable arbitrary-value classes plus an **Add your config**
+      action that works from Dev Mode — it never looks like an error
 - [ ] Every copy button copies exactly what it displays (verified by pasting)
 - [ ] The two surfaces produce byte-identical class strings, asserted by a test
       **and** verified by hand across nine nodes
 - [ ] Selection-change to rendered panel under 250 ms warm; under 1 s cold
 - [ ] Rapid selection changes stay responsive
-- [ ] All three failure modes produce readable output on both surfaces
+- [ ] All three fallback/failure modes produce readable, usable output on both
+      surfaces — a corrupt config degrades to a lower tier rather than failing
 - [ ] Plan 003's write-safety guards pass with no new allowlist entries
 - [ ] `dist/ui.html` under 500 kB
 - [ ] No files outside the in-scope list were changed
@@ -377,9 +424,11 @@ ALL must hold.
 Stop and report back — do not improvise — if:
 
 - **The `inspect` capability does not behave as documented** — the iframe does
-  not appear in the Inspect panel, or cannot read the current selection. That
-  removes the persistent surface and leaves the program dependent on the Code
-  section alone, which is a product risk the owner should weigh.
+  not appear in the Inspect panel, or cannot read the current selection. Ship
+  what does work (plan 004's Code section is unaffected, and the Step 2 pipeline
+  refactor is worth keeping either way), mark this plan BLOCKED with the
+  evidence, and report. The program still functions on one surface; what the
+  owner needs to weigh is whether discovery is good enough without the second.
 - The Step 2 refactor changes any output in plan 004's matrix and the cause is
   not obvious. Do not "fix" the matrix to match; the matrix is the record.
 - The two surfaces cannot be made byte-identical for structural reasons.
