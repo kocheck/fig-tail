@@ -1,9 +1,16 @@
 # Plan 001: Build the in-plugin Tailwind theme resolver (v3 + v4)
 
-> **Executor instructions**: Follow this plan step by step. Confirm each step's
-> **Check** before moving to the next. If anything in "STOP conditions" occurs,
-> stop and report — do not improvise. When done, update the status row for this
-> plan in `plans/README.md`.
+> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
+> toolchain, commands, conventions, and failure handling shared by every plan.
+> Then read this plan in full and work through its **Build sheet** below, one
+> task at a time, confirming each *Done when* before starting the next. Commit
+> after each task. When done, update the status row for this plan in
+> `plans/README.md`.
+>
+> **Structure of this file**: the Build sheet is what you *do*. Everything after
+> it is reference — read a section when a task points you there. "Steps" gives
+> the detail behind each task; "STOP conditions" and "Done criteria" are
+> checklists you must confirm literally before calling this finished.
 >
 > **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
 > *not* listed there has a designed fallback: do the next-best thing, label it
@@ -30,6 +37,70 @@
 - **Depends on**: none
 - **Category**: dx
 - **Grounded at**: `e757f32` (2026-07-31) — greenfield.
+
+## Build sheet
+
+**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
+commands, TypeScript rules, commit format, and what to do when a check fails —
+none of which is repeated here.
+
+Do the tasks below **in order, one at a time**. Each task's *Done when* is a
+command; it must produce the stated result before you start the next task.
+Commit after each task. Everything after this section is **reference** — read a
+section when a task points you at it.
+
+### Files this plan creates
+
+| Path | Purpose | Task |
+|---|---|---|
+| `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `eslint.config.js`, `.gitignore` | workspace root | 1 |
+| `packages/theme/package.json`, `tsconfig.json` | package setup | 1 |
+| `packages/theme/src/types.ts` | `TokenSet`, `ResolveInput`, `ResolveResult`, `Unresolved` | 2 |
+| `packages/theme/src/validate.ts` | `validateTokenSet` | 2 |
+| `packages/theme/src/validate.test.ts` | schema tests | 2 |
+| `packages/theme/spike/eval.ts`, `packages/theme/spike/FINDINGS.md` | throwaway spike + findings | 3 |
+| `fixtures/configs/v3/*.js|.ts` (8 files), `fixtures/configs/README.md` | v3 corpus + provenance | 3 |
+| `packages/theme/scripts/gen-data.ts` | Node generator for bundled defaults | 4 |
+| `packages/theme/data/v3-default-theme.json`, `v4-default-theme.json` | bundled defaults (checked in) | 4 |
+| `packages/theme/src/v3/index.ts`, `evaluate.ts`, `merge.ts`, `ts-prepass.ts` + tests | v3 adapter | 5 |
+| `packages/theme/src/v4/index.ts`, `parse-theme.ts` + tests | v4 adapter | 6 |
+| `fixtures/configs/v4/*.css` (4 files) | v4 corpus | 6 |
+| `packages/theme/src/consistency.test.ts` | cross-flavour agreement | 7 |
+| `packages/theme/src/index.ts` | `resolveTheme`, public exports | 8 |
+| `packages/theme/src/resolve.test.ts` | the four guarantees | 8 |
+| `README.md` (section only) | what the resolver can read | 9 |
+
+### Dependencies
+
+```bash
+pnpm add -w -D typescript vitest tsup eslint @eslint/js typescript-eslint zod
+pnpm add --filter @fig-tail/theme culori acorn acorn-walk
+pnpm add --filter @fig-tail/theme -D @types/culori tailwindcss@3 tailwindcss@4 --save-exact
+```
+
+`tailwindcss@3` and `@4` are **dev-only**, used solely by `scripts/gen-data.ts`
+to produce the bundled default themes. They must never appear in the runtime
+bundle — task 8's size check will catch it if they do.
+
+### Tasks
+
+| # | Do this | Files it may touch | Done when |
+|---|---|---|---|
+| 1 | Scaffold the workspace and the `@fig-tail/theme` package. Add the ESLint rule banning Node built-ins in `packages/theme/**`. See Step 1. | workspace root, `packages/theme/package.json`, `tsconfig.json` | `pnpm install && pnpm -r typecheck && pnpm -r lint` → exit 0. Then add `import fs from 'fs'` to a file under `packages/theme/src` → `pnpm -r lint` **fails**. Remove it → passes. |
+| 2 | Write `TokenSet` + the other types, and `validateTokenSet`. Copy the shape from Step 2 exactly, including `unknownNamespaces`. | `src/types.ts`, `src/validate.ts`, `src/validate.test.ts` | `pnpm --filter @fig-tail/theme test -t schema` → passes, with 1 valid fixture and 5 malformed ones each failing distinguishably |
+| 3 | **Spike.** Gather the 8-config corpus (8 distinct shapes — see Step 3), prototype the acorn evaluator, write `FINDINGS.md`. Produces findings, not shipped code. | `spike/**`, `fixtures/configs/v3/**`, `fixtures/configs/README.md` | `spike/FINDINGS.md` answers all 5 questions with **pasted output**, states the resolved count, and states a build-vs-buy decision |
+| 4 | Write `scripts/gen-data.ts` and generate both bundled default themes. Record the Tailwind versions inside each JSON. | `scripts/gen-data.ts`, `data/*.json` | `pnpm --filter @fig-tail/theme gen:data` twice → `git diff` empty. 5 values hand-checked against Tailwind docs and named in the commit message |
+| 5 | Implement the v3 adapter: evaluator, known-module table, TS pre-pass, presets, merge semantics, **and the replace-vs-extend safe-fallback rule**. | `src/v3/**` | `pnpm --filter @fig-tail/theme test -t v3` → passes, incl. the 8 cases in Step 5 and both directions of the safe-fallback rule |
+| 6 | Measure postcss vs a hand-rolled scanner, then implement the v4 adapter. Build the 4 v4 fixtures. | `src/v4/**`, `fixtures/configs/v4/**` | `pnpm --filter @fig-tail/theme test -t v4` → passes; the postcss measurement is in the commit message |
+| 7 | Add the cross-flavour consistency test (same design intent, v3 and v4, identical token values). | `src/consistency.test.ts`, `fixtures/configs/**` | `pnpm --filter @fig-tail/theme test -t consistency` → passes |
+| 8 | Wire `resolveTheme`, flavour detection, unknown-version degradation, and the unresolved report. Enforce the four guarantees in Step 8. | `src/index.ts`, `src/resolve.test.ts` | `pnpm --filter @fig-tail/theme test -t resolve` → passes; `pnpm --filter @fig-tail/theme build && du -b packages/theme/dist/index.js` → under 184320 |
+| 9 | Add the "What fig-tail can read from your Tailwind config" README section (~40 lines). | `README.md` | You read only that section, predicted the outcome for 2 fixture configs, then ran the resolver and matched |
+
+**Task 3 is the one that can change the plan.** If it reports fewer than 6 of 8
+configs fully resolving, that is **not** a stop — continue to task 4 and record
+the shortfall (see Step 3). Stop only if *nothing* parses.
+
+---
 
 ## Why this matters
 

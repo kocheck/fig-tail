@@ -1,9 +1,16 @@
 # Plan 005: Ship the Dev Mode Inspect-panel surface
 
-> **Executor instructions**: Follow this plan step by step. Confirm each step's
-> **Check** before moving to the next. If anything in "STOP conditions" occurs,
-> stop and report — do not improvise. When done, update the status row for this
-> plan in `plans/README.md`.
+> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
+> toolchain, commands, conventions, and failure handling shared by every plan.
+> Then read this plan in full and work through its **Build sheet** below, one
+> task at a time, confirming each *Done when* before starting the next. Commit
+> after each task. When done, update the status row for this plan in
+> `plans/README.md`.
+>
+> **Structure of this file**: the Build sheet is what you *do*. Everything after
+> it is reference — read a section when a task points you there. "Steps" gives
+> the detail behind each task; "STOP conditions" and "Done criteria" are
+> checklists you must confirm literally before calling this finished.
 >
 > **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
 > *not* listed there has a designed fallback: do the next-best thing, label it
@@ -28,6 +35,52 @@
 - **Depends on**: 004
 - **Category**: dx
 - **Grounded at**: the commit at which plan 004 landed.
+
+## Build sheet
+
+**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
+commands, TypeScript rules, commit format, and what to do when a check fails —
+none of which is repeated here.
+
+Do the tasks below **in order, one at a time**. Each task's *Done when* is a
+command or a named in-Figma check; it must produce the stated result before you
+start the next task. Commit after each task. Everything after this section is
+**reference** — read a section when a task points you at it.
+
+### You need Figma desktop, and plan 004's test file
+
+A second Figma account helps for task 1 but is not required.
+
+### Files this plan creates or edits
+
+| Path | Purpose | Task |
+|---|---|---|
+| `packages/plugin/notes/devmode-discovery.md` | the persistence findings | 1 |
+| `packages/plugin/src/pipeline.ts` + test | **the** shared resolution path | 2 |
+| `packages/plugin/src/mode-dev.ts` (refactor) | now calls the pipeline | 2 |
+| `packages/plugin/src/render.ts` (refactor) | shared grouping/ordering | 2 |
+| `packages/plugin/src/inspect/index.ts` | sandbox side, selection handling | 3 |
+| `packages/plugin/src/ui/inspect/**` | the panel UI | 3 |
+| `packages/plugin/src/consistency.test.ts` | surfaces produce identical strings | 4 |
+| `README.md` (section only) | "Two ways to see it" | 6 |
+
+No new dependencies.
+
+### Tasks
+
+| # | Do this | Files it may touch | Done when |
+|---|---|---|---|
+| 1 | Answer the 5 discovery questions in Step 1 by hand and write them up with screenshots. **Do not skip to task 2 first.** | `notes/devmode-discovery.md` | The file answers all 5 and ends with **one sentence** stating what a first-time developer must do. Plan 010's README is built from that sentence |
+| 2 | **Refactor before building anything new.** Extract `resolveNode` into `src/pipeline.ts`; point `mode-dev.ts` at it. Add the test asserting `matchDeclarations` is imported in **exactly one file**. | `src/pipeline.ts`, `mode-dev.ts`, `render.ts` + test | The single-import-site test passes, **and** plan 004's full 9-node matrix produces byte-identical output to `fixtures/figma/README.md`. Any difference is a refactor bug, not an improvement |
+| 3 | Build the panel: config status (3 tiers + `unknownNamespaces`), header w/ multi-select stepper, all-classes + format toggle, grouped classes w/ confidence badges, needs-attention, empty state. Debounce `selectionchange` at ~120 ms. | `src/inspect/**`, `src/ui/inspect/**` | Every state walked by hand. **Every copy button pasted into a text editor and compared** — they must copy exactly what they display |
+| 4 | Add the cross-surface consistency test, then verify by hand across all 9 nodes. | `src/consistency.test.ts` | Test passes; the 9-node hand comparison shows zero differences; comparison recorded in the commit message |
+| 5 | Measure warm / rapid / cold. Verify the 3 fallback modes on **both** surfaces. | `src/inspect/**` | Warm <250 ms, cold <1 s, rapid selection stays responsive. No config → arbitrary classes + banner on both surfaces, never an error |
+| 6 | README "Two ways to see it" — Code section and Inspect panel, with task 1's sentence and a screenshot of each. | `README.md` | Someone followed it from a fresh Figma session and reached class names by **both** routes |
+
+**Do task 2 before task 3.** Building the panel first and unifying afterwards is
+exactly how the two surfaces end up permanently divergent.
+
+---
 
 ## Why this matters
 

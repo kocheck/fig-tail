@@ -1,9 +1,16 @@
 # Plan 006: Add the read-only drift linter (designer dry-run)
 
-> **Executor instructions**: Follow this plan step by step. Confirm each step's
-> **Check** before moving to the next. If anything in "STOP conditions" occurs,
-> stop and report — do not improvise. When done, update the status row for this
-> plan in `plans/README.md`.
+> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
+> toolchain, commands, conventions, and failure handling shared by every plan.
+> Then read this plan in full and work through its **Build sheet** below, one
+> task at a time, confirming each *Done when* before starting the next. Commit
+> after each task. When done, update the status row for this plan in
+> `plans/README.md`.
+>
+> **Structure of this file**: the Build sheet is what you *do*. Everything after
+> it is reference — read a section when a task points you there. "Steps" gives
+> the detail behind each task; "STOP conditions" and "Done criteria" are
+> checklists you must confirm literally before calling this finished.
 >
 > **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
 > *not* listed there has a designed fallback: do the next-best thing, label it
@@ -27,6 +34,58 @@
 - **Depends on**: 002, 003
 - **Category**: design
 - **Grounded at**: the commit at which plans 002 and 003 landed.
+
+## Build sheet
+
+**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
+commands, TypeScript rules, commit format, and what to do when a check fails —
+none of which is repeated here.
+
+Do the tasks below **in order, one at a time**. Each task's *Done when* is a
+command or a named in-Figma check; it must produce the stated result before you
+start the next task. Commit after each task. Everything after this section is
+**reference** — read a section when a task points you at it.
+
+### Before you start
+
+You need Figma desktop, plan 004's test file with a config loaded, **and** a
+large messy Figma file (several hundred nodes) for task 6. A duplicated Community
+file is fine.
+
+**This plan writes nothing to the document.** If you find yourself adding an
+ESLint allowlist entry, you have gone out of scope — stop and re-read Scope.
+
+### Files this plan creates
+
+| Path | Purpose | Task |
+|---|---|---|
+| `packages/plugin/src/lint/types.ts` + test | `Finding`, `Severity`, `ScanResult` | 1 |
+| `packages/plugin/src/lint/scan.ts` + test | node walker + classification | 2 |
+| `packages/plugin/src/lint/variables.ts` + test | variable → token proposals | 3 |
+| `packages/plugin/src/ui/lint/**` | report view | 4 |
+| `packages/plugin/src/lint/dismiss.ts` + test | per-user dismissals | 5 |
+| `packages/plugin/src/hints.ts` | **only if plan 004 has not landed** | 2 |
+| `README.md` (section only) | what the four findings mean | 7 |
+
+No new dependencies.
+
+### Tasks
+
+| # | Do this | Files it may touch | Done when |
+|---|---|---|---|
+| 1 | Write the finding types and the severity sort (high→medium→low, then node count descending). | `src/lint/types.ts` + test | A hand-built `ScanResult` sorts into the documented order with node-count as tiebreak |
+| 2 | The scanner: **iterative stack walk** (not recursion), batches of 50 with a yield, progress callback, cancel flag, skip invisible + instance children, dedupe by `(property, value, nearestToken)`. Classify per the mapping in Step 2. | `src/lint/scan.ts` + test | Unit tests cover every classification branch, the dedupe (3 nodes → 1 finding, `nodeIds.length === 3`), skip rules, and mid-walk cancel leaving `cancelled: true` |
+| 3 | The variable proposer: value match, name match, agreement → `high`/`medium`/`conflict`. **A conflict proposes nothing.** | `src/lint/variables.ts` + test | Tests cover all 3 outcomes, the 3 name-normalisation forms, the conflict case, unsupported variable types skipped, and an already-mapped variable producing no finding |
+| 4 | The report UI: scope picker, progress + cancel, grouped results, "Select these nodes", empty state, Markdown export. | `src/ui/lint/**` | On plan 004's test file: the near-miss node appears as high-severity drift naming the right token; 25 px padding appears with `distance: 1`; the gradient node produces nothing; "Select these nodes" selects and scrolls; the Markdown pastes as a readable table |
+| 5 | Severity ordering + per-finding Dismiss, stored in **`clientStorage`** keyed by file ID + finding hash. Add "Show dismissed (N)". | `src/lint/dismiss.ts` + test, `src/ui/lint/**` | Dismiss → gone, count drops; re-scan → still dismissed; toggle → reappears marked; reload → persists. **And** `getSharedPluginData('figtail','meta')` is byte-identical before and after |
+| 6 | Run a page scan on the large messy file. Record node count, duration, responsiveness, cancel behaviour. | none (measurement) | 1,000 nodes in <10 s, UI responsive (scroll the canvas mid-scan and confirm it moves), cancel shows partial results. Timings in the commit message |
+| 7 | README section explaining the 4 finding types **for a designer** — what each means and how to fix it in Figma (~50 lines). | `README.md` | A reader can correctly explain what "unbound" means and what to do about it, without asking |
+
+**The read-only assertion test is mandatory** (see Validation plan): run a full
+scan against a mocked `figma` where every mutation method throws, and assert the
+scan completes. That test stays in the suite permanently.
+
+---
 
 ## Why this matters
 

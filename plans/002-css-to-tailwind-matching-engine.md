@@ -1,9 +1,16 @@
 # Plan 002: Build the CSS→Tailwind matching engine
 
-> **Executor instructions**: Follow this plan step by step. Confirm each step's
-> **Check** before moving to the next. If anything in "STOP conditions" occurs,
-> stop and report — do not improvise. When done, update the status row for this
-> plan in `plans/README.md`.
+> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
+> toolchain, commands, conventions, and failure handling shared by every plan.
+> Then read this plan in full and work through its **Build sheet** below, one
+> task at a time, confirming each *Done when* before starting the next. Commit
+> after each task. When done, update the status row for this plan in
+> `plans/README.md`.
+>
+> **Structure of this file**: the Build sheet is what you *do*. Everything after
+> it is reference — read a section when a task points you there. "Steps" gives
+> the detail behind each task; "STOP conditions" and "Done criteria" are
+> checklists you must confirm literally before calling this finished.
 >
 > **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
 > *not* listed there has a designed fallback: do the next-best thing, label it
@@ -28,6 +35,60 @@
 - **Depends on**: 001
 - **Category**: dx
 - **Grounded at**: the commit at which plan 001 landed.
+
+## Build sheet
+
+**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
+commands, TypeScript rules, commit format, and what to do when a check fails —
+none of which is repeated here.
+
+Do the tasks below **in order, one at a time**. Each task's *Done when* is a
+command; it must produce the stated result before you start the next task.
+Commit after each task. Everything after this section is **reference** — read a
+section when a task points you at it.
+
+### Files this plan creates
+
+| Path | Purpose | Task |
+|---|---|---|
+| `packages/match/package.json`, `tsconfig.json` | package setup | 1 |
+| `packages/match/src/types.ts` | `MatchResult`, `Confidence`, `MatchOptions`, `VariableHint` | 1 |
+| `packages/match/fixtures/css/card.json`, `text.json`, `sized.json` | captured `getCSSAsync()` output | 1 |
+| `packages/match/src/normalise.ts` + test | shorthand expansion, colour canonicalisation, collapse rules | 2 |
+| `packages/match/src/matchers/color.ts` + test | colour matcher, ΔE, alpha modifier | 3 |
+| `packages/match/src/matchers/length.ts` + test | spacing, sizing, radius, border width | 4 |
+| `packages/match/src/matchers/typography.ts` + test | font size/weight/family, leading, tracking | 5 |
+| `packages/match/src/matchers/layout.ts`, `shadow.ts`, `effects.ts` + tests | static + shadow + effects | 6 |
+| `packages/match/src/order.ts` | canonical class ordinal table | 7 |
+| `packages/match/src/index.ts` + `integration.test.ts` | `matchDeclarations`, `toClassName` | 7 |
+| `packages/match/src/summarise.ts` + test | `summarise`, empty-token-set, unknown-namespace tests | 8 |
+
+### Dependencies
+
+```bash
+pnpm add --filter @fig-tail/match culori
+pnpm add --filter @fig-tail/match -D fast-check @vitest/coverage-v8
+```
+
+`@fig-tail/theme` is a workspace dependency (`workspace:*`), types only.
+
+### Tasks
+
+| # | Do this | Files it may touch | Done when |
+|---|---|---|---|
+| 1 | Scaffold the package. Write the public types **first** — plans 004–008 depend on them. Save the 3 CSS fixtures verbatim from the Step-1 examples. | `package.json`, `tsconfig.json`, `src/types.ts`, `fixtures/css/*` | `pnpm --filter @fig-tail/match typecheck` → exit 0; placeholder test asserting `matchDeclarations({}, tokens) === []` passes |
+| 2 | Shorthand expansion, colour canonicalisation, no-op dropping, and the collapse rules (`p-6` not four longhands). | `src/normalise.ts` + test | `test -t expand` → passes, incl. 1/2/3/4-value shorthands, the `border` shorthand, 5 colour notations comparing equal, and the 3-match-1-miss non-collapse case |
+| 3 | Colour matcher: property→prefix map, CIEDE2000, alpha modifier, full confidence ladder, `codeSyntax` hint short-circuit. | `src/matchers/color.ts` + test | `test -t color` → passes, incl. all 6 cases named in Step 3 |
+| 4 | Length matchers. **v4 divides by `spacing.base`; v3 looks up `spacing.scale`.** Branch on which is populated, not on `source.major`. | `src/matchers/length.ts` + test | `test -t length` → passes against **both** fixture token sets, incl. all 5 cases in Step 4 |
+| 5 | Typography. Pair `font-size` with `line-height` when the token defines one. | `src/matchers/typography.ts` + test | `test -t typography` → passes, incl. paired, unpaired, and font-stack cases |
+| 6 | Layout (static tables), shadow (normalised whole-string), effects. | `src/matchers/{layout,shadow,effects}.ts` + tests | `test -t layout`, `-t shadow`, `-t effects` → all pass, incl. the colour-notation shadow case |
+| 7 | Compose `matchDeclarations`, apply collapse + dedupe + canonical sort, write `toClassName`. Snapshot the 3 fixtures. | `src/index.ts`, `src/order.ts`, `src/integration.test.ts` | `test -t integration` → passes, asserting the **exact** class string and its order for the card fixture |
+| 8 | `summarise`, plus the two safety tests: empty token set, and unknown namespace **with matching tokens present in the map**. | `src/summarise.ts` + tests | `test -t summarise`, `-t empty-tokens`, `-t unknown-namespace` → pass; `test -- --coverage` ≥90% in `src/matchers`; `du -b dist/index.js` under 61440 |
+
+**Task 8's unknown-namespace test is the safety-critical one.** If it regresses,
+fig-tail emits class names that do not exist in strangers' codebases.
+
+---
 
 ## Why this matters
 

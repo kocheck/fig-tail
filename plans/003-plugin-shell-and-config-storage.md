@@ -1,9 +1,16 @@
 # Plan 003: Scaffold the plugin shell, dual capability, and config storage
 
-> **Executor instructions**: Follow this plan step by step. Confirm each step's
-> **Check** before moving to the next. If anything in "STOP conditions" occurs,
-> stop and report — do not improvise. When done, update the status row for this
-> plan in `plans/README.md`.
+> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
+> toolchain, commands, conventions, and failure handling shared by every plan.
+> Then read this plan in full and work through its **Build sheet** below, one
+> task at a time, confirming each *Done when* before starting the next. Commit
+> after each task. When done, update the status row for this plan in
+> `plans/README.md`.
+>
+> **Structure of this file**: the Build sheet is what you *do*. Everything after
+> it is reference — read a section when a task points you there. "Steps" gives
+> the detail behind each task; "STOP conditions" and "Done criteria" are
+> checklists you must confirm literally before calling this finished.
 >
 > **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
 > *not* listed there has a designed fallback: do the next-best thing, label it
@@ -28,6 +35,66 @@
 - **Depends on**: 001
 - **Category**: dx
 - **Grounded at**: the commit at which plan 001 landed.
+
+## Build sheet
+
+**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
+commands, TypeScript rules, commit format, and what to do when a check fails —
+none of which is repeated here.
+
+Do the tasks below **in order, one at a time**. Each task's *Done when* is a
+command or a named in-Figma check; it must produce the stated result before you
+start the next task. Commit after each task. Everything after this section is
+**reference** — read a section when a task points you at it.
+
+### You need Figma desktop for this plan
+
+Tasks 2–8 cannot be done in a browser. Install the Figma **desktop app**, and
+create a **scratch file you can edit** — never test against a real design file.
+Import the plugin with Plugins → Development → Import plugin from manifest.
+
+### Files this plan creates
+
+| Path | Purpose | Task |
+|---|---|---|
+| `packages/plugin/package.json`, `tsconfig.json`, `build.mjs` | package + two-bundle esbuild | 1 |
+| `packages/plugin/manifest.json` | dual capability, no network | 2 |
+| `packages/plugin/src/main.ts` | sandbox entry, mode branching | 3 |
+| `packages/plugin/src/mode-dev.ts`, `mode-design.ts` | the two editor branches (stubs) | 3 |
+| `packages/plugin/src/setup.ts` + test | resolve → validate → store orchestration | 4 |
+| `packages/plugin/src/storage.ts` + test | 3-tier ladder, gzip, chunking | 5 |
+| `packages/plugin/src/ui/index.html`, `main.tsx`, `styles.css` | setup UI, 6 states | 6 |
+| `eslint.config.js` (edit) | write-safety rule | 7 |
+| `packages/plugin/src/write-safety.test.ts` | bundle audit | 7 |
+| `README.md` (section only) | installing locally | 9 |
+
+### Dependencies
+
+```bash
+pnpm add --filter @fig-tail/plugin fflate
+pnpm add --filter @fig-tail/plugin -D @figma/plugin-typings esbuild
+```
+
+Plus `@fig-tail/theme` as `workspace:*`.
+
+### Tasks
+
+| # | Do this | Files it may touch | Done when |
+|---|---|---|---|
+| 1 | Scaffold the package and `build.mjs` (two esbuild passes; the UI must be inlined into one HTML file). | `package.json`, `tsconfig.json`, `build.mjs` | `pnpm --filter @fig-tail/plugin build` → exit 0; `dist/main.js` and `dist/ui.html` exist; `dist/ui.html` has `<script>` with **no** `src=` |
+| 2 | Write `manifest.json` exactly as Step 2 gives it, including `capabilities: ["codegen","inspect"]`. | `manifest.json` | Import into Figma desktop with no errors, and **all three** surfaces reachable: design-editor plugin list, Dev Mode Code-section dropdown ("Tailwind"), Dev Mode Inspect-panel plugin list |
+| 3 | Mode branching + three stubs. **Never call `figma.showUI` inside the generate callback** — use the `preferenceschange` handler. | `src/main.ts`, `mode-dev.ts`, `mode-design.ts` | By hand in Figma: Dev Mode Code section shows the fig-tail message; "Configure Tailwind config…" opens the iframe; Inspect panel shows the placeholder; design editor opens the same UI |
+| 4 | Config ingestion. Run `resolveTheme` **in the UI iframe**, not the sandbox. Handle `missing-import` by asking for the named file. | `src/setup.ts` + test | Unit tests for all 4 resolver outcomes pass; each plan-001 fixture config dropped in produces that fixture's known result |
+| 5 | Storage: the **three-tier ladder** (document / user / none), gzip + base64 + ≤80 kB chunks, meta written last, stale chunks cleared, module-level cache. | `src/storage.ts` + test | Unit tests pass: 250 kB round-trip; 4→2 chunk shrink leaves no readable `tokens.2`; truncated read returns `null` + diagnostic. Then in Figma: drop a fixture, reload, `readConfig()` returns the same token count |
+| 6 | Setup UI, **six** states. Must open from Dev Mode as well as the design editor. Include the credential scan and the `unknownNamespaces` callout. | `src/ui/**` | All six states walked by hand in Figma, incl. the credential warning on a config containing `apiKey: "sk-live-abc123"` |
+| 7 | Write-safety: the ESLint rule **and** the bundle test. Exactly **one** allowlist entry (`setSharedPluginData`). | `eslint.config.js`, `src/write-safety.test.ts` | Both pass. Then add `figma.currentPage.selection[0].name = 'x'` to `main.ts` → **both fail**. Remove → both pass. Record this in the commit message. |
+| 8 | Verify the ladder: every tier and transition in Step 8(a) by hand; then the cross-user read in 8(b). | none (verification only) | 8(a) fully verified and recorded. 8(b) passed **or** explicitly recorded as unverified — either is acceptable |
+| 9 | README "Installing the plugin" section (~25 lines). | `README.md` | You followed your own README from a clean checkout and reached a loaded config in Dev Mode without opening another file |
+
+**Task 7 is the one a reviewer will check hardest.** A guard nobody has watched
+fail is not a guard.
+
+---
 
 ## Why this matters
 

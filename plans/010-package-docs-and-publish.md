@@ -1,9 +1,16 @@
 # Plan 010: Package, document, and publish
 
-> **Executor instructions**: Follow this plan step by step. Confirm each step's
-> **Check** before moving to the next. If anything in "STOP conditions" occurs,
-> stop and report — do not improvise. When done, update the status row for this
-> plan in `plans/README.md`.
+> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
+> toolchain, commands, conventions, and failure handling shared by every plan.
+> Then read this plan in full and work through its **Build sheet** below, one
+> task at a time, confirming each *Done when* before starting the next. Commit
+> after each task. When done, update the status row for this plan in
+> `plans/README.md`.
+>
+> **Structure of this file**: the Build sheet is what you *do*. Everything after
+> it is reference — read a section when a task points you there. "Steps" gives
+> the detail behind each task; "STOP conditions" and "Done criteria" are
+> checklists you must confirm literally before calling this finished.
 >
 > **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
 > *not* listed there has a designed fallback: do the next-best thing, label it
@@ -31,6 +38,51 @@
   006–009 are documented if done and omitted if not.
 - **Category**: docs
 - **Grounded at**: the commit at which plan 005 landed, or later.
+
+## Build sheet
+
+**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
+commands, TypeScript rules, commit format, and what to do when a check fails —
+none of which is repeated here.
+
+Do the tasks below **in order, one at a time**. Each task's *Done when* is a
+command or a named in-Figma check; it must produce the stated result before you
+start the next task. Commit after each task. Everything after this section is
+**reference** — read a section when a task points you at it.
+
+### ⚠ Tasks 4 and 5 are public and effectively irreversible
+
+They publish to npm and submit to the Figma Community under the owner's name.
+**Neither happens without the owner's explicit approval in task 3.** Do not run
+ahead.
+
+### Files this plan creates
+
+| Path | Purpose | Task |
+|---|---|---|
+| `README.md` (full rewrite) | the front door | 2 |
+| `docs/setup.md`, `docs/troubleshooting.md` | the long versions | 2 |
+| `CONTRIBUTING.md` | incl. the write-safety invariant | 2 |
+| `CHANGELOG.md`, package metadata | release prep | 3 |
+| `.github/workflows/ci.yml`, `release.yml` | CI + tagged publish | 3 |
+| Community listing assets (icon, cover, screenshots) | submission | 5 |
+| `plans/README.md` (edit) | final statuses | 6 |
+
+### Tasks
+
+| # | Do this | Files it may touch | Done when |
+|---|---|---|---|
+| 1 | Audit what actually shipped. Read `plans/README.md`, then **verify each DONE plan's headline feature by hand in the built plugin**. Do not trust the table. | none (verification) | A written checklist of verified features in the commit message, matching `plans/README.md`. Any mismatch → **STOP** |
+| 2 | Write all the docs, describing **only** what task 1 verified. Structure per Step 2, including the three config tiers and why unreadable config parts give raw values. | `README.md`, `docs/**`, `CONTRIBUTING.md` | **From a fresh clone on a clean machine**, follow the developer path and then the designer path literally. Both work end to end. Fix every place you had to improvise |
+| 3 | Version 0.1.0, changelog, package metadata, CI + release workflows (secret **referenced**, never contained). Run the publish dry-run and read the file lists. Then **stop and ask the owner** for approval on (a) npm and (b) Community. | `package.json`s, `CHANGELOG.md`, `.github/workflows/**` | Dry-run shows no source/fixtures/plans/spikes in any tarball; `git log -p \| grep -iE 'npm_[A-Za-z0-9]\|figd_\|figu_'` returns nothing; **the owner has explicitly approved both, or told you which one** |
+| 4 | *(Only with approval.)* Tag and publish `@fig-tail/theme`, `@fig-tail/match`, and `@fig-tail/cli` if plan 009 shipped. | tags only | Each package on npm at 0.1.0; a clean-directory install works; tarballs contain no source |
+| 5 | *(Only with approval.)* **First, find the current Figma publishing doc and record its URL in this plan** — it was never verified. Then prepare assets and submit. | `manifest.json` (assigned ID), listing assets | Live in the Community, installable from a **different** account, and that account completes the README developer path. The assigned plugin ID is committed |
+| 6 | Update `plans/README.md`: DONE / TODO / REJECTED with one-line rationales, plus a "Shipped 0.1.0" note. | `plans/README.md` | Every row matches reality; nothing left IN PROGRESS |
+
+**Task 3 is a hard gate.** Nothing outward-facing ships without the owner saying
+so, and this is the one plan whose actions cannot be quietly reverted.
+
+---
 
 ## Why this matters
 

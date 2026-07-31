@@ -293,6 +293,46 @@ each plan's Done criteria; it is the subset a demo will expose.
 
 ---
 
+## For executors — how to run one of these plans
+
+These plans are written to be executed by a small model or a busy human with
+**zero context from the conversation that produced them**. Two files make that
+possible:
+
+1. **`plans/EXECUTOR-GUIDE.md`** — read this first, every time. It holds the
+   toolchain, exact commands, TypeScript and testing conventions, package import
+   rules, commit format, the failure-handling decision tree, and a list of
+   anti-patterns specific to this problem. No plan repeats any of it.
+2. **The plan's own Build sheet** — the first section of every plan. It lists
+   the exact files that plan creates, the exact `pnpm add` commands, and a
+   numbered task table where each task names the files it may touch and a single
+   *Done when* command.
+
+### The structure of every plan
+
+| Section | What it is for |
+|---|---|
+| **Build sheet** | What you *do*. File manifest, dependencies, numbered tasks with checks. Follow it in order. |
+| Why this matters | Intent. Read it so you can make a right call when a detail is off. |
+| Context the executor needs | The facts, inlined. Platform docs, API shapes, constraints. |
+| Inputs & resources | What you need on hand before starting. |
+| Scope | In-scope and out-of-scope. The out list names the tempting-but-forbidden things. |
+| Steps | The detail behind each Build-sheet task. |
+| Validation plan | How the whole thing is proven to work. |
+| Done criteria | Confirm every line literally before saying you are finished. |
+| STOP conditions | Narrow and specific. Everything else degrades — see invariant 2. |
+| Handoff | What the next plan depends on, and what a reviewer should scrutinise. |
+
+### One task, one commit
+
+Each Build-sheet task is sized to be independently committable and independently
+verifiable. Do not batch them, and do not start a task while the previous one's
+check is unverified. If a check fails twice, follow the decision tree in
+`EXECUTOR-GUIDE.md` §6 — which, in almost every case, says take the labelled
+fallback and keep going rather than stopping.
+
+---
+
 ## Order & status
 
 | Plan | Title | Priority | Effort | Depends on | Status |

@@ -1,9 +1,16 @@
 # Plan 007: Add opt-in variable Code-syntax stamping
 
-> **Executor instructions**: Follow this plan step by step. Confirm each step's
-> **Check** before moving to the next. If anything in "STOP conditions" occurs,
-> stop and report — do not improvise. When done, update the status row for this
-> plan in `plans/README.md`.
+> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
+> toolchain, commands, conventions, and failure handling shared by every plan.
+> Then read this plan in full and work through its **Build sheet** below, one
+> task at a time, confirming each *Done when* before starting the next. Commit
+> after each task. When done, update the status row for this plan in
+> `plans/README.md`.
+>
+> **Structure of this file**: the Build sheet is what you *do*. Everything after
+> it is reference — read a section when a task points you there. "Steps" gives
+> the detail behind each task; "STOP conditions" and "Done criteria" are
+> checklists you must confirm literally before calling this finished.
 >
 > **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
 > *not* listed there has a designed fallback: do the next-best thing, label it
@@ -32,6 +39,61 @@
 - **Depends on**: 006
 - **Category**: design
 - **Grounded at**: the commit at which plan 006 landed.
+
+## Build sheet
+
+**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
+commands, TypeScript rules, commit format, and what to do when a check fails —
+none of which is repeated here.
+
+Do the tasks below **in order, one at a time**. Each task's *Done when* is a
+command or a named in-Figma check; it must produce the stated result before you
+start the next task. Commit after each task. Everything after this section is
+**reference** — read a section when a task points you at it.
+
+### ⚠ This is the only plan that writes to a Figma file
+
+Before task 1: **duplicate a Figma file you can afford to damage** and work only
+in that. Never develop this plan against anything real.
+
+Re-read "Hard constraints" in full before writing any code. The short version:
+
+- Only ever call `variable.setVariableCodeSyntax('WEB', value)`. Nothing else.
+- Never assign `variable.name`. Never touch values, modes, scopes, description,
+  or the `ANDROID`/`iOS` platforms.
+- Nothing is written without a rendered diff, per-row opt-in, and a confirm.
+- Add **exactly one** ESLint allowlist entry. If you want a second, stop.
+
+### Files this plan creates
+
+| Path | Purpose | Task |
+|---|---|---|
+| `packages/plugin/spike/codesyntax.ts`, `spike/FINDINGS.md` | throwaway spike + findings | 1 |
+| `packages/plugin/src/lint/variables.ts` (edit) | scope-aware utility forms | 2 |
+| `packages/plugin/src/ui/stamp/**` | dry-run diff screen | 3 |
+| `packages/plugin/src/stamp/apply.ts` + test | **the single write site** | 4 |
+| `eslint.config.js` (edit) | one new allowlist entry | 4 |
+| `packages/plugin/src/stamp/guardrails.test.ts` | the six guardrail tests | 6 |
+| `README.md` (section only) | what stamping does, and that it writes | 7 |
+
+No new dependencies.
+
+### Tasks
+
+| # | Do this | Files it may touch | Done when |
+|---|---|---|---|
+| 1 | **Spike.** Answer the 6 questions in Step 1 on the throwaway file, with pasted output and a screenshot for Q1. | `spike/**` | `spike/FINDINGS.md` answers all 6 with evidence. **If Q1 is false — Figma does not show code syntax in Inspect — STOP and report.** |
+| 2 | Extend the proposals with the scope→utility mapping (`FRAME_FILL` → `bg-`, `TEXT_FILL` → `text-`, …). Each proposal gains a plain-language **reason**. Read-only change. | `src/lint/variables.ts` + test | Tests cover every scope-table row, the ambiguous `ALL_SCOPES` case (→ bare token), multi-scope precedence (document your choice), and a conflict proposing nothing |
+| 3 | The dry-run diff screen. **Every row starts unchecked.** Rows with existing code syntax are disabled until "overwrite" is ticked. Conflict rows cannot be selected. Proposed values are editable. | `src/ui/stamp/**` | Walked by hand, **and** a before/after snapshot of every variable's `codeSyntax` proves nothing was written by merely opening the screen |
+| 4 | The apply path: confirm dialog with the exact count, re-validate each proposal against the live variable (skip if changed), assert target/platform/value-shape before each write, batch, report applied/skipped/failed. **One write site, one eslint-disable comment naming plan 007.** | `src/stamp/apply.ts` + test, `eslint.config.js` | Apply 3 selected → exactly 3 changed, verified by re-reading; all other variables byte-identical to a pre-apply snapshot (name, value, scopes, description, modes, ANDROID/iOS). Then edit one in Figma, re-open a stale diff → that row is **skipped** |
+| 5 | Establish and document undo. Apply 10, undo, compare against a pre-apply snapshot. Put the recovery text **on the result screen**, not just the README. | `src/ui/stamp/**` | The documented undo procedure, followed literally, restores the file — verified by snapshot comparison |
+| 6 | Write the six guardrail tests from Step 6. Then **break each of 1–3 and 6 deliberately and confirm the test fails.** | `src/stamp/guardrails.test.ts` | All six pass; each deliberate violation was observed failing; the verification is recorded in the commit message |
+| 7 | README section (~60 lines). **Lead with the fact that it writes to your Figma file.** | `README.md` | A designer reading only that section can answer: does this change my variable names? (No.) Can I undo it? (Yes, this way.) Does it happen automatically? (No.) |
+
+**If any task appears to need a write other than `codeSyntax.WEB`, STOP.** That
+is the hard line, not a judgement call.
+
+---
 
 ## Why this matters
 

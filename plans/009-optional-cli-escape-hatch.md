@@ -1,9 +1,16 @@
 # Plan 009: Add the optional CLI escape hatch for complex configs
 
-> **Executor instructions**: Follow this plan step by step. Confirm each step's
-> **Check** before moving to the next. If anything in "STOP conditions" occurs,
-> stop and report — do not improvise. When done, update the status row for this
-> plan in `plans/README.md`.
+> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
+> toolchain, commands, conventions, and failure handling shared by every plan.
+> Then read this plan in full and work through its **Build sheet** below, one
+> task at a time, confirming each *Done when* before starting the next. Commit
+> after each task. When done, update the status row for this plan in
+> `plans/README.md`.
+>
+> **Structure of this file**: the Build sheet is what you *do*. Everything after
+> it is reference — read a section when a task points you there. "Steps" gives
+> the detail behind each task; "STOP conditions" and "Done criteria" are
+> checklists you must confirm literally before calling this finished.
 >
 > **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
 > *not* listed there has a designed fallback: do the next-best thing, label it
@@ -27,6 +34,63 @@
 - **Depends on**: 001
 - **Category**: dx
 - **Grounded at**: the commit at which plan 001 landed.
+
+## Build sheet
+
+**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
+commands, TypeScript rules, commit format, and what to do when a check fails —
+none of which is repeated here.
+
+Do the tasks below **in order, one at a time**. Each task's *Done when* is a
+command or a named in-Figma check; it must produce the stated result before you
+start the next task. Commit after each task. Everything after this section is
+**reference** — read a section when a task points you at it.
+
+### The rule that governs this whole plan
+
+> The CLI is an **escape hatch**, not a step. Nothing you write may present it as
+> part of normal setup — not the README, not the CLI's own output, not an error
+> message.
+
+If a task seems to require making the CLI a required step, stop and report.
+
+### Files this plan creates
+
+| Path | Purpose | Task |
+|---|---|---|
+| `packages/cli/package.json`, `tsconfig.json` | package setup | 1 |
+| `packages/theme/src/index.ts` (edit) | **export-only** exposure of conversion helpers | 1 |
+| `packages/cli/src/v3.ts` + test | real `resolveConfig` evaluation | 2 |
+| `fixtures/projects/tw3-preset/**` | installable v3 project w/ preset, fn value, plugin, `.ts` | 2 |
+| `packages/cli/src/v4.ts` + test | filesystem `@import`/`@config` resolution | 3 |
+| `fixtures/projects/tw4-config/**` | installable v4 project using `@config` | 3 |
+| `packages/cli/src/equivalence.test.ts` | CLI output == browser output | 4 |
+| `packages/cli/src/index.ts` | the `export` command | 5 |
+| `packages/plugin/src/setup.ts` (edit) | accept a pre-resolved token JSON | 6 |
+| `README.md` (section only) | placed **after** normal setup | 7 |
+
+### Dependencies
+
+```bash
+pnpm add --filter @fig-tail/cli jiti cac
+pnpm add --filter @fig-tail/cli -D tailwindcss@3 tailwindcss@4
+```
+
+The CLI resolves the **target project's** `tailwindcss`, never a bundled copy.
+
+### Tasks
+
+| # | Do this | Files it may touch | Done when |
+|---|---|---|---|
+| 1 | Scaffold `packages/cli`. Export the conversion helpers from `@fig-tail/theme` **without changing their behaviour**. | `packages/cli/*`, `packages/theme/src/index.ts` | `pnpm -r typecheck && pnpm -r test` → exit 0 **and** plan 001's snapshot files show an empty `git diff`. If a snapshot moved, you changed behaviour — revert |
+| 2 | The v3 path: resolve the project's `tailwindcss`, `require()` the config via `jiti`, run its `resolveConfig`, hand the result to the shared helpers. Build the fixture project. | `src/v3.ts` + test, `fixtures/projects/tw3-preset/**` | `test -t v3` passes, asserting in **one test** both that the CLI resolves the preset/fn/plugin values **and** that the browser resolver reports them unresolvable for the same config |
+| 3 | The v4 path: filesystem `@import`/`@config` resolution, project's `theme.css` for defaults. | `src/v4.ts` + test, `fixtures/projects/tw4-config/**` | `test -t v4` passes, and the CLI resolves the `@config`-referenced preset the browser resolver cannot |
+| 4 | The equivalence suite: for **every** plan-001 fixture the browser resolver fully resolves, assert byte-identical `TokenSet` (normalise `generatedAt` only). | `src/equivalence.test.ts` | `test -t equivalence` passes for every fully-resolvable fixture; the count is in the commit message. **Do not add tolerances to make it pass** — find which path is wrong |
+| 5 | The `export` command: detect major by **installed version**, dispatch, validate, write, print a stderr summary whose last line says to drop the file into the plugin's setup screen. | `src/index.ts` | All four commands in Step 5 behave as stated, incl. a non-zero exit with an actionable message on a non-Tailwind directory |
+| 6 | Make the plugin's setup UI accept a pre-resolved `figtail.tokens.json` (validate, store directly, no resolve step), and show the CLI as the source. | `packages/plugin/src/setup.ts`, `src/ui/**` | Drop a CLI-produced file in Figma → stores, Configured names the CLI, Dev Mode produces classes. Then drop the **raw** config for the same project → the unresolved report appears |
+| 7 | README section, placed **after** the normal setup instructions. | `README.md` | A reader following the normal setup path never meets an instruction to install the CLI |
+
+---
 
 ## Why this matters
 

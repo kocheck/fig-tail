@@ -1,9 +1,16 @@
 # Plan 004: Ship the Dev Mode Code-section panel (codegen)
 
-> **Executor instructions**: Follow this plan step by step. Confirm each step's
-> **Check** before moving to the next. If anything in "STOP conditions" occurs,
-> stop and report — do not improvise. When done, update the status row for this
-> plan in `plans/README.md`.
+> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
+> toolchain, commands, conventions, and failure handling shared by every plan.
+> Then read this plan in full and work through its **Build sheet** below, one
+> task at a time, confirming each *Done when* before starting the next. Commit
+> after each task. When done, update the status row for this plan in
+> `plans/README.md`.
+>
+> **Structure of this file**: the Build sheet is what you *do*. Everything after
+> it is reference — read a section when a task points you there. "Steps" gives
+> the detail behind each task; "STOP conditions" and "Done criteria" are
+> checklists you must confirm literally before calling this finished.
 >
 > **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
 > *not* listed there has a designed fallback: do the next-best thing, label it
@@ -27,6 +34,52 @@
 - **Depends on**: 002, 003
 - **Category**: dx
 - **Grounded at**: the commit at which plans 002 and 003 landed.
+
+## Build sheet
+
+**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
+commands, TypeScript rules, commit format, and what to do when a check fails —
+none of which is repeated here.
+
+Do the tasks below **in order, one at a time**. Each task's *Done when* is a
+command or a named in-Figma check; it must produce the stated result before you
+start the next task. Commit after each task. Everything after this section is
+**reference** — read a section when a task points you at it.
+
+### You need Figma desktop, and a config already loaded
+
+Use the scratch file from plan 003 with a plan-001 fixture config loaded. Task 6
+builds the durable test file this plan and plans 005–008 are all verified against.
+
+### Files this plan creates or edits
+
+| Path | Purpose | Task |
+|---|---|---|
+| `packages/plugin/src/mode-dev.ts` (rewrite) | the real generate handler | 1 |
+| `packages/plugin/src/hints.ts` + test | `boundVariables` → `VariableHint` | 2 |
+| `packages/plugin/src/render.ts` + test | `MatchResult[]` → `CodegenResult[]` | 3, 4 |
+| `packages/plugin/manifest.json` (edit) | the 5 codegen preferences | 5 |
+| `fixtures/figma/README.md` | the 9-node test matrix + file URL | 6 |
+| `README.md` (section only) | using it in Dev Mode | 8 |
+
+Add `@fig-tail/match` as `workspace:*`. No new external dependencies.
+
+### Tasks
+
+| # | Do this | Files it may touch | Done when |
+|---|---|---|---|
+| 1 | Replace the stub with the real handler. **It must never return early because there is no config** — tier 3 emits arbitrary values plus a banner. Add the tier label. Catch everything; never rethrow. | `src/mode-dev.ts` | By hand in Dev Mode, all three tiers verified: tier 1 → classes + label; tier 2 → classes + label; tier 3 → **arbitrary classes + banner**, not an error |
+| 2 | `buildHints`: map every `boundVariables` key to its CSS property per the table in "Bound variables". Dedupe by variable ID, resolve with `Promise.all`, handle TextNode `fills` → `color`. | `src/hints.ts` + test | Unit tests pass for every table row, the TextNode case, the 4-sides-one-variable dedupe (exactly 1 call), and an unresolvable alias skipped without throwing |
+| 3 | Primary output section. Body is **the class string and nothing else** — no comments inside the copyable body. Do not re-sort; `toClassName` already did. | `src/render.ts` | Select the card node → section contains exactly the expected class string. Figma's copy button → paste → identical |
+| 4 | Drift section, emitted **only** when `summarise` reports any `nearest`/`arbitrary`/`none`. `nearest` never enters the primary string unless `acceptNearest` is on. | `src/render.ts` | Three purpose-built nodes verified by hand; a clean node produces **no** drift section |
+| 5 | Add the 5 codegen preferences from Step 5 and `optionsFromPreferences`. | `manifest.json`, `src/mode-dev.ts` | Each preference changes output live with **no plugin reload** — all 5 verified by hand |
+| 6 | Build the 9-node test file and write `fixtures/figma/README.md`: node name → expected class string → why. This is a durable deliverable. | `fixtures/figma/README.md` | All 9 nodes walked by hand and matching what you wrote. Mismatches either fixed or the expectation corrected **with a stated reason** |
+| 7 | Instrument, measure (cold / warm / variable-heavy), then remove the instrumentation. Verify the corrupt-storage path. | `src/mode-dev.ts` | Timings in the commit message: warm <200 ms, cold <1 s, nothing >1 s. Corrupt chunk → readable error, not a hang |
+| 8 | README "Using it in Dev Mode" (~40 lines, one screenshot). | `README.md` | Someone else followed it from a configured file and got a class string |
+
+**Task 6 is the test matrix every later plan re-runs.** Write it carefully.
+
+---
 
 ## Why this matters
 

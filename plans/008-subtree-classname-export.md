@@ -1,9 +1,16 @@
 # Plan 008: Add whole-subtree className export
 
-> **Executor instructions**: Follow this plan step by step. Confirm each step's
-> **Check** before moving to the next. If anything in "STOP conditions" occurs,
-> stop and report — do not improvise. When done, update the status row for this
-> plan in `plans/README.md`.
+> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
+> toolchain, commands, conventions, and failure handling shared by every plan.
+> Then read this plan in full and work through its **Build sheet** below, one
+> task at a time, confirming each *Done when* before starting the next. Commit
+> after each task. When done, update the status row for this plan in
+> `plans/README.md`.
+>
+> **Structure of this file**: the Build sheet is what you *do*. Everything after
+> it is reference — read a section when a task points you there. "Steps" gives
+> the detail behind each task; "STOP conditions" and "Done criteria" are
+> checklists you must confirm literally before calling this finished.
 >
 > **Degrade, don't block.** STOP conditions are deliberately narrow. Anything
 > *not* listed there has a designed fallback: do the next-best thing, label it
@@ -28,6 +35,56 @@
 - **Depends on**: 004 (and, if it has landed, plan 005's `src/pipeline.ts`)
 - **Category**: dx
 - **Grounded at**: the commit at which plan 004 landed.
+
+## Build sheet
+
+**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
+commands, TypeScript rules, commit format, and what to do when a check fails —
+none of which is repeated here.
+
+Do the tasks below **in order, one at a time**. Each task's *Done when* is a
+command or a named in-Figma check; it must produce the stated result before you
+start the next task. Commit after each task. Everything after this section is
+**reference** — read a section when a task points you at it.
+
+### Before you start
+
+You need Figma desktop, plan 004's test file, **and** a realistically complex
+frame (100+ nodes, nested components, text). Add it to `fixtures/figma/README.md`.
+
+If plan 005 has landed, route per-node work through `src/pipeline.ts`. **Do not
+call `matchDeclarations` directly** — plan 005 has a test that fails if you do.
+
+### Files this plan creates
+
+| Path | Purpose | Task |
+|---|---|---|
+| `packages/plugin/src/tree/walk.ts` + test | iterative traversal, caps, cancel | 1 |
+| `packages/plugin/src/hints.ts` (edit) | shared variable cache | 2 |
+| `packages/plugin/src/tree/resolve.ts` + test | chunked parallel resolution | 3 |
+| `packages/plugin/src/tree/emit/html.ts`, `jsx.ts`, `outline.ts` + tests | the three emitters | 4 |
+| `packages/plugin/src/render.ts` (edit) | the Subtree section, both surfaces | 5 |
+| `packages/plugin/manifest.json` (edit) | format + cap preferences | 5 |
+| `README.md` (section only) | what it is and is not | 7 |
+
+No new dependencies.
+
+### Tasks
+
+| # | Do this | Files it may touch | Done when |
+|---|---|---|---|
+| 1 | The walker: **iterative stack, never recursion.** Depth cap 6, node cap 150, skip invisible, flatten `GROUP`. Returns a flat array + `truncated` + reason. | `src/tree/walk.ts` + test | Tests cover both caps, invisible exclusion (incl. children), group flattening with reparenting, and a 500-node tree not blowing the stack |
+| 2 | Add a per-call `Map<variableId, Variable>` cache to `buildHints`, with a backwards-compatible signature (optional param, fresh map default). | `src/hints.ts` + test | 100 nodes binding the same variable → exactly **1** `getVariableByIdAsync` call. Plan 004's existing hints tests still pass unchanged |
+| 3 | Chunked parallel resolution (~20 at a time) sharing the cache. Returns the intermediate tree. | `src/tree/resolve.ts` + test | A mocked `getCSSAsync` recording concurrency never exceeds the chunk size, and total calls equal node count. Timing on the complex frame in the commit message |
+| 4 | The three emitters over the intermediate tree. Two-space indent. HTML-escape text **and** `data-name`. Byte-deterministic. | `src/tree/emit/**` + tests | Snapshots for all three formats, incl. nesting, escaping (`<`, `&`, `"`), the vector placeholder comment, and the truncation marker. Two runs → byte-identical |
+| 5 | Add the Subtree section to **both** surfaces, emitted only when the node has children. Add the format + cap preferences. Keep plan 004's single-node section **first**. | `src/render.ts`, `manifest.json` | All three formats render in Dev Mode; caps respected; truncation marker shown when capped; section **absent** for a leaf node; JSX output pastes as syntactically valid JSX |
+| 6 | Measure at default caps, at depth 10 / 400 nodes, and on the largest frame. Add the **runtime guard**: truncate at 8 s regardless of caps. | `src/tree/resolve.ts` | Generate never exceeds 10 s. Temporarily lower the guard to 100 ms → clean truncation marker, not an error. Restore it. Timings in the commit message |
+| 7 | README section (~40 lines) with a real input/output example. Say plainly what it is **not**: no assets, no positioning, not a component. | `README.md` | A developer reading it correctly predicts what they will get and does **not** expect a working component |
+
+**If you find yourself reconstructing absolute positioning, stop.** That is out
+of scope and it makes the output look more finished than it is.
+
+---
 
 ## Why this matters
 
