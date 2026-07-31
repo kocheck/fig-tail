@@ -6,7 +6,7 @@ import { applyStamp, prepareStampDiff } from './stamp/stamp'
 
 /** Open the setup UI from design or codegen preferences. */
 export const openSetupUi = () => {
-  figma.showUI(__html__, { width: 400, height: 520, title: 'fig-tail setup' })
+  figma.showUI(__html__, { width: 400, height: 520, title: 'fig-tail setup', themeColors: true })
   void publishSetupState()
 }
 

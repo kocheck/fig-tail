@@ -62,7 +62,7 @@ const errorSections = (message: string): CodegenSection[] => [
 /** Dev Mode codegen + inspect entry points. */
 export const runDevMode = () => {
   if (figma.mode === 'codegen') {
-    figma.showUI(__html__, { visible: false })
+    figma.showUI(__html__, { visible: false, themeColors: true })
 
     figma.codegen.on('generate', async (event) => {
       try {
@@ -99,7 +99,7 @@ export const runDevMode = () => {
   }
 
   // Inspect mode — full panel iframe
-  figma.showUI(__html__, { width: 320, height: 480, title: 'fig-tail' })
+  figma.showUI(__html__, { width: 320, height: 480, title: 'fig-tail', themeColors: true })
 
   let requestId = 0
   let debounceTimer: ReturnType<typeof setTimeout> | undefined

@@ -73,7 +73,7 @@ const renderInspectBody = (inspect: InspectPayload | null): string => {
 
   const isNoConfig = inspect.tierLabel.startsWith('No Tailwind config')
   const tierBanner = `
-    <div class="banner${isNoConfig ? ' warn' : ''}">
+    <div class="banner ${isNoConfig ? 'warn' : 'info'}">
       ${escapeHtml(inspect.tierLabel)}
       ${isNoConfig ? `<div class="row"><button type="button" id="inspect-add-config">Add your config</button></div>` : ''}
     </div>`
@@ -120,22 +120,22 @@ const render = () => {
     if (setup.kind === 'empty') {
       return `<p class="muted">Drop your <code>tailwind.config.js</code>/<code>.ts</code> or v4 <code>app.css</code>, plus <code>package.json</code> for exact version evidence.</p>`
     }
-    if (setup.kind === 'loading') return `<p>Resolving…</p>`
-    if (setup.kind === 'error') return `<p class="banner warn">${escapeHtml(setup.message)}</p>`
+    if (setup.kind === 'loading') return `<p class="muted">Resolving…</p>`
+    if (setup.kind === 'error') return `<p class="banner danger">${escapeHtml(setup.message)}</p>`
     if (setup.kind === 'no-edit') {
-      return `<div class="banner">${escapeHtml(setup.label)}<ul>${setup.details.map((d) => `<li>${escapeHtml(d)}</li>`).join('')}</ul></div>`
+      return `<div class="banner warn">${escapeHtml(setup.label)}<ul>${setup.details.map((d) => `<li>${escapeHtml(d)}</li>`).join('')}</ul></div>`
     }
     const switchNotice =
       setup.available.document && setup.available.user
-        ? `<div class="banner">Both a shared and a personal config exist — currently using <strong>${setup.tier}</strong>.
-           <button type="button" id="switch-source" data-target="${setup.tier === 'document' ? 'user' : 'document'}">
+        ? `<div class="banner info">Both a shared and a personal config exist — currently using <strong>${setup.tier}</strong>.
+           <div class="row"><button type="button" id="switch-source" data-target="${setup.tier === 'document' ? 'user' : 'document'}">
              Switch to ${setup.tier === 'document' ? 'personal' : 'shared'} config
-           </button></div>`
+           </button></div></div>`
         : ''
     const warnings = setup.warnings.length
       ? `<ul class="banner warn">${setup.warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('')}</ul>`
       : ''
-    return `<div class="banner"><strong>${escapeHtml(setup.label)}</strong><ul>${setup.details.map((d) => `<li>${escapeHtml(d)}</li>`).join('')}</ul></div>${switchNotice}${warnings}`
+    return `<div class="banner info"><strong>${escapeHtml(setup.label)}</strong><ul>${setup.details.map((d) => `<li>${escapeHtml(d)}</li>`).join('')}</ul></div>${switchNotice}${warnings}`
   })()
 
   const inspectBody = renderInspectBody(state.inspect)
