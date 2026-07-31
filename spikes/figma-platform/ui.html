@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>fig-tail platform spike</title>
+    <style>
+      body {
+        font: 12px/1.4 ui-sans-serif, system-ui, sans-serif;
+        margin: 12px;
+        color: #111;
+      }
+      button {
+        display: block;
+        width: 100%;
+        margin: 0 0 8px;
+        padding: 8px;
+      }
+      pre {
+        white-space: pre-wrap;
+        background: #f4f4f5;
+        padding: 8px;
+        max-height: 240px;
+        overflow: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Platform spike</h1>
+    <p id="route">Loading route…</p>
+    <button type="button" id="capture">Capture selection CSS</button>
+    <button type="button" id="write-storage">Write chunked storage</button>
+    <button type="button" id="read-storage">Read storage</button>
+    <button type="button" id="write-matrix">Run write matrix</button>
+    <pre id="out">Ready.</pre>
+    <script>
+      const out = document.getElementById('out')
+      const route = document.getElementById('route')
+      const show = (value) => {
+        out.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2)
+      }
+
+      parent.postMessage({ pluginMessage: { type: 'route-info' } }, '*')
+
+      document.getElementById('capture').onclick = () => {
+        parent.postMessage({ pluginMessage: { type: 'capture-css' } }, '*')
+      }
+      document.getElementById('write-storage').onclick = () => {
+        parent.postMessage({ pluginMessage: { type: 'write-storage' } }, '*')
+      }
+      document.getElementById('read-storage').onclick = () => {
+        parent.postMessage({ pluginMessage: { type: 'read-storage' } }, '*')
+      }
+      document.getElementById('write-matrix').onclick = () => {
+        parent.postMessage({ pluginMessage: { type: 'write-matrix' } }, '*')
+      }
+
+      onmessage = (event) => {
+        const msg = event.data.pluginMessage
+        if (!msg) return
+        if (msg.type === 'route-info') {
+          route.textContent = `editorType=${msg.editorType} mode=${msg.mode}`
+        }
+        show(msg)
+      }
+    </script>
+  </body>
+</html>

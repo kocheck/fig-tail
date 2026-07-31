@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-500: #3b82f6;
+  --color-brand-soft: var(--color-brand-500);
+  --spacing: 0.25rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: var(--radius-lg);
+}

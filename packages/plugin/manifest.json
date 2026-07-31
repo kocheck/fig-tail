@@ -1,0 +1,21 @@
+{
+  "name": "fig-tail",
+  "id": "fig-tail-dev",
+  "api": "1.0.0",
+  "main": "dist/main.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma", "dev"],
+  "capabilities": ["codegen", "inspect"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": { "allowedDomains": ["none"] },
+  "codegenLanguages": [
+    { "label": "Tailwind CSS", "value": "tailwind" }
+  ],
+  "codegenPreferences": [
+    {
+      "itemType": "action",
+      "propertyName": "openSetup",
+      "label": "Configure Tailwind…"
+    }
+  ]
+}

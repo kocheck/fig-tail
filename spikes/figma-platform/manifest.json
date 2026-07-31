@@ -1,0 +1,19 @@
+{
+  "name": "fig-tail platform spike",
+  "id": "fig-tail-platform-spike",
+  "api": "1.0.0",
+  "main": "main.js",
+  "ui": "ui.html",
+  "editorType": ["figma", "dev"],
+  "capabilities": ["codegen", "inspect"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": { "allowedDomains": ["none"] },
+  "codegenLanguages": [{ "label": "Tailwind (spike)", "value": "tailwind-spike" }],
+  "codegenPreferences": [
+    {
+      "itemType": "action",
+      "propertyName": "openSpikeSetup",
+      "label": "Open spike UI"
+    }
+  ]
+}

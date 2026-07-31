@@ -1,0 +1,35 @@
+{
+  "name": "@fig-tail/theme",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src",
+    "gen:data": "tsx scripts/gen-data.ts",
+    "probe:browser": "node scripts/browser-bundle-probe.mjs"
+  },
+  "dependencies": {
+    "acorn": "8.15.0",
+    "acorn-walk": "8.3.4",
+    "culori": "4.0.2"
+  },
+  "devDependencies": {
+    "@types/culori": "4.0.1",
+    "tailwindcss-v3": "npm:tailwindcss@3.4.19",
+    "tailwindcss-v4": "npm:tailwindcss@4.1.11"
+  }
+}

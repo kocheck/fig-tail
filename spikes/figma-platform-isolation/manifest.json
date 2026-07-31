@@ -1,0 +1,9 @@
+{
+  "name": "fig-tail isolation reader",
+  "id": "fig-tail-platform-isolation",
+  "api": "1.0.0",
+  "main": "main.js",
+  "editorType": ["figma", "dev"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": { "allowedDomains": ["none"] }
+}

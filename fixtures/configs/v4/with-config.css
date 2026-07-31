@@ -1,0 +1,7 @@
+@import "tailwindcss";
+@config "./tailwind.config.js";
+
+@theme {
+  --color-brand-500: #3b82f6;
+  --radius-lg: 0.5rem;
+}
