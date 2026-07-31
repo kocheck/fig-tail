@@ -71,6 +71,15 @@ Check `plans/README.md` for what is actually DONE. The minimum is 001–005:
 - Figma reviews Community submissions. Review takes days, and rejections
   usually cite the description, the listing images, or permissions.
 
+**Documentation for this step was not verified when this plan was written.**
+Figma's plugin-publishing flow changes, and no publishing doc was confirmed
+reachable. Before Step 5, locate the current official publishing guide from
+[developers.figma.com](https://developers.figma.com/docs/plugins/plugin-quickstart-guide/)
+and Figma's help centre ([Create a plugin for development](https://help.figma.com/hc/en-us/articles/360042786733-Create-a-classic-plugin-for-development)
+is the local-install counterpart), read it, and **record the URL in this plan**
+so the next person does not repeat the search. Do not follow a remembered
+process for an outward-facing, reviewed submission.
+
 **Verify the tier before Step 5.** If the account has moved to Org/Enterprise
 since 2026-07-31, private publishing becomes available and is probably the
 better choice — raise it with the owner rather than proceeding.

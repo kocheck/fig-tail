@@ -59,6 +59,21 @@ tree without chasing them.
 - `@fig-tail/match` — `matchDeclarations`, `toClassName`, `summarise`.
 - Manifest declares `codegenPreferences` including an `output` select.
 
+### Reference documentation
+
+Gathered from Figma's docs on 2026-07-31; **open each before implementing
+against it**, since these are search-located summaries rather than quotations.
+
+- `figma.codegen.on('generate')` and its **hard 15-second timeout** —
+  [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on)
+- `node.getCSSAsync()`, called once per node in the walk —
+  [Update 68](https://developers.figma.com/docs/plugins/updates/2023/06/21/version-1-update-68)
+  · [Shared node properties](https://www.figma.com/plugin-docs/api/node-properties/)
+- `codegenPreferences` item types, for the format and cap preferences in Step 5 —
+  [CodegenPreference](https://developers.figma.com/docs/plugins/api/CodegenPreference/)
+- A Dev Mode plugin runs on the **current page only** by default —
+  [Working in Dev Mode](https://developers.figma.com/docs/plugins/working-in-dev-mode)
+
 ### The 15-second budget is now the binding constraint
 
 Plan 004 measured ~200 ms warm for a single node, most of it `getCSSAsync()` and
