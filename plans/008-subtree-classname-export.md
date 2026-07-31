@@ -1,11 +1,11 @@
 # Plan 008: Add whole-subtree className export
 
-> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
-> toolchain, commands, conventions, and failure handling shared by every plan.
-> Then read this plan in full and work through its **Build sheet** below, one
+> **Executor instructions**: This plan is self-contained. Read it in full and
+> work through its **Build sheet** below, one
 > task at a time, confirming each *Done when* before starting the next. Commit
 > after each task. When done, update the status row for this plan in
-> `plans/README.md`.
+> `plans/README.md`. `plans/EXECUTOR-GUIDE.md` is optional expanded guidance;
+> this plan wins if they conflict.
 >
 > **Structure of this file**: the Build sheet is what you *do*. Everything after
 > it is reference — read a section when a task points you there. "Steps" gives
@@ -19,11 +19,11 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**:
-> `git diff --stat <SHA at which 004 completed>..HEAD -- packages/plugin/src`
-> This plan reuses `src/pipeline.ts` (extracted in plan 005) and `buildHints`.
-> If plan 005 has landed, route everything through the pipeline — do not call
-> `matchDeclarations` directly; plan 005 Step 2 has a test that fails if you do.
+> **Drift check (run first)**: this plan was written at commit `2157dc6`, before
+> plan 005 existed. Confirm 005 is `DONE`, locate its landing commit with
+> `git log --oneline -- plans/005-devmode-inspect-panel-surface.md packages/plugin/src`,
+> and compare `pipeline.ts`, `hints.ts`, render types, and UI routing with the
+> prospective contracts below. A mismatch is a STOP condition.
 
 ## Status
 
@@ -32,15 +32,16 @@
 - **Risk**: MED — the risk is scope creep. This plan sits one step away from
   "generate my component for me", which is a different and much larger product.
   The Scope section draws that line deliberately; hold it.
-- **Depends on**: 004 (and, if it has landed, plan 005's `src/pipeline.ts`)
+- **Depends on**: 005
 - **Category**: dx
-- **Grounded at**: the commit at which plan 004 landed.
+- **Planned at**: commit `2157dc6`, 2026-07-31 — dependency contract is prospective.
 
 ## Build sheet
 
-**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
-commands, TypeScript rules, commit format, and what to do when a check fails —
-none of which is repeated here.
+Use Node 20+ and pnpm. Preserve plan 005's package scripts and strict TypeScript
+settings; use named exports, no `any`, no non-null assertions, and colocated
+Vitest tests. Before every commit run
+`pnpm -r typecheck && pnpm -r lint && pnpm -r test`.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command or a named in-Figma check; it must produce the stated result before you
@@ -52,8 +53,8 @@ start the next task. Commit after each task. Everything after this section is
 You need Figma desktop, plan 004's test file, **and** a realistically complex
 frame (100+ nodes, nested components, text). Add it to `fixtures/figma/README.md`.
 
-If plan 005 has landed, route per-node work through `src/pipeline.ts`. **Do not
-call `matchDeclarations` directly** — plan 005 has a test that fails if you do.
+Route every node through `src/pipeline.ts`. **Do not call
+`matchDeclarations` directly** — plan 005 has a test that fails if you do.
 
 ### Files this plan creates
 
@@ -61,9 +62,10 @@ call `matchDeclarations` directly** — plan 005 has a test that fails if you do
 |---|---|---|
 | `packages/plugin/src/tree/walk.ts` + test | iterative traversal, caps, cancel | 1 |
 | `packages/plugin/src/hints.ts` (edit) | shared variable cache | 2 |
-| `packages/plugin/src/tree/resolve.ts` + test | chunked parallel resolution | 3 |
+| `packages/plugin/src/pipeline.ts` (edit), `tree/resolve.ts` + test | shared context + chunked resolution | 3 |
 | `packages/plugin/src/tree/emit/html.ts`, `jsx.ts`, `outline.ts` + tests | the three emitters | 4 |
 | `packages/plugin/src/render.ts` (edit) | the Subtree section, both surfaces | 5 |
+| `packages/plugin/src/mode-dev.ts` (edit) | one absolute Codegen deadline | 6 |
 | `packages/plugin/manifest.json` (edit) | format + cap preferences | 5 |
 | `README.md` (section only) | what it is and is not | 7 |
 
@@ -73,12 +75,12 @@ No new dependencies.
 
 | # | Do this | Files it may touch | Done when |
 |---|---|---|---|
-| 1 | The walker: **iterative stack, never recursion.** Depth cap 6, node cap 150, skip invisible, flatten `GROUP`. Returns a flat array + `truncated` + reason. | `src/tree/walk.ts` + test | Tests cover both caps, invisible exclusion (incl. children), group flattening with reparenting, and a 500-node tree not blowing the stack |
+| 1 | The walker: **iterative stack, never recursion.** Inspect defaults: depth 6 / 150 nodes. Codegen defaults: depth 5 / 40 nodes. Skip invisible, flatten `GROUP`. Returns a flat array + `truncated` + reason. | `src/tree/walk.ts` + test | Tests cover both surface profiles and caps, invisible exclusion (incl. children), group flattening with reparenting, and a 500-node tree not blowing the stack |
 | 2 | Add a per-call `Map<variableId, Variable>` cache to `buildHints`, with a backwards-compatible signature (optional param, fresh map default). | `src/hints.ts` + test | 100 nodes binding the same variable → exactly **1** `getVariableByIdAsync` call. Plan 004's existing hints tests still pass unchanged |
-| 3 | Chunked parallel resolution (~20 at a time) sharing the cache. Returns the intermediate tree. | `src/tree/resolve.ts` + test | A mocked `getCSSAsync` recording concurrency never exceeds the chunk size, and total calls equal node count. Timing on the complex frame in the commit message |
+| 3 | Extend `resolveNode` with an optional shared cache/deadline context, then resolve in chunks (~10 at a time) with cancel support. Returns the intermediate tree. | `src/pipeline.ts`, `src/tree/resolve.ts` + tests | Existing single-node callers/tests pass unchanged; mocked concurrency never exceeds the chunk size; calls equal nodes completed before deadline/cancel. Timing in commit message |
 | 4 | The three emitters over the intermediate tree. Two-space indent. HTML-escape text **and** `data-name`. Byte-deterministic. | `src/tree/emit/**` + tests | Snapshots for all three formats, incl. nesting, escaping (`<`, `&`, `"`), the vector placeholder comment, and the truncation marker. Two runs → byte-identical |
-| 5 | Add the Subtree section to **both** surfaces, emitted only when the node has children. Add the format + cap preferences. Keep plan 004's single-node section **first**. | `src/render.ts`, `manifest.json` | All three formats render in Dev Mode; caps respected; truncation marker shown when capped; section **absent** for a leaf node; JSX output pastes as syntactically valid JSX |
-| 6 | Measure at default caps, at depth 10 / 400 nodes, and on the largest frame. Add the **runtime guard**: truncate at 8 s regardless of caps. | `src/tree/resolve.ts` | Generate never exceeds 10 s. Temporarily lower the guard to 100 ms → clean truncation marker, not an error. Restore it. Timings in the commit message |
+| 5 | Add Subtree to **both** surfaces only when the node has children. Codegen uses discrete native select preferences; Inspect adds progress/cancel and larger controls. Keep plan 004's single-node section **first**. | `src/render.ts`, `src/ui/inspect/**`, `manifest.json` | All three formats render; each surface's caps respected; truncation marker shown; leaf section absent; JSX parses as JSX |
+| 6 | Measure both profiles and the largest frame. Enforce one **2-second Codegen deadline from handler entry**; Inspect stays progressive/cancellable and may run longer. | `src/mode-dev.ts`, `src/tree/resolve.ts`, `src/ui/inspect/**` | Codegen always returns before 3 s and ordinarily before 2 s; temporarily lower guard to 100 ms → clean truncation. Inspect scans 150 nodes with progress and Cancel. Timings in commit message |
 | 7 | README section (~40 lines) with a real input/output example. Say plainly what it is **not**: no assets, no positioning, not a component. | `README.md` | A developer reading it correctly predicts what they will get and does **not** expect a working component |
 
 **If you find yourself reconstructing absolute positioning, stop.** That is out
@@ -121,8 +123,11 @@ tree without chasing them.
 Gathered from Figma's docs on 2026-07-31; **open each before implementing
 against it**, since these are search-located summaries rather than quotations.
 
-- `figma.codegen.on('generate')` and its **hard 15-second timeout** —
+- `figma.codegen.on('generate')`; the API reference says 15 seconds while the
+  Codegen guide says 3 seconds. Treat 3 seconds as hard and keep the internal
+  deadline at 2 seconds —
   [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on)
+  · [Codegen plugins](https://developers.figma.com/docs/plugins/codegen-plugins)
 - `node.getCSSAsync()`, called once per node in the walk —
   [Update 68](https://developers.figma.com/docs/plugins/updates/2023/06/21/version-1-update-68)
   · [Shared node properties](https://www.figma.com/plugin-docs/api/node-properties/)
@@ -131,22 +136,23 @@ against it**, since these are search-located summaries rather than quotations.
 - A Dev Mode plugin runs on the **current page only** by default —
   [Working in Dev Mode](https://developers.figma.com/docs/plugins/working-in-dev-mode)
 
-### The 15-second budget is now the binding constraint
+### The stricter 3-second Codegen budget is the binding constraint
 
-Plan 004 measured ~200 ms warm for a single node, most of it `getCSSAsync()` and
-variable resolution. A subtree multiplies that. Sixty nodes at 200 ms is twelve
-seconds — inside the limit, but only just, and a real design frame can hold
-hundreds of nodes.
+Plan 004 targets ~200 ms warm for a single node, most of it Figma API latency.
+A subtree multiplies that, while the published docs conflict at 3 versus 15
+seconds. The Codegen path must honor the stricter figure. The Inspect iframe has
+no equivalent documented callback timeout, so it can expose progress and Cancel
+for the larger 150-node workflow.
 
 Mitigations, in order of impact:
 
-1. **Depth and node-count caps.** Default: depth 6, 150 nodes. When a subtree
-   exceeds either, emit what fits, then a truncation marker
-   (`<!-- fig-tail: truncated at 150 nodes; increase the limit in preferences -->`).
+1. **Surface-specific depth and node-count caps.** Codegen defaults to depth 5
+   / 40 nodes; Inspect defaults to depth 6 / 150 nodes. When a subtree exceeds
+   either, emit what fits, then a truncation marker
+   (`<!-- fig-tail: truncated at 40 nodes; use Inspect for a larger export -->`).
    Truncated-but-useful beats timed-out-and-empty.
-2. **Parallelise per node.** `getCSSAsync()` and variable resolution are
-   independent across siblings. Walk the tree to collect nodes first, then
-   `Promise.all` in chunks of ~20.
+2. **Parallelise per node.** Walk the tree to collect nodes first, then call the
+   shared `resolveNode` pipeline in bounded chunks of ~10.
 3. **Cache variable resolution across the whole subtree.** A design system frame
    hits the same twenty variables hundreds of times. A `Map<variableId, Variable>`
    for the duration of one generate call is the single biggest win — build it in
@@ -159,7 +165,7 @@ Mitigations, in order of impact:
 |---|---|---|
 | `FRAME` / `COMPONENT` / `INSTANCE` with auto-layout | `<div>` with flex classes | Auto-layout already becomes `flex`/`flex-col`/`gap-*` via plan 002's layout matcher |
 | `FRAME` without auto-layout | `<div>` | Absolute positioning is **not** reconstructed — see Scope |
-| `TEXT` | `<span>` or `<p>` | Include the text content, HTML-escaped |
+| `TEXT` | `<span>` | Include the text content, HTML-escaped; semantic block/paragraph inference is out of scope |
 | `RECTANGLE` / `ELLIPSE` / `VECTOR` | `<div>` | With a comment naming the node, so the developer knows to swap in an asset |
 | `GROUP` | flattened — emit children directly | Figma groups have no layout meaning |
 | Node with an image fill | `<img alt="" />` with a comment | No asset extraction — see Scope |
@@ -199,7 +205,12 @@ nested components, and text. Add it to `fixtures/figma/README.md`.
 
 - `packages/plugin/src/tree/**` — traversal, caps, parallel resolution, emitters
 - `packages/plugin/src/hints.ts` — adding the per-call variable cache
-- `packages/plugin/manifest.json` — the format preference and cap preferences
+- `packages/plugin/src/pipeline.ts` — optional resolution context, preserving
+  existing single-node behavior
+- `packages/plugin/src/mode-dev.ts` — creating and passing the one absolute
+  Codegen deadline
+- `packages/plugin/manifest.json` — discrete Codegen format/depth/node select preferences
+- `packages/plugin/src/ui/inspect/**` — larger-cap progress and cancel controls
 - `packages/plugin/src/render.ts` — adding the subtree section
 - Tests, and a README section
 
@@ -256,14 +267,16 @@ unchanged.
 
 ### Step 3: Resolve CSS and matches in parallel
 
-`src/tree/resolve.ts`: given the flat node array, run `getCSSAsync()` +
-`buildHints()` + `matchDeclarations()` in chunks of ~20 with `Promise.all`,
-sharing the variable cache. Returns the intermediate tree
+`src/tree/resolve.ts`: given the flat node array, run plan 005's `resolveNode()`
+in chunks of ~10 with `Promise.all`, passing a shared variable cache plus an
+abort/deadline context. Returns the intermediate tree
 (`{ tag, classes, text, children, comment, nodeName }`).
 
-**Check**: a test asserting chunked parallelism (a mocked `getCSSAsync` that
-records concurrency never exceeds the chunk size, and total calls equal node
-count). Timing on the complex fixture frame recorded in the commit message.
+**Check**: a test asserting chunked parallelism (a mocked pipeline records that
+concurrency never exceeds the chunk size, total calls equal node count without a
+deadline, and no new chunk starts after cancellation). Plan 005's test still
+asserts `matchDeclarations` has exactly one plugin import site. Timing on the
+complex fixture frame recorded in the commit message.
 
 ### Step 4: Implement the three emitters
 
@@ -284,8 +297,16 @@ Add a section, "Subtree", to **both** Dev Mode surfaces — the Code section
 node has children**. A leaf node should not produce a one-line subtree section
 duplicating the primary output.
 
-Add the preferences: format select (HTML / JSX / Classes only), max depth
-(default 6), max nodes (default 150).
+Add native Codegen preferences as `select` items only:
+
+- format: HTML / JSX / Classes only;
+- max depth: 3 / **5 default** / 6;
+- max nodes: 20 / **40 default** / 60.
+
+Figma Codegen preferences do not accept arbitrary numeric values. In the
+Inspect UI, offer depth 3/5/6/10 and node caps 40/100/150/400, defaulting to
+6/150, with progress and Cancel. A 400-node Inspect export is an explicit slow
+choice, not a Codegen option.
 
 Keep the primary single-node section from plan 004 **first**. It is the common
 case; the subtree is the occasional one.
@@ -298,21 +319,24 @@ will not compile without real components; that is expected and correct).
 
 ### Step 6: Performance-test and enforce the budget
 
-Measure total generate time on the complex fixture at the default caps, at
-depth 10 / 400 nodes, and on the largest frame in the file.
+Measure Codegen at its default 5/40 and maximum 6/60 profiles. Measure Inspect
+at 6/150 and the explicit 10/400 profile, plus the largest frame in the file.
 
-**Hard requirement**: the generate callback must never exceed **10 seconds**,
-leaving 5 seconds of headroom under Figma's 15-second limit. If defaults cannot
-hit that, lower the defaults — do not raise the risk.
+**Hard Codegen requirement**: calculate one absolute deadline at the start of
+the existing `generate` handler and pass it through single-node resolution,
+traversal, subtree resolution, and emission. Do not start a fresh two-second
+budget for the subtree. Stop starting work with enough time to serialize the
+partial tree, and return an explanatory truncation marker before Figma's
+stricter documented three-second limit. If 5/40 cannot reliably fit, lower the
+Codegen defaults.
 
-Add a **runtime guard**: track elapsed time during resolution and truncate early
-with an explicit marker if it passes 8 seconds, regardless of the caps. A
-timeout with no output is the worst outcome; a truncated result with an
-explanation is recoverable.
+Inspect is progressive rather than deadline-bound: post completed/total after
+each chunk, keep Cancel responsive, and discard a cancelled run's late results.
 
-**Check**: measurements recorded in the commit message for all three cases. The
-runtime guard verified by temporarily lowering it to 100 ms and confirming a
-clean truncation marker rather than an error.
+**Check**: measurements recorded in the commit message for both profiles. The
+Codegen guard is verified by temporarily lowering it to 100 ms and confirming a
+clean truncation marker. Inspect completes 150 nodes with visible progress and
+cancel works during the 400-node run.
 
 ### Step 7: Document it
 
@@ -333,7 +357,8 @@ what they expect.
 - **Determinism test**: emit the same tree twice; assert byte equality.
 - **Manual matrix** on the complex fixture: all three formats, both caps,
   truncation marker, leaf-node absence, JSX syntactic validity.
-- **Performance**: Step 6's measurements plus the runtime-guard verification.
+- **Performance**: Step 6's Codegen deadline measurements plus Inspect
+  progress/cancel verification.
 - **Write-safety regression**: plan 003's guards pass unchanged, no new
   allowlist entries.
 
@@ -345,8 +370,9 @@ ALL must hold.
 - [ ] All three output formats render correctly in Dev Mode
 - [ ] Depth and node caps are enforced and configurable via preferences
 - [ ] Truncation always emits an explanatory marker
-- [ ] The runtime guard truncates cleanly before the 15-second limit (verified)
-- [ ] Generate never exceeds 10 seconds on the complex fixture at default caps
+- [ ] The Codegen runtime guard truncates cleanly before the conservative
+      3-second limit and targets 2 seconds internally (verified)
+- [ ] Inspect exports 150 nodes with progress and working Cancel
 - [ ] The variable cache reduces resolution calls to one per unique variable
 - [ ] Output is byte-deterministic across runs
 - [ ] Text content and node names are HTML-escaped
@@ -360,7 +386,7 @@ ALL must hold.
 
 Stop and report back — do not improvise — if:
 
-- Generate cannot stay under 10 seconds even at reduced caps on a realistic
+- Codegen cannot return before the 3-second limit even at reduced caps on a realistic
   frame. The feature may need to move out of codegen entirely (into a design-mode
   view with its own progress UI), which is a different plan.
 - `getCSSAsync()` behaves differently on nested nodes than on top-level ones

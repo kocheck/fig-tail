@@ -1,11 +1,11 @@
 # Plan 004: Ship the Dev Mode Code-section panel (codegen)
 
-> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
-> toolchain, commands, conventions, and failure handling shared by every plan.
-> Then read this plan in full and work through its **Build sheet** below, one
+> **Executor instructions**: This plan is self-contained. Read it in full and
+> work through its **Build sheet** below, one
 > task at a time, confirming each *Done when* before starting the next. Commit
 > after each task. When done, update the status row for this plan in
-> `plans/README.md`.
+> `plans/README.md`. `plans/EXECUTOR-GUIDE.md` is optional expanded guidance;
+> this plan wins if they conflict.
 >
 > **Structure of this file**: the Build sheet is what you *do*. Everything after
 > it is reference — read a section when a task points you there. "Steps" gives
@@ -19,10 +19,12 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**:
-> `git diff --stat <SHA at which 002 and 003 completed>..HEAD -- packages/match packages/plugin`
-> This plan is the wiring between those two packages. If either has moved since,
-> read the changes before starting.
+> **Drift check (run first)**: this plan was written at commit `2157dc6`, before
+> plans 002 and 003 existed. Confirm both are `DONE`, find their landing commits
+> with `git log --oneline -- plans/002-css-to-tailwind-matching-engine.md packages/match`
+> and `git log --oneline -- plans/003-plugin-shell-and-config-storage.md packages/plugin`,
+> then compare the live exports with the contracts quoted below. A mismatch is
+> a STOP condition; do not substitute a placeholder SHA.
 
 ## Status
 
@@ -33,13 +35,14 @@
   "plausible but wrong" is the failure mode. Steps 6 and 7 exist to catch it.
 - **Depends on**: 002, 003
 - **Category**: dx
-- **Grounded at**: the commit at which plans 002 and 003 landed.
+- **Planned at**: commit `2157dc6`, 2026-07-31 — dependency contracts are prospective.
 
 ## Build sheet
 
-**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
-commands, TypeScript rules, commit format, and what to do when a check fails —
-none of which is repeated here.
+Use Node 20+ and pnpm. Copy package scripts and strict TypeScript settings from
+the landed packages; use named exports, no `any`, no non-null assertions, and
+colocated Vitest tests. Before every commit run
+`pnpm -r typecheck && pnpm -r lint && pnpm -r test`.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command or a named in-Figma check; it must produce the stated result before you
@@ -112,16 +115,16 @@ resolution path.
 ```ts
 function matchDeclarations(
   css: Record<string, string>,
-  tokens: TokenSet,
+  tokens: TokenSet | null,
   options?: Partial<MatchOptions>,
   hints?: Record<string, VariableHint>,   // keyed by CSS property
 ): MatchResult[]
 
-function toClassName(results: MatchResult[]): string
+function toClassName(results: MatchResult[], options?: { acceptNearest?: boolean }): string
 function summarise(results: MatchResult[]): MatchSummary
 
 type Confidence =
-  | 'exact-variable'   // a bound variable carried codeSyntax.WEB — authored, not inferred
+  | 'exact-variable'   // codeSyntax.WEB named a token key and config confirmed key + value
   | 'exact-value'      // the CSS value equals a token's value
   | 'name-match'       // a bound variable's name maps to a token, values agree
   | 'nearest'          // within tolerance but not equal — THE DRIFT SIGNAL
@@ -165,20 +168,21 @@ search, not quotations, and the pages 403 automated fetching. If a page
 contradicts a line here, the page wins; fix the line in the same commit.
 
 1. `figma.codegen.on('generate', cb)` fires on every Dev Mode selection change.
-   **The callback has a hard 15-second timeout.** It may be async. —
+   The API reference says 15 seconds while the Codegen guide says 3 seconds.
+   Treat **3 seconds as hard** and enforce a 2-second internal deadline. —
    [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on)
-   · [figma.codegen](https://developers.figma.com/docs/plugins/api/figma-codegen)
+   · [Codegen plugins](https://developers.figma.com/docs/plugins/codegen-plugins)
 2. `figma.showUI` is **not allowed inside** the generate callback; move it
    outside and use `figma.ui.postMessage`. Preference actions
    (`preferenceschange`) may call it. —
    [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on)
 3. `node.getCSSAsync()` resolves to a JSON object of the node's CSS properties —
-   the same CSS the Inspect panel shows. Dev Mode only. —
+   the same CSS the Inspect panel shows. This plan calls it only from Dev Mode. —
    [Update 68](https://developers.figma.com/docs/plugins/updates/2023/06/21/version-1-update-68)
    · [Shared node properties](https://www.figma.com/plugin-docs/api/node-properties/)
 4. `figma.codegen.preferences` exposes the user's current preference values;
    `codegenPreferences` in the manifest declares them. `itemType` may be
-   `"select"`, `"unit"`, `"bool"`, or `"action"`. —
+   `"select"`, `"unit"`, or `"action"`; there is no boolean item type. —
    [CodegenPreference](https://developers.figma.com/docs/plugins/api/CodegenPreference/)
    · [Plugin manifest](https://developers.figma.com/docs/plugins/manifest)
 5. A `CodegenResult` is `{ title: string, code: string, language: CodegenLanguage }`.
@@ -198,7 +202,7 @@ this plan's job:
 | `fills` | `VariableAlias[]` (per paint) | `background-color` (or `color` on a TextNode) |
 | `strokes` | `VariableAlias[]` | `border-color` |
 | `itemSpacing` | `VariableAlias` | `gap` |
-| `counterAxisSpacing` | `VariableAlias` | `row-gap` |
+| `counterAxisSpacing` | `VariableAlias` | `row-gap` when `layoutMode` is `HORIZONTAL`; `column-gap` when it is `VERTICAL` |
 | `paddingLeft` / `Right` / `Top` / `Bottom` | `VariableAlias` | `padding-left` … |
 | `topLeftRadius` / `topRightRadius` / `bottomLeftRadius` / `bottomRightRadius` | `VariableAlias` | `border-top-left-radius` … |
 | `strokeWeight` | `VariableAlias` | `border-width` |
@@ -211,21 +215,31 @@ build a `VariableHint` from `variable.codeSyntax.WEB` and `variable.name`.
 Two things to get right:
 
 - **A `fills` binding on a `TextNode` means `color`, not `background-color`.**
-  Branch on `node.type === 'TEXT'`.
+  Branch on `node.type === 'TEXT'`. On other nodes, use it as a
+  `background-color` hint only when the corresponding paint is a single visible
+  solid fill; gradients and multiple paints are not a trustworthy one-property
+  hint.
+- Map `counterAxisSpacing` using the node's `layoutMode`; it is not universally
+  `row-gap`.
 - **Resolve variables in parallel** (`Promise.all`), and **deduplicate by
   variable ID** — a card with four padding sides bound to the same token would
-  otherwise make four identical async calls inside a 15-second budget.
+  otherwise make four identical async calls inside the deadline.
 
-When plan 007 has stamped variables, `codeSyntax.WEB` is the literal class
-(`bg-brand-500`) and the match is `exact-variable` with no inference at all.
+When plan 007 has stamped variables, `codeSyntax.WEB` is a reusable token key
+(`brand-500`), not a property-specific utility. The matcher validates that key
+and the variable value against the active config, then derives `bg-brand-500`,
+`text-brand-500`, or `border-brand-500` from the CSS property. A stale or
+unrecognised syntax falls back to name/value matching; it is never blindly
+trusted.
 When it has not, `variable.name` still beats a hex value. Both paths must work
 from day one — do not gate this on plan 007.
 
 ### Performance budget
 
-15 seconds is generous but not infinite, and the callback runs on **every
-selection change**, so slowness is felt constantly. Target **under 200 ms** for
-a single node.
+The published docs conflict at 3 versus 15 seconds. Design for the stricter
+limit: use a 2-second internal deadline that returns a readable partial/error
+section rather than letting Figma terminate the callback. Target **under 200
+ms** for a single node.
 
 Where the time goes: `readConfig()` (gunzip + parse — cached after the first
 call, so amortised to ~0), `getCSSAsync()` (one await), variable resolution
@@ -244,7 +258,7 @@ about it.
 | Test | `pnpm --filter @fig-tail/plugin test` | all pass |
 | Build | `pnpm --filter @fig-tail/plugin build` | `dist/main.js`, `dist/ui.html` |
 | Write-safety | `pnpm --filter @fig-tail/plugin lint && pnpm --filter @fig-tail/plugin test -t write-safety` | exit 0, passes |
-| Bundle size | `du -b packages/plugin/dist/main.js` | under 400 kB |
+| Bundle size | `wc -c < packages/plugin/dist/main.js` | under 400 kB |
 
 Needed on hand:
 
@@ -301,10 +315,9 @@ Rewrite `src/mode-dev.ts`:
 figma.codegen.on('generate', async ({ node }) => {
   try {
     const stored = await readConfig()          // { tokens, source } | null
-    const tokens = stored?.tokens ?? EMPTY_TOKEN_SET
     const css = await node.getCSSAsync()
-    const results = matchDeclarations(css, tokens, optionsFromPreferences())
-    return renderSections(results, { node, tokens, source: stored?.source ?? null })
+    const results = matchDeclarations(css, stored?.tokens ?? null, optionsFromPreferences())
+    return renderSections(results, { node, tokens: stored?.tokens ?? null, source: stored?.source ?? null })
   } catch (err) {
     return errorResult(err)
   }
@@ -313,23 +326,26 @@ figma.codegen.on('generate', async ({ node }) => {
 
 **Note what this does not do: it never returns early because there is no
 config.** Per plan 003's config-source ladder, "no config" is tier 3, not a
-failure. With an empty token set the matcher emits arbitrary values
+failure. With a `null` token set the matcher emits clearly labelled generic
+arbitrary values when safe
 (`bg-[#3b82f6]`, `p-[24px]`) — which is what every other Figma→Tailwind plugin
-produces, so a developer who just installed fig-tail gets something useful
-immediately. Plan 002 Step 7 guarantees an empty `TokenSet` behaves this way.
+produces. If prefix/core-plugin status is unknowable, the renderer says that
+the suggestion is generic and may need adapting; it must not claim the class is
+confirmed by the project config.
 
-What tier 3 *does* get is a **banner**, prepended to the section body:
+Tier/status text is a **separate `PLAINTEXT` CodegenResult**, never prepended to
+the copyable Tailwind body:
 
 ```
-// No Tailwind config on this file. Showing raw values.
-// Add your tailwind.config.js via "Configure Tailwind config…" for real token names.
+// No Tailwind config. These are generic Tailwind suggestions; your prefix or disabled utilities may require changes.
+// Add your config via "Configure Tailwind config…" for project-confirmed output.
 ```
 
 Two sentences, and it must name the action a developer can take **themselves** —
 tier 2 (personal config) needs no edit access, so this is never a dead end even
 for a Dev-seat viewer.
 
-Tiers 1 and 2 get a one-line source label instead, so nobody is ever guessing
+Tiers 1 and 2 get a one-line source label in that status result, so nobody is ever guessing
 which config produced the output:
 
 - tier 1 → `// Tailwind config: saved on this file`
@@ -351,8 +367,9 @@ sentence to understand why.
 `errorResult(err)` returns a `PLAINTEXT` section containing the message and a
 one-line "report this" pointer. **Never rethrow.**
 
-For this step, `renderSections` returns one section with the label/banner plus
-`toClassName(results)`.
+For this step, `renderSections` returns the status section plus the primary
+Tailwind section from `toClassName(results, { acceptNearest })`. The primary
+body remains the class string and nothing else.
 
 **Check**: in Figma desktop, in Dev Mode on the test file, verify all three
 tiers by hand — with a config saved on the file, the panel shows classes plus
@@ -364,8 +381,9 @@ banner**, not an error and not an empty panel. Confirm each by hand.
 
 Implement `src/hints.ts`: `buildHints(node): Promise<Record<string, VariableHint>>`
 per the mapping table in "Context". Dedupe by variable ID, resolve with
-`Promise.all`, handle the TextNode `fills` → `color` case, and skip aliases that
-fail to resolve (a variable from an unavailable library) rather than throwing.
+`Promise.all`, handle the TextNode and single-solid-paint rules for `fills`, map
+`counterAxisSpacing` from `layoutMode`, and skip aliases that fail to resolve (a
+variable from an unavailable library) rather than throwing.
 
 Wire it into Step 1's handler as the fourth argument to `matchDeclarations`.
 
@@ -439,18 +457,27 @@ entirely.
 
 ### Step 5: Add codegen preferences
 
-Extend `manifest.json`. Use native `codegenPreferences` types wherever possible
-so no custom UI is needed:
+Extend `manifest.json`. Boolean choices use two-option `select` preferences,
+because Figma has no boolean preference item type:
 
 ```jsonc
 "codegenPreferences": [
   { "itemType": "action", "propertyName": "settings", "label": "Configure Tailwind config…" },
-  { "itemType": "bool", "propertyName": "includeLayout",
-    "label": "Include layout utilities (flex, items-center…)", "defaultValue": true },
-  { "itemType": "bool", "propertyName": "allowArbitrary",
-    "label": "Fall back to arbitrary values (bg-[#a1b2c3])", "defaultValue": true },
-  { "itemType": "bool", "propertyName": "acceptNearest",
-    "label": "Accept near matches (hides drift warnings)", "defaultValue": false },
+  { "itemType": "select", "propertyName": "includeLayout",
+    "label": "Include layout utilities", "options": [
+      { "label": "On", "value": "on", "isDefault": true },
+      { "label": "Off", "value": "off" }
+    ]},
+  { "itemType": "select", "propertyName": "allowArbitrary",
+    "label": "Fall back to arbitrary values", "options": [
+      { "label": "On", "value": "on", "isDefault": true },
+      { "label": "Off", "value": "off" }
+    ]},
+  { "itemType": "select", "propertyName": "acceptNearest",
+    "label": "Accept near matches (hides drift warnings)", "options": [
+      { "label": "Off", "value": "off", "isDefault": true },
+      { "label": "On", "value": "on" }
+    ]},
   { "itemType": "select", "propertyName": "output", "label": "Output",
     "options": [
       { "label": "Classes only", "value": "classes", "isDefault": true },
@@ -461,7 +488,8 @@ so no custom UI is needed:
 ```
 
 Read them via `figma.codegen.preferences` in `optionsFromPreferences()` and map
-onto `MatchOptions`.
+the `on`/`off` strings explicitly onto `MatchOptions`; unknown or missing values
+fall back to the manifest defaults.
 
 Note the phrasing of `acceptNearest`: its label states the consequence
 ("hides drift warnings"), because turning it on trades correctness for
@@ -512,6 +540,10 @@ then measure on the test file:
 Target: **under 200 ms warm**, under 1 s cold. If the cold path is slow, the
 config cache from plan 003 Step 5 is the place to look, not the matcher.
 
+Add a deadline guard around the whole pipeline: if two seconds elapse, return a
+short `PLAINTEXT` result saying generation timed out and name the phase last
+entered. Do not leave background work capable of replacing the current render.
+
 Then verify the failure modes explicitly: corrupt one stored chunk by hand via
 the settings UI (or by writing garbage to `tokens.1`) and confirm the panel
 shows the actionable error rather than an opaque Figma failure or a hang.
@@ -534,7 +566,8 @@ session.
 ## Validation plan
 
 - **Unit tests** (`figma` global mocked): `buildHints` for every mapping-table
-  row plus the TextNode and dedupe cases; `renderSections` for six scenarios
+  row plus horizontal/vertical `counterAxisSpacing`, TextNode, multi-paint, and
+  dedupe cases; `renderSections` for six scenarios
   (tier 1 clean, tier 1 with drift, tier 2, tier 3, config with unresolved
   entries, error); `optionsFromPreferences` mapping every preference to
   `MatchOptions`.
@@ -556,8 +589,9 @@ ALL must hold.
 - [ ] Selecting a node in Dev Mode shows a copyable Tailwind class string
 - [ ] Class output is in canonical Tailwind order (verified against the card
       fixture's exact expected string)
-- [ ] Bound variables produce `exact-variable` when `codeSyntax.WEB` exists and
-      `name-match` when only a name does
+- [ ] Bound variables produce `exact-variable` only when `codeSyntax.WEB` names
+      a configured token whose value agrees; invalid/stale syntax falls back to
+      `name-match` or value matching
 - [ ] `nearest` results are excluded from the primary string by default and
       reported in the drift section with token, value, and distance
 - [ ] The drift section is absent when there is nothing to report
@@ -591,7 +625,7 @@ Stop and report back — do not improvise — if:
 - `getCSSAsync()` returns a materially different shape from the examples in plan
   002's "Context" (different property names, nested objects, units). Plan 002's
   matchers were written against that shape and would all need revisiting.
-- The generate callback cannot stay under 15 seconds on a realistically complex
+- The generate callback cannot stay under the 2-second internal deadline on a realistically complex
   node. That is an architecture problem, not a tuning problem.
 - Codegen preferences do not persist between sessions, or do not reach
   `figma.codegen.preferences` as documented — the settings model would need

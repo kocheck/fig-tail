@@ -1,8 +1,9 @@
-# Executor guide — read this before any plan
+# Executor guide — optional expanded guidance
 
-You have been given one plan from `plans/`. This file holds everything shared
-across all of them, so the plans do not repeat it. **Read this file completely,
-then read your plan completely, then start.**
+Every numbered plan is self-contained and can be executed without this file.
+This guide expands the shared working style and repository conventions for a
+human who wants more context. Read the numbered plan completely first; consult
+this guide as needed.
 
 If anything here conflicts with your plan, **your plan wins** — it is more
 specific. Say so in your commit message when it happens.
@@ -34,11 +35,11 @@ seems to need.
 
 | # | Rule | What it means in code |
 |---|---|---|
-| 1 | **Never write to the Figma document** except the two sanctioned calls | Only `figma.root.setSharedPluginData` (plan 003) and `Variable.setVariableCodeSyntax('WEB', …)` (plan 007). Nothing else. Ever. |
+| 1 | **Never write to the Figma document** except the two sanctioned shipped paths | Only `figma.root.setSharedPluginData` (plan 003) and `Variable.setVariableCodeSyntax('WEB', …)` (plan 007) may enter production bundles. Plan 007's isolated throwaway API spike is explicitly scoped to a disposable file. |
 | 2 | **Never write `variable.name`** | Tailwind names go in Code syntax. No exceptions. |
-| 3 | **Never `eval`, `new Function`, or dynamic `import()`** | The resolver parses user input; it never executes it. |
+| 3 | **The plugin and browser resolver never execute user config** | No `eval`, `new Function`, or dynamic import in browser/plugin code. Plan 009's optional Node CLI is the only exception: it executes config only from a trusted checkout after the caller supplies the explicit trust flag. |
 | 4 | **Never make a network request** | The manifest is `networkAccess: { allowedDomains: ["none"] }`. No `fetch`, no telemetry, no analytics. |
-| 5 | **Never emit a Tailwind class you cannot confirm exists** | When unsure, emit an arbitrary value (`bg-[#3b82f6]`). It compiles everywhere. A wrong token name silently applies no styling. |
+| 5 | **Never label a Tailwind class as project-confirmed when it is not** | With a validated config, suppress classes disabled by prefix/core-plugin uncertainty. With no config, a generic arbitrary suggestion may be shown only with a warning that project prefix/core settings can require adaptation. A wrong named token silently applies no styling. |
 | 6 | **Never fall back silently** | Every fallback shows the user what was used, why, and how to get the better result. |
 | 7 | **Never commit a secret** | No tokens, no API keys, no `.env` with real values. |
 
@@ -169,7 +170,7 @@ These are the only commands you need. Run them from the repo root.
 | Test one package | `pnpm --filter @fig-tail/<name> test` | all pass |
 | Run one test by name | `pnpm --filter @fig-tail/<name> test -t "<name>"` | passes |
 | Coverage | `pnpm --filter @fig-tail/<name> test -- --coverage` | see plan's bar |
-| Byte size of a build | `du -b packages/<name>/dist/index.js` | see plan's budget |
+| Byte size of a build | `wc -c < packages/<name>/dist/index.js` | see plan's budget |
 
 **Before every commit**, run:
 
@@ -310,7 +311,7 @@ Terms used across the plans without re-definition.
 | **Dev Mode** | Figma's developer-facing mode. `figma.editorType === 'dev'`. |
 | **Code section** | The panel inside Dev Mode's Inspect panel where codegen plugins render. Plan 004. |
 | **Inspect panel** | The wider Dev Mode panel, where `inspect`-capability plugins get a full-height iframe. Plan 005. |
-| **Stamping** | Writing a Tailwind class name into a Figma variable's Code syntax field. Plan 007. |
+| **Stamping** | Writing a reusable, config-validated Tailwind token key into a Figma variable's Code syntax field. Plan 007. |
 | **Drift** | A design value that is *nearly* but not exactly a token. The signal plan 006 hunts. |
 
 ---

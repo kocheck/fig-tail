@@ -1,11 +1,11 @@
 # Plan 010: Package, document, and publish
 
-> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
-> toolchain, commands, conventions, and failure handling shared by every plan.
-> Then read this plan in full and work through its **Build sheet** below, one
+> **Executor instructions**: This plan is self-contained. Read it in full and
+> work through its **Build sheet** below, one
 > task at a time, confirming each *Done when* before starting the next. Commit
 > after each task. When done, update the status row for this plan in
-> `plans/README.md`.
+> `plans/README.md`. `plans/EXECUTOR-GUIDE.md` is optional expanded guidance;
+> this plan wins if they conflict.
 >
 > **Structure of this file**: the Build sheet is what you *do*. Everything after
 > it is reference — read a section when a task points you there. "Steps" gives
@@ -19,8 +19,8 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**: `git log --oneline -20` and read
-> `plans/README.md`. This plan documents whatever has actually shipped. Confirm
+> **Drift check (run first)**: this plan was written at commit `2157dc6`.
+> Run `git log --oneline 2157dc6..HEAD`, read `plans/README.md`, and confirm
 > which of plans 005–009 are DONE before writing a word of documentation —
 > documenting an unbuilt feature is the main failure mode here.
 >
@@ -37,13 +37,13 @@
 - **Depends on**: 005 (with 001–004, the minimum shippable product). Plans
   006–009 are documented if done and omitted if not.
 - **Category**: docs
-- **Grounded at**: the commit at which plan 005 landed, or later.
+- **Planned at**: commit `2157dc6`, 2026-07-31 — dependencies are prospective.
 
 ## Build sheet
 
-**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
-commands, TypeScript rules, commit format, and what to do when a check fails —
-none of which is repeated here.
+Use Node 20+ and pnpm. Preserve the landed workspace scripts and strict
+TypeScript settings. Before every commit run
+`pnpm -r typecheck && pnpm -r lint && pnpm -r test`.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command or a named in-Figma check; it must produce the stated result before you
@@ -65,7 +65,7 @@ ahead.
 | `CONTRIBUTING.md` | incl. the write-safety invariant | 2 |
 | `CHANGELOG.md`, package metadata | release prep | 3 |
 | `.github/workflows/ci.yml`, `release.yml` | CI + tagged publish | 3 |
-| Community listing assets (icon, cover, screenshots) | submission | 5 |
+| `docs/community/**` listing copy, icon, cover, screenshots | approval packet | 3 |
 | `plans/README.md` (edit) | final statuses | 6 |
 
 ### Tasks
@@ -74,9 +74,9 @@ ahead.
 |---|---|---|---|
 | 1 | Audit what actually shipped. Read `plans/README.md`, then **verify each DONE plan's headline feature by hand in the built plugin**. Do not trust the table. | none (verification) | A written checklist of verified features in the commit message, matching `plans/README.md`. Any mismatch → **STOP** |
 | 2 | Write all the docs, describing **only** what task 1 verified. Structure per Step 2, including the three config tiers and why unreadable config parts give raw values. | `README.md`, `docs/**`, `CONTRIBUTING.md` | **From a fresh clone on a clean machine**, follow the developer path and then the designer path literally. Both work end to end. Fix every place you had to improvise |
-| 3 | Version 0.1.0, changelog, package metadata, CI + release workflows (secret **referenced**, never contained). Run the publish dry-run and read the file lists. Then **stop and ask the owner** for approval on (a) npm and (b) Community. | `package.json`s, `CHANGELOG.md`, `.github/workflows/**` | Dry-run shows no source/fixtures/plans/spikes in any tarball; `git log -p \| grep -iE 'npm_[A-Za-z0-9]\|figd_\|figu_'` returns nothing; **the owner has explicitly approved both, or told you which one** |
-| 4 | *(Only with approval.)* Tag and publish `@fig-tail/theme`, `@fig-tail/match`, and `@fig-tail/cli` if plan 009 shipped. | tags only | Each package on npm at 0.1.0; a clean-directory install works; tarballs contain no source |
-| 5 | *(Only with approval.)* **First, find the current Figma publishing doc and record its URL in this plan** — it was never verified. Then prepare assets and submit. | `manifest.json` (assigned ID), listing assets | Live in the Community, installable from a **different** account, and that account completes the README developer path. The assigned plugin ID is committed |
+| 3 | Version 0.1.0, changelog, package metadata, CI + OIDC trusted-publishing workflow. Prepare Community copy/assets, run filtered package dry-runs, and perform a quiet secret-presence audit. Then **stop and ask the owner** for separate npm and Community approvals. | `package.json`s, `CHANGELOG.md`, `.github/workflows/**`, `docs/community/**` | Each publishable tarball is clean; secret audit exits 1 without printing matches; approval packet is complete; **the owner explicitly approves each channel to use** |
+| 4 | *(Only with npm approval.)* Tag and publish `@fig-tail/theme`, `@fig-tail/match`, and `@fig-tail/cli` if plan 009 shipped, using npm trusted publishing with provenance. | tag + release workflow | Every intended package is on npm at 0.1.0 with provenance; a clean-directory install works; tarballs contain no source |
+| 5 | *(Only with Community approval.)* Find and record the current official Figma publishing guide, re-check account/distribution options, and submit the already-approved assets. | listing submission only | Live in the Community, installable from a **different** account, and that account completes the README developer path. The development plugin ID already committed by plan 003 remains correct |
 | 6 | Update `plans/README.md`: DONE / TODO / REJECTED with one-line rationales, plus a "Shipped 0.1.0" note. | `plans/README.md` | Every row matches reality; nothing left IN PROGRESS |
 
 **Task 3 is a hard gate.** Nothing outward-facing ships without the owner saying
@@ -86,9 +86,11 @@ so, and this is the one plan whose actions cannot be quietly reverted.
 
 ## Why this matters
 
-fig-tail's whole premise is that setup is worth it: run a CLI, paste a file
-once, and every developer gets class names from the real config. That is a
-larger ask than "install a plugin", and it fails at the first confusing step.
+fig-tail's whole premise is that setup is worth it: one person drops a config
+into the plugin once, and every developer gets class names from the real config.
+The optional CLI appears only when the in-plugin resolver reports a complex
+config it cannot fully read. Even the normal one-time setup is a larger ask than
+"install a plugin", and it fails at the first confusing step.
 The documentation is not a wrapper around the product — for a tool with a
 two-part setup, it *is* part of the product.
 
@@ -117,11 +119,12 @@ Check `plans/README.md` for what is actually DONE. The minimum is 001–005:
   Organization or Enterprise plan**, so private org-only plugin publishing is
   not available.
 - Plugin development and local installation require the **Figma desktop app**.
-- Publishing to the Figma Community assigns the plugin its permanent ID. The
-  manifest currently carries a placeholder (plan 003 Step 2) — publishing is
-  what fills it in.
-- Figma reviews Community submissions. Review takes days, and rejections
-  usually cite the description, the listing images, or permissions.
+- Plan 003 registered the development plugin and committed its real manifest ID
+  before import testing. Do not replace it with a placeholder or assume
+  submission is the first time an ID exists.
+- Figma's submission and review flow is time-sensitive. Step 5 re-reads the
+  current official documentation instead of relying on remembered timings or
+  rejection patterns.
 
 **Documentation for this step was not verified when this plan was written.**
 Figma's plugin-publishing flow changes, and no publishing doc was confirmed
@@ -143,9 +146,9 @@ Two audiences with different entry points. Structure the docs around them:
 1. **A developer who was handed a Figma link.** Wants: install the plugin, open
    Dev Mode, read classes. Does not care about the CLI. Should be reading for
    under two minutes before it works.
-2. **A designer or lead setting it up.** Wants: run the CLI in the codebase,
-   paste the file, understand what the linter finds and what stamping does.
-   Ten minutes, and they need to understand the tradeoffs.
+2. **A designer or lead setting it up.** Wants: drop the config into the plugin,
+   understand what the resolver could not read, and understand what the linter
+   and stamping do. The CLI appears only as the complex-config escape hatch.
 
 Lead with the developer path. It is the larger audience and the shorter read.
 
@@ -155,15 +158,19 @@ Lead with the developer path. It is the larger audience and the shorter read.
 |---|---|---|
 | Full check | `pnpm -r typecheck && pnpm -r lint && pnpm -r test` | exit 0 |
 | Build all | `pnpm -r build` | every package's `dist/` present |
-| Package dry-run | `pnpm -r publish --dry-run --no-git-checks` | no errors, correct file lists |
-| Plugin bundle | `pnpm --filter @fig-tail/plugin build && du -b packages/plugin/dist/*` | main under 400 kB, ui under 500 kB |
+| Theme dry-run | `pnpm --filter @fig-tail/theme publish --dry-run --no-git-checks` | clean file list |
+| Match dry-run | `pnpm --filter @fig-tail/match publish --dry-run --no-git-checks` | clean file list |
+| CLI dry-run | `pnpm --filter @fig-tail/cli publish --dry-run --no-git-checks` | run only if plan 009 is DONE; clean file list |
+| Plugin bundle | `pnpm --filter @fig-tail/plugin build && wc -c packages/plugin/dist/main.js packages/plugin/dist/ui.html` | main under 400 kB, ui under 500 kB |
 
 Needed on hand:
 
-- **npm publish rights** for the `@fig-tail` scope — credential type: an npm
-  automation token, stored in the owner's password manager and in GitHub Actions
-  secrets. **Never commit it, never paste it into a file, never echo it.** If it
-  does not exist yet, the owner creates it; you do not.
+- **npm publish rights** for the `@fig-tail` scope and an npm trusted-publisher
+  configuration bound to this GitHub repository/workflow. The release workflow
+  uses GitHub OIDC (`id-token: write`) and publishes with provenance; it does
+  not require a long-lived npm token. A token is an explicit owner-approved
+  fallback only if trusted publishing is unavailable for a documented reason,
+  and its value is never pasted, echoed, or committed.
 - A **Figma account with Community publishing enabled** (the owner's).
 - Screenshots of both Dev Mode surfaces (plans 004 and 005) and the setup UI.
 
@@ -177,8 +184,8 @@ Needed on hand:
 - `package.json` metadata for the three published packages (description,
   keywords, repo, license, `files`, `exports`)
 - `.github/workflows/ci.yml` — typecheck, lint, test, build on push and PR
-- `.github/workflows/release.yml` — npm publish on tag (using the stored token
-  secret; the workflow references it, never contains it)
+- `.github/workflows/release.yml` — npm trusted publishing on tag using OIDC and
+  provenance, limited to the explicit publishable packages
 - Figma Community listing assets: icon, cover, screenshots, description
 - The Community submission itself (Step 5, gated on Step 3)
 
@@ -286,15 +293,29 @@ improvise and fix it before moving on.
 - Add package metadata: description, keywords, `repository`, `license`, `files`
   (dist + README + LICENSE only), `exports`.
 - Add `.github/workflows/ci.yml`: typecheck, lint, test, build on push and PR.
-- Add `.github/workflows/release.yml`: publish on tag, reading the npm token
-  from a repository secret. The workflow **references** the secret name; it
-  never contains a value.
-- Run `pnpm -r publish --dry-run --no-git-checks` and read the file lists.
-  Confirm no source, no fixtures, no `plans/`, and no `spike/` directories are
-  included.
+- Add `.github/workflows/release.yml`: tag-triggered, least-privilege
+  permissions (`contents: read`, `id-token: write`), pinned supported Node/npm,
+  `npm publish --access public --provenance`, and explicit steps for only the packages that
+  actually ship. Configure each package's npm trusted-publisher mapping to this
+  repository and exact workflow filename. Do not add `NODE_AUTH_TOKEN` or a
+  long-lived npm secret in the normal path.
+- Run a separate `publish --dry-run --no-git-checks` for
+  `@fig-tail/theme`, `@fig-tail/match`, and conditionally `@fig-tail/cli`.
+  Never use recursive publish, which would include private/plugin workspaces.
+  Read every file list; confirm no TypeScript source, fixtures, `plans/`, or
+  `spike/` directories are included.
+- Prepare the full Community approval packet now, before asking: final listing
+  copy, icon, cover, screenshots, support URL, declared capabilities, and the
+  current manifest permission list. Store it under `docs/community/`. Step 5
+  submits these approved assets; it does not invent them after approval.
+- Run a non-printing history presence check:
+  `git log -p --all | rg -q '(npm_[A-Za-z0-9]{20,}|figd_[A-Za-z0-9_-]{20,}|figu_[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})'`.
+  Expected exit is **1** (no match). Never run a command that prints a matching
+  credential. If the exit is 0, STOP and ask the owner to run a redacting secret
+  scanner/rotation workflow; do not expose the value in logs.
 
 **Then stop and ask the owner**, presenting: the package names and versions, the
-dry-run file lists, the draft Community listing text and images from Step 4, and
+dry-run file lists, the Community listing text and images prepared above, and
 the fact that the account tier permits only public Community distribution.
 
 **Check**: dry-run output reviewed and clean; the owner has explicitly approved
@@ -303,16 +324,19 @@ Steps 4 or 5 without both.** If only one is approved, do that one.
 
 ### Step 4: Publish the npm packages *(gated on Step 3)*
 
-Tag and let the release workflow publish `@fig-tail/theme` and `@fig-tail/match`,
-plus `@fig-tail/cli` **only if plan 009 shipped**.
+After the owner separately configures/confirms npm trusted publishers, tag and
+let the release workflow publish `@fig-tail/theme` and `@fig-tail/match`, plus
+`@fig-tail/cli` **only if plan 009 shipped**. Verify provenance on each package
+page. Do not silently fall back to a token if OIDC fails.
 
-**Check**: each published package appears on npm at 0.1.0; the tarballs contain
-no source, fixtures, plans, or spikes. If the CLI shipped, `npx @fig-tail/cli
-export` works from a clean directory with no local checkout.
+**Check**: each intended published package appears on npm at 0.1.0 with
+provenance; the tarballs contain no source, fixtures, plans, or spikes. If the
+CLI shipped, `npx @fig-tail/cli export` from a trusted fixture checkout requires
+and honors its explicit config-execution flag.
 
 ### Step 5: Submit to the Figma Community *(gated on Step 3)*
 
-Listing assets and copy:
+Use the already-approved listing assets and copy from `docs/community/`:
 
 - **Name**: fig-tail
 - **Tagline**: one line — Tailwind classes from your own config, in Dev Mode.
@@ -335,8 +359,8 @@ with the owner.
 
 **Check**: the plugin is live in the Community, installable from a **different**
 Figma account, and that account can complete the README's developer path against
-a file that already has a theme configured. The manifest's placeholder ID has
-been replaced with the assigned ID and committed.
+a file that already has a theme configured. Confirm the published plugin maps to
+the real manifest ID committed during plan 003; no placeholder ever ships.
 
 ### Step 6: Close out the plans
 
@@ -358,8 +382,9 @@ matches the code, and nothing is left IN PROGRESS.
 - **Publish dry-run** file lists reviewed for leaked source or secrets.
 - **Post-publish smoke test**: install from npm and from the Community on a
   different account, and complete the developer path.
-- **Secret audit**: `git log -p | grep -iE 'npm_[A-Za-z0-9]|figd_|figu_'` over
-  the full history returns nothing. Run it before publishing, not after.
+- **Secret-presence audit**: the quiet `git log -p --all | rg -q …` check exits
+  1 and prints no match. Run it before publishing, not after; a 0 exit triggers
+  the redacting scan/rotation STOP path.
 
 ## Done criteria
 
@@ -379,15 +404,16 @@ ALL must hold.
       003 and 007
 - [ ] Both README paths verified end to end from a fresh clone
 - [ ] CI workflow runs on push and PR and is green
-- [ ] Release workflow references the npm token as a secret and contains no
-      credential value
+- [ ] Release workflow uses least-privilege GitHub OIDC trusted publishing with
+      provenance and contains no long-lived npm credential path by default
 - [ ] Publish dry-run shows no source, fixtures, plans, or spikes in the tarballs
-- [ ] The secret audit over full git history returns nothing
-- [ ] The owner explicitly approved npm publication and Community submission
-- [ ] *(If approved)* all three packages live on npm at 0.1.0, verified by a
-      clean install
-- [ ] *(If approved)* the plugin is live in the Community and installable from a
-      different account, and the assigned plugin ID is committed to the manifest
+- [ ] The quiet secret-presence audit exits 1 without printing a match
+- [ ] The owner made and recorded a separate approve/defer/reject decision for
+      npm publication and Community submission; only approved channels ran
+- [ ] *(If npm approved)* every intended package (two, or three when plan 009
+      shipped) lives on npm at 0.1.0 with provenance, verified by a clean install
+- [ ] *(If Community approved)* the plugin is live and installable from a
+      different account, mapped to plan 003's already-committed real manifest ID
 - [ ] `plans/README.md` reflects reality with no IN PROGRESS rows
 - [ ] No files outside the in-scope list were changed
 
@@ -402,6 +428,9 @@ Stop and report back — do not improvise — if:
 - The owner has not approved publication. **Nothing outward-facing ships without
   it** — this is the one plan whose actions cannot be quietly reverted.
 - The npm scope `@fig-tail` is taken, or publishing rights are unavailable.
+- npm trusted publishing cannot be configured or the OIDC release fails. Stop
+  and show the owner the failure; use a long-lived token only after a separate,
+  explicit security decision.
 - The Figma account tier has changed such that private publishing is now
   possible — that likely changes the distribution decision.
 - Any credential appears in git history, a workflow file, or a published

@@ -1,11 +1,11 @@
 # Plan 001: Build the in-plugin Tailwind theme resolver (v3 + v4)
 
-> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
-> toolchain, commands, conventions, and failure handling shared by every plan.
-> Then read this plan in full and work through its **Build sheet** below, one
+> **Executor instructions**: This plan is self-contained. Read it in full, then
+> work through its **Build sheet** below, one
 > task at a time, confirming each *Done when* before starting the next. Commit
 > after each task. When done, update the status row for this plan in
-> `plans/README.md`.
+> `plans/README.md`. `plans/EXECUTOR-GUIDE.md` is optional expanded guidance;
+> this plan wins if they conflict.
 >
 > **Structure of this file**: the Build sheet is what you *do*. Everything after
 > it is reference — read a section when a task points you there. "Steps" gives
@@ -19,9 +19,11 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**: `git log --oneline -5`. This plan was written
-> against a repository containing only `LICENSE`, `README.md`, and `plans/` at
-> commit `e757f32`. If `packages/` already exists, someone has started this
+> **Drift check (run first)**:
+> `git diff --stat 2157dc6..HEAD -- package.json pnpm-workspace.yaml tsconfig.base.json eslint.config.js packages/theme fixtures/configs`
+> This plan was written against a plan-only repository at commit `2157dc6`.
+> Expected result before implementation: empty. If any listed path appears,
+> someone has started this
 > work — read what is there first, and treat a conflict with this plan as a STOP
 > condition.
 
@@ -36,13 +38,14 @@
   on them.
 - **Depends on**: none
 - **Category**: dx
-- **Grounded at**: `e757f32` (2026-07-31) — greenfield.
+- **Planned at**: commit `2157dc6`, 2026-07-31 — greenfield.
 
 ## Build sheet
 
-**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
-commands, TypeScript rules, commit format, and what to do when a check fails —
-none of which is repeated here.
+Use Node 20+ and pnpm. TypeScript is strict; use named exports, no `any`, no
+non-null assertions, and colocated Vitest tests. Run
+`pnpm -r typecheck && pnpm -r lint && pnpm -r test` before every commit. Branch
+and commit rules are in "Working approach" below.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command; it must produce the stated result before you start the next task.
@@ -73,12 +76,13 @@ section when a task points you at it.
 ### Dependencies
 
 ```bash
-pnpm add -w -D typescript vitest tsup eslint @eslint/js typescript-eslint zod
+pnpm add -w -D typescript vitest tsup eslint @eslint/js typescript-eslint
 pnpm add --filter @fig-tail/theme culori acorn acorn-walk
-pnpm add --filter @fig-tail/theme -D @types/culori tailwindcss@3 tailwindcss@4 --save-exact
+pnpm add --filter @fig-tail/theme -D @types/culori tailwindcss-v3@npm:tailwindcss@3.4.19 tailwindcss-v4@npm:tailwindcss@4.3.1 --save-exact
 ```
 
-`tailwindcss@3` and `@4` are **dev-only**, used solely by `scripts/gen-data.ts`
+The aliased Tailwind packages are **dev-only**, used solely by
+`scripts/gen-data.ts`
 to produce the bundled default themes. They must never appear in the runtime
 bundle — task 8's size check will catch it if they do.
 
@@ -90,10 +94,10 @@ bundle — task 8's size check will catch it if they do.
 | 2 | Write `TokenSet` + the other types, and `validateTokenSet`. Copy the shape from Step 2 exactly, including `unknownNamespaces`. | `src/types.ts`, `src/validate.ts`, `src/validate.test.ts` | `pnpm --filter @fig-tail/theme test -t schema` → passes, with 1 valid fixture and 5 malformed ones each failing distinguishably |
 | 3 | **Spike.** Gather the 8-config corpus (8 distinct shapes — see Step 3), prototype the acorn evaluator, write `FINDINGS.md`. Produces findings, not shipped code. | `spike/**`, `fixtures/configs/v3/**`, `fixtures/configs/README.md` | `spike/FINDINGS.md` answers all 5 questions with **pasted output**, states the resolved count, and states a build-vs-buy decision |
 | 4 | Write `scripts/gen-data.ts` and generate both bundled default themes. Record the Tailwind versions inside each JSON. | `scripts/gen-data.ts`, `data/*.json` | `pnpm --filter @fig-tail/theme gen:data` twice → `git diff` empty. 5 values hand-checked against Tailwind docs and named in the commit message |
-| 5 | Implement the v3 adapter: evaluator, known-module table, TS pre-pass, presets, merge semantics, **and the replace-vs-extend safe-fallback rule**. | `src/v3/**` | `pnpm --filter @fig-tail/theme test -t v3` → passes, incl. the 8 cases in Step 5 and both directions of the safe-fallback rule |
+| 5 | Implement the v3 adapter: evaluator, known-module table, TS pre-pass, presets, Tailwind-compatible recursive merge semantics, **and the replace-vs-extend safe-fallback rule**. | `src/v3/**` | `pnpm --filter @fig-tail/theme test -t v3` → passes, incl. the cases in Step 5, recursive-merge conformance, and both directions of the safe-fallback rule |
 | 6 | Measure postcss vs a hand-rolled scanner, then implement the v4 adapter. Build the 4 v4 fixtures. | `src/v4/**`, `fixtures/configs/v4/**` | `pnpm --filter @fig-tail/theme test -t v4` → passes; the postcss measurement is in the commit message |
 | 7 | Add the cross-flavour consistency test (same design intent, v3 and v4, identical token values). | `src/consistency.test.ts`, `fixtures/configs/**` | `pnpm --filter @fig-tail/theme test -t consistency` → passes |
-| 8 | Wire `resolveTheme`, flavour detection, unknown-version degradation, and the unresolved report. Enforce the four guarantees in Step 8. | `src/index.ts`, `src/resolve.test.ts` | `pnpm --filter @fig-tail/theme test -t resolve` → passes; `pnpm --filter @fig-tail/theme build && du -b packages/theme/dist/index.js` → under 184320 |
+| 8 | Wire `resolveTheme`, flavour detection, unknown-version degradation, and the unresolved report. Enforce the four guarantees in Step 8. | `src/index.ts`, `src/resolve.test.ts` | `pnpm --filter @fig-tail/theme test -t resolve` → passes; `pnpm --filter @fig-tail/theme build && wc -c < packages/theme/dist/index.js` → under 184320 |
 | 9 | Add the "What fig-tail can read from your Tailwind config" README section (~40 lines). | `README.md` | You read only that section, predicted the outcome for 2 fixture configs, then ran the resolver and matched |
 
 **Task 3 is the one that can change the plan.** If it reports fewer than 6 of 8
@@ -147,7 +151,7 @@ fig-tail/
 └── plans/
 ```
 
-- TypeScript, strict, `target: es2020`, `moduleResolution: nodenext`.
+- TypeScript, strict, `target: es2020`, `moduleResolution: bundler`.
 - **vitest** for tests, **tsup**/esbuild for the build.
 - pnpm workspaces (`corepack enable` if pnpm is absent).
 
@@ -214,9 +218,9 @@ not exist when it was written:
   stable within a major. Record the bundled default-theme version in
   `source.defaultThemeVersion` so any skew is visible downstream.
 - **An unrecognised major** (a future v5, say) → **do not apply v4 semantics to
-  it.** Return a `TokenSet` with every namespace marked unknown, plus a warning
-  naming the version. The plugin then emits arbitrary values, which are correct
-  in any Tailwind version, instead of token names built on guessed semantics.
+  it.** Return `{ ok: false, tokens: null }` plus a warning naming the version.
+  The plugin may show clearly-labelled generic arbitrary syntax, but must not
+  claim that any emitted class is confirmed for the unknown major.
 
 ### v3 resolution semantics — get these exactly right
 
@@ -224,9 +228,11 @@ Confirmed against Tailwind's v3 theme documentation:
 
 - **`theme.<key>`** *replaces* the default value for that key entirely.
 - **`theme.extend.<key>`** *merges* with the resolved default value for that key.
-- Merging is per-key at the top level of each namespace. `theme.extend.colors`
-  merges into the default colour map; a nested object under a colour name
-  replaces that colour's whole shade map when the name already exists.
+- `theme.extend` uses Tailwind's recursive object merge semantics. Extending
+  `colors.blue.950` retains the other default `blue` shades; arrays such as font
+  families and box shadows follow Tailwind's special array rules. Do not invent
+  a simplified merge: add conformance tests that compare this adapter with the
+  pinned `tailwindcss-v3` `resolveConfig` output for plain-object fixtures.
 - `presets` resolve first, in order, with later entries winning; the user's own
   config applies last.
 - Function-valued theme entries (`spacing: ({ theme }) => …`) are resolved by
@@ -261,6 +267,10 @@ Namespaces are deterministic:
   values they declare — treat all three forms alike for token extraction.
 - The v4 **default theme** ships as `theme.css` inside the `tailwindcss`
   package. The resolver bundles its values (Step 4).
+- A v4 prefix is declared on the import, for example
+  `@import "tailwindcss" prefix(tw)`, and produces variant-style classes such as
+  `tw:bg-red-500`. This differs from v3's string prefix (`tw-bg-red-500`) and
+  must be represented explicitly in `TokenSet.source.prefix`.
 
 **Two v4 behaviours that will bite you:**
 
@@ -329,13 +339,14 @@ silently does nothing and has no way to tell why. See invariant 2 in
 
 The same rule governs three related cases:
 
-- **`prefix` unresolvable** → mark every namespace unknown. Emitting unprefixed
-  classes into a prefixed project produces uniformly dead output, which is worse
-  than raw values everywhere.
-- **`corePlugins` unresolvable, or a namespace's core plugin disabled** → mark
-  that namespace unknown *and* record it, so plan 002 knows not to emit an
-  arbitrary value for it either (a disabled core plugin means even
-  `bg-[#fff]` does not exist).
+- **`prefix` unresolvable** → preserve the resolved tokens but record prefix
+  status as `unknown`. Plan 002 then emits no classes at all for that config;
+  even arbitrary utilities would be dead if emitted with the wrong prefix.
+- **`corePlugins`** is utility-specific, not namespace-specific: disabling
+  `backgroundColor` must not disable `textColor` over the same color tokens.
+  Record the resolved allow/deny mode and core-plugin names in `source`.
+  Unresolvable availability becomes `mode: "unknown"`; plan 002 suppresses
+  affected named and arbitrary utilities rather than guessing.
 - **`important: true` or a `important: '#app'` selector** → does not change class
   names; record it in `source` for the record and carry on.
 
@@ -400,7 +411,7 @@ hatch (off by default; correctness first).
 | Test | `pnpm -r test` | all pass |
 | Generate default data | `pnpm --filter @fig-tail/theme gen:data` | writes `packages/theme/data/*.json` |
 | Build | `pnpm --filter @fig-tail/theme build` | `dist/index.js` exists |
-| Size probe | `du -b packages/theme/dist/index.js` | under 184320 (180 kB) |
+| Size probe | `wc -c < packages/theme/dist/index.js` | under 184320 (180 kB) |
 
 Reference documentation:
 
@@ -419,9 +430,9 @@ No accounts, credentials, or Figma access needed. This plan is pure TypeScript.
 - **`postcss`** for the v4 CSS walk — or, if it proves too heavy, a
   purpose-built `@theme`-block scanner. Measure before deciding (Step 6).
 - **`culori`** for colour conversion.
-- **`zod`** for validating the emitted token set. Keep it a `devDependency` and
-  export a plain validator function, so the runtime package stays lean and plan
-  003 can reuse it.
+- Implement `validateTokenSet` as a small explicit runtime validator. Do not
+  import a dev-only schema library into the published bundle; plan 003 calls
+  this validator at runtime.
 
 ## Scope
 
@@ -517,10 +528,15 @@ export function validateTokenSet(value: unknown):
   "source": {
     "major": 3,                    // 3 | 4
     "entry": "tailwind.config.js",
-    "prefix": null,                // e.g. "tw"
+    "prefix": { "status": "none" },
+    // or { "status": "known", "style": "v3-string", "value": "tw-" }
+    // or { "status": "known", "style": "v4-variant", "value": "tw" }
+    // or { "status": "unknown" }
+    "corePlugins": { "mode": "all", "names": [] },
+    // mode: "all" | "denylist" | "allowlist" | "unknown"
     "remBasePx": 16,               // the assumed rem base; never guess downstream
     "tailwindVersionGuess": null,  // if the config declares one; null otherwise
-    "defaultThemeVersion": "3.4.17" // which bundled defaults were merged in
+    "defaultThemeVersion": "3.4.19" // which bundled defaults were merged in
   },
   "colors": {
     "brand-500": { "hex": "#3b82f6", "rgb": [59,130,246], "alpha": 1,
@@ -562,6 +578,10 @@ Rules the validator must enforce:
 - `raw` is omitted when identical to `hex`.
 - Recognised-but-unmodelled namespaces go into `unsupported` with a count, never
   dropped silently.
+- Prefix status and core-plugin availability are required. The validator rejects
+  a `known` v3 prefix without its exact configured string (including its dash),
+  a `known` v4 prefix containing `:`, and an availability mode with malformed
+  core-plugin names.
 - **A namespace listed in `unknownNamespaces` must be empty in the token maps.**
   Carrying both tokens and an unknown marker for the same namespace is a
   contradiction, and the validator must reject it — this is the invariant that
@@ -634,9 +654,9 @@ Write `packages/theme/scripts/gen-data.ts` — a **Node** script that runs at
 development time, never in the plugin — producing checked-in JSON in
 `packages/theme/data/`:
 
-- `v3-default-theme.json` — from `tailwindcss@3`'s `defaultTheme` and `colors`,
+- `v3-default-theme.json` — from the `tailwindcss-v3` alias's `defaultTheme` and `colors`,
   every colour pre-converted to `hex`/`rgb`.
-- `v4-default-theme.json` — from `tailwindcss@4`'s `theme.css`, parsed into the
+- `v4-default-theme.json` — from the `tailwindcss-v4` alias's `theme.css`, parsed into the
   same token shape, colours pre-converted from oklch.
 
 Record the exact Tailwind versions the data came from, inside each JSON file and
@@ -655,6 +675,11 @@ published defaults (`blue-500`, `gray-200`, `spacing.4`, `text-sm`'s line-height
 TypeScript pre-pass, preset ordering, and the `theme` vs `theme.extend` merge
 semantics from "Context".
 
+For fixtures made only of plain values, run the same input through the pinned
+`tailwindcss-v3` `resolveConfig` in a test-only Node path and compare the
+resulting theme projection. Include nested color-shade extension and an array
+case; these are the two places a hand-written merge most often diverges.
+
 Every unresolvable construct produces an `Unresolved` entry with an accurate
 `path`, `reason`, `snippet`, and a `message` written for a designer rather than a
 compiler author:
@@ -666,7 +691,8 @@ compiler author:
 **Check**: `pnpm --filter @fig-tail/theme test -t v3` → passes, with a snapshot
 per fixture config. Tests must cover: `theme.colors` replacing defaults;
 `theme.extend.colors` merging; nested colour flattening including `DEFAULT`;
-`...defaultTheme.fontFamily.sans` spreading correctly; a function value reported
+`...defaultTheme.fontFamily.sans` spreading correctly; nested color extension
+retaining untouched shades; a function value reported
 rather than dropped; an unknown `require()` reported; a `.ts` config resolved; a
 preset reported. Spot-check three values per snapshot by eye and note them in the
 commit message — **a green snapshot of wrong output is this plan's worst failure
@@ -712,8 +738,9 @@ test:
 
 1. **`resolveTheme` never throws.** Any internal failure becomes
    `{ ok: false, tokens: null, unresolved: [...] }` with a `parse-error` entry.
-   Plan 003 calls this from a UI and plan 004 from inside a 15-second codegen
-   budget; neither can handle an exception.
+   Plan 003 calls this from a UI and plan 004 may consume its stored output
+   inside a conservative 3-second Codegen budget; neither can handle an
+   exception.
 2. **Nothing is skipped silently.** For every fixture, the count of config keys
    the adapter ignored equals the number of `Unresolved` entries.
 3. **Partial results are still useful.** A config with one unresolvable key
@@ -724,7 +751,7 @@ test:
    bundle contains no `eval(` and no `new Function`.
 
 **Check**: `pnpm --filter @fig-tail/theme test -t resolve` → passes, all four
-guarantees covered. `pnpm --filter @fig-tail/theme build && du -b
+guarantees covered. `pnpm --filter @fig-tail/theme build && wc -c <
 packages/theme/dist/index.js` → under 180 kB.
 
 ### Step 9: Document what is and is not supported
@@ -771,10 +798,11 @@ ALL must hold.
 - [ ] **The safe-fallback rule holds**: an unresolvable *replacing* key marks its
       namespace unknown and emits no tokens for it; an unresolvable *extending*
       key keeps the defaults. Both directions tested.
-- [ ] An unresolvable `prefix`, and a disabled core plugin, each mark the
-      affected namespaces unknown
-- [ ] An unrecognised Tailwind major marks every namespace unknown rather than
-      applying another major's semantics
+- [ ] An unresolvable `prefix` records `status: "unknown"` and causes plan 002's
+      contract tests to suppress every class; a disabled core plugin suppresses
+      only its own utility family, not the whole token namespace
+- [ ] An unrecognised Tailwind major returns `tokens: null` rather than applying
+      another major's semantics
 - [ ] The validator rejects a `TokenSet` carrying both tokens and an unknown
       marker for the same namespace
 - [ ] All 4 v4 fixtures resolve, including resets, aliasing, and `@config`

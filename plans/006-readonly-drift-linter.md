@@ -1,11 +1,11 @@
 # Plan 006: Add the read-only drift linter (designer dry-run)
 
-> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
-> toolchain, commands, conventions, and failure handling shared by every plan.
-> Then read this plan in full and work through its **Build sheet** below, one
+> **Executor instructions**: This plan is self-contained. Read it in full and
+> work through its **Build sheet** below, one
 > task at a time, confirming each *Done when* before starting the next. Commit
 > after each task. When done, update the status row for this plan in
-> `plans/README.md`.
+> `plans/README.md`. `plans/EXECUTOR-GUIDE.md` is optional expanded guidance;
+> this plan wins if they conflict.
 >
 > **Structure of this file**: the Build sheet is what you *do*. Everything after
 > it is reference — read a section when a task points you there. "Steps" gives
@@ -19,27 +19,29 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**:
-> `git diff --stat <SHA at which 003 completed>..HEAD -- packages/plugin/src/storage.ts packages/plugin/src/mode-design.ts`
-> This plan adds another view to the design-mode UI and reuses `readConfig()`.
-> If either has changed, read it before starting.
+> **Drift check (run first)**: this plan was written at commit `2157dc6`, before
+> plan 005 existed. Confirm 005 is `DONE`, locate its landing commit with
+> `git log --oneline -- plans/005-devmode-inspect-panel-surface.md packages/plugin/src`,
+> and compare the live `pipeline.ts`, storage, hints, and UI routing with the
+> prospective contracts below. A mismatch is a STOP condition.
 
 ## Status
 
 - **Priority**: P2
 - **Effort**: M
-- **Risk**: LOW — this plan is **strictly read-only**. It cannot damage a file.
-  Its risk is a noisy report nobody acts on, which Step 5's severity model
-  addresses.
-- **Depends on**: 002, 003
-- **Category**: design
-- **Grounded at**: the commit at which plans 002 and 003 landed.
+- **Risk**: MED — document writes remain mechanically impossible, but the
+  availability and parity of `getCSSAsync()` in design mode must be proven
+  before choosing the surface. Task 0 resolves that uncertainty.
+- **Depends on**: 005
+- **Category**: dx
+- **Planned at**: commit `2157dc6`, 2026-07-31 — dependency contract is prospective.
 
 ## Build sheet
 
-**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
-commands, TypeScript rules, commit format, and what to do when a check fails —
-none of which is repeated here.
+Use Node 20+ and pnpm. Preserve plan 005's package scripts and strict TypeScript
+settings; use named exports, no `any`, no non-null assertions, and colocated
+Vitest tests. Before every commit run
+`pnpm -r typecheck && pnpm -r lint && pnpm -r test`.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command or a named in-Figma check; it must produce the stated result before you
@@ -59,12 +61,12 @@ ESLint allowlist entry, you have gone out of scope — stop and re-read Scope.
 
 | Path | Purpose | Task |
 |---|---|---|
+| `packages/plugin/notes/css-api-surface-spike.md` | design/Dev Mode CSS parity evidence + route decision | 0 |
 | `packages/plugin/src/lint/types.ts` + test | `Finding`, `Severity`, `ScanResult` | 1 |
 | `packages/plugin/src/lint/scan.ts` + test | node walker + classification | 2 |
 | `packages/plugin/src/lint/variables.ts` + test | variable → token proposals | 3 |
 | `packages/plugin/src/ui/lint/**` | report view | 4 |
 | `packages/plugin/src/lint/dismiss.ts` + test | per-user dismissals | 5 |
-| `packages/plugin/src/hints.ts` | **only if plan 004 has not landed** | 2 |
 | `README.md` (section only) | what the four findings mean | 7 |
 
 No new dependencies.
@@ -73,11 +75,12 @@ No new dependencies.
 
 | # | Do this | Files it may touch | Done when |
 |---|---|---|---|
+| 0 | Spike `getCSSAsync()` on the same nine nodes in design mode and Dev Mode; record property/value parity and choose the linter surface using Step 0's decision rule. Commit the note before production code. | `notes/css-api-surface-spike.md` | Nine-node result table exists. If parity holds, design-mode UI is chosen; otherwise the existing Dev Mode Inspect UI is chosen. No CSS extraction is reimplemented |
 | 1 | Write the finding types and the severity sort (high→medium→low, then node count descending). | `src/lint/types.ts` + test | A hand-built `ScanResult` sorts into the documented order with node-count as tiebreak |
 | 2 | The scanner: **iterative stack walk** (not recursion), batches of 50 with a yield, progress callback, cancel flag, skip invisible + instance children, dedupe by `(property, value, nearestToken)`. Classify per the mapping in Step 2. | `src/lint/scan.ts` + test | Unit tests cover every classification branch, the dedupe (3 nodes → 1 finding, `nodeIds.length === 3`), skip rules, and mid-walk cancel leaving `cancelled: true` |
-| 3 | The variable proposer: value match, name match, agreement → `high`/`medium`/`conflict`. **A conflict proposes nothing.** | `src/lint/variables.ts` + test | Tests cover all 3 outcomes, the 3 name-normalisation forms, the conflict case, unsupported variable types skipped, and an already-mapped variable producing no finding |
+| 3 | The variable proposer: reusable token-key value match, name match, agreement → `high`/`medium`/`conflict`. **A conflict proposes nothing.** | `src/lint/variables.ts` + test | Tests cover all 3 outcomes, the 3 name-normalisation forms, the conflict case, unsupported variable types skipped, valid existing syntax skipped, and invalid/stale syntax reported |
 | 4 | The report UI: scope picker, progress + cancel, grouped results, "Select these nodes", empty state, Markdown export. | `src/ui/lint/**` | On plan 004's test file: the near-miss node appears as high-severity drift naming the right token; 25 px padding appears with `distance: 1`; the gradient node produces nothing; "Select these nodes" selects and scrolls; the Markdown pastes as a readable table |
-| 5 | Severity ordering + per-finding Dismiss, stored in **`clientStorage`** keyed by file ID + finding hash. Add "Show dismissed (N)". | `src/lint/dismiss.ts` + test, `src/ui/lint/**` | Dismiss → gone, count drops; re-scan → still dismissed; toggle → reappears marked; reload → persists. **And** `getSharedPluginData('figtail','meta')` is byte-identical before and after |
+| 5 | Severity ordering + per-finding Dismiss. Persist in **`clientStorage`** by plan 003's `documentConfigId` + finding hash when tier 1 exists; otherwise use clearly labelled session-only dismissals. Add "Show dismissed (N)". | `src/lint/dismiss.ts` + test, `src/ui/lint/**` | Tier-1 dismissal survives reload; tier-2/3 dismissal says "this session" and resets on reload; toggle works. **And** `getSharedPluginData('figtail','meta')` is byte-identical before and after |
 | 6 | Run a page scan on the large messy file. Record node count, duration, responsiveness, cancel behaviour. | none (measurement) | 1,000 nodes in <10 s, UI responsive (scroll the canvas mid-scan and confirm it moves), cancel shows partial results. Timings in the commit message |
 | 7 | README section explaining the 4 finding types **for a designer** — what each means and how to fix it in Figma (~50 lines). | `README.md` | A reader can correctly explain what "unbound" means and what to do about it, without asking |
 
@@ -110,18 +113,18 @@ and a review UI in the same change.
 
 ## Context the executor needs
 
-### What exists after plans 002, 003, and (optionally) 004
+### What exists after plan 005
 
-- `@fig-tail/match` exports `matchDeclarations`, `summarise`, and the
-  `MatchResult` type with its `confidence` ladder and `nearest` field. See
-  plan 004's "Context" for the full type signatures — they are unchanged.
+- `src/pipeline.ts` is the only plugin import site for `matchDeclarations`; it
+  returns classes, match results, config tier, tokens/null, warnings, and
+  unknown namespaces for a node. The linter must reuse it rather than fork the
+  CSS/matching path.
 - `packages/plugin/src/storage.ts` exports `readConfig()`, cached.
 - `packages/plugin/src/mode-design.ts` runs when `figma.editorType === 'figma'`
   and currently shows the setup UI from plan 003 Step 6.
-- If plan 004 landed, `packages/plugin/src/hints.ts` exports `buildHints(node)`.
-  **If 004 has not landed, implement `buildHints` here** per plan 004 Step 2 and
-  its mapping table, in the same file path — 004 will then find it already
-  present. Do not duplicate it.
+- `packages/plugin/src/hints.ts` exports the tested bound-variable resolver.
+- Plan 003 stores a stable `documentConfigId` inside tier-1 metadata. Public
+  plugins cannot use `figma.fileKey` as a general per-file identifier.
 
 ### The four things this linter reports
 
@@ -139,8 +142,9 @@ merged list of "issues" is not actionable.
    is bound to it. The design is *correct* and *fragile*: it will not follow a
    theme change. This is the most common finding in most files and the easiest
    to fix in Figma.
-4. **Unmapped variable** — a variable exists in the file but has no
-   `codeSyntax.WEB`, and fig-tail can propose one from the theme. This is
+4. **Unmapped variable** — a variable exists in the file but has no valid
+   `codeSyntax.WEB`, and fig-tail can propose a reusable Tailwind **token key**
+   from the theme. This is
    exactly the input plan 007 acts on, and generating it here is why 007
    depends on 006.
 
@@ -156,8 +160,8 @@ Therefore: **scan the current selection, or the current page. Never the whole
 document.** Offer "Selection" (default when something is selected) and
 "This page". A whole-document scan is explicitly out of scope — see Scope.
 
-There is no 15-second timeout here (this is design mode, not codegen), but a
-page with thousands of nodes still needs to not freeze Figma:
+There is no documented Codegen-style deadline on either candidate UI route,
+but a page with thousands of nodes still needs to not freeze Figma:
 
 - Walk with an explicit stack, not recursion — deep component trees will blow
   the sandbox stack.
@@ -208,25 +212,26 @@ Needed on hand:
 
 - `packages/plugin/src/lint/**` — the scanner, finding types, and severity model
 - `packages/plugin/src/ui/lint/**` — the report view
-- `packages/plugin/src/mode-design.ts` — adding navigation between the settings
-  view and the lint view
-- `packages/plugin/src/hints.ts` — **only** if plan 004 has not landed yet
+- The existing single UI router — adding the lint view to design mode if Task 0
+  proves parity, otherwise to Dev Mode Inspect
 - Tests for all of the above
 - A README section describing the linter
 
 **Out of scope**:
 
-- **Any document write.** No `setVariableCodeSyntax`, no node mutation, no
-  plugin data other than the existing config storage. Plan 003's write-safety
-  guards must pass unchanged, with no new allowlist entries. If you need to add
-  an ESLint exception, you are out of scope.
+- **Any document write.** No `setVariableCodeSyntax`, no node mutation, and no
+  `setSharedPluginData` call. Per-user `clientStorage` is allowed only for the
+  dismissal behavior specified in Step 5. Plan 003's write-safety guards must
+  pass unchanged, with no new allowlist entries. If you need to add an ESLint
+  exception, you are out of scope.
 - **Auto-fix of any kind.** Not "bind this variable for me", not "round this to
-  the nearest token". Plan 007 is the only plan that writes, and only to
-  `codeSyntax`.
+  the nearest token". Plan 007 is the only plan that writes design-variable
+  data, and only to `codeSyntax`.
 - **Whole-document scanning.** `loadAllPagesAsync()` must not appear in this
   plan's code.
-- The Dev Mode surfaces — plans 004 and 005 own them. This is a design-mode
-  surface.
+- The Codegen surface. The linter may live inside plan 005's Dev Mode Inspect
+  surface only when Task 0 shows design-mode CSS is unavailable or materially
+  different.
 - Modifying `@fig-tail/match`. If a finding type needs engine support that does
   not exist, that is a STOP condition.
 - Publishing or listing assets — plan 010.
@@ -242,6 +247,28 @@ Needed on hand:
 
 ## Steps
 
+### Step 0: Prove the CSS API on the intended surface
+
+Before choosing a UI route, run a throwaway, read-only spike against plan 004's
+nine-node fixture matrix. For each node, call `getCSSAsync()` once in the design
+editor and once in Dev Mode, then record in
+`packages/plugin/notes/css-api-surface-spike.md`: success/error, sorted property
+names, and normalized values. Do not record user content beyond the fixture.
+
+Decision rule:
+
+- If all nine design-mode calls succeed and their normalized outputs match Dev
+  Mode, put the linter in the design-mode route as originally intended.
+- If design mode rejects, omits properties, or changes meanings, put the linter
+  in the existing Dev Mode Inspect iframe from plan 005. Reuse
+  `resolveNode`; do not recreate Figma's CSS from raw node properties.
+
+Delete throwaway instrumentation before the commit. The note and its result
+table are the durable artifact.
+
+**Check**: the note covers all nine nodes, cites the Figma/plugin versions used,
+states the selected route, and confirms no document-write API was called.
+
 ### Step 1: Define finding types and the scanner contract
 
 `src/lint/types.ts`:
@@ -256,7 +283,7 @@ export type Finding = {
   property: string           // CSS property, or 'variable' for unmapped-variable
   value: string              // the offending value, or the variable's value
   /** What it nearly matched, when applicable. */
-  suggestion?: { token: string; tokenValue: string; className: string; distance?: number; unit?: string }
+  suggestion?: { tokenKey: string; tokenValue: string; distance?: number; unit?: string }
   /** Node ids this finding applies to. Length is the count shown in the UI. */
   nodeIds: string[]
   nodeNames: string[]        // first 5, for display
@@ -282,8 +309,10 @@ with node-count as the tiebreak.
 ### Step 2: Implement the node scanner
 
 `src/lint/scan.ts`. Iterative stack-based walk, batches of 50 with a yield,
-progress callback, cancellation flag. For each node: `getCSSAsync()`,
-`buildHints(node)`, `matchDeclarations(...)`, then classify each `MatchResult`:
+progress callback, cancellation flag. For each node, call plan 005's
+`resolveNode()` and classify its `MatchResult` values. Do not call
+`getCSSAsync()`, `buildHints()`, or `matchDeclarations()` from the scanner; the
+single-import-site invariant still applies:
 
 - `nearest` → **drift**
 - `arbitrary` → **off-system**
@@ -304,7 +333,8 @@ dedup path (three nodes with the same off-token hex → one finding with
 `src/lint/variables.ts`. Read local variables with
 `figma.variables.getLocalVariablesAsync()`
 ([Working with variables](https://developers.figma.com/docs/plugins/working-with-variables)). For each, if `codeSyntax.WEB` is
-absent, propose a Tailwind class from the theme by:
+absent **or fails plan 002's configured-key-and-value validation**, propose a
+reusable token key from the theme by:
 
 1. **Value match** — resolve the variable's value for its default mode and match
    it against the token set with `@fig-tail/match`. An exact value match is the
@@ -319,20 +349,24 @@ absent, propose a Tailwind class from the theme by:
    surfacing, and guessing which is right would be exactly the kind of
    silent-wrong-answer this program avoids.
 
-Emit these as `unmapped-variable` findings with the proposal in `suggestion`.
+Emit these as `unmapped-variable` findings with the token key in `suggestion`.
+Never stamp or propose `bg-*`, `text-*`, or `border-*`: the same colour variable
+may back all three properties, and the matcher derives the property-specific
+utility at use time.
 
 This function is the input plan 007 consumes. Export it cleanly and keep it
 free of UI concerns.
 
 **Check**: unit tests for each confidence outcome, the three name-normalisation
 forms, the conflict case (proposes nothing, reports the conflict), variables
-whose type is unsupported (BOOLEAN, STRING → skipped, not errored), and a
-variable that already has `codeSyntax.WEB` (→ no finding).
+whose type is unsupported (BOOLEAN, STRING → skipped, not errored), a variable
+with valid configured `codeSyntax.WEB` (→ no finding), and invalid/stale syntax
+(→ an overwrite-required finding, never silently trusted).
 
 ### Step 4: Build the report UI
 
-A second view in the design-mode iframe, reachable from the settings view and
-back.
+A second view in the single plugin iframe, reachable from the route selected in
+Step 0 and back to that surface's ordinary view.
 
 - **Scope picker**: Selection (default when a selection exists) / This page.
 - **Scan button**, with progress ("Scanning… 412 / 1,203 nodes") and Cancel.
@@ -362,17 +396,20 @@ scrolls to them; the Markdown export pastes as a readable table.
 Sort per the severity table. Add per-finding **Dismiss**, so a designer can
 clear a deliberate off-system value and keep the report meaningful on re-scan.
 
-Dismissals persist in **`figma.clientStorage`, keyed by file ID + a hash of the
-finding** — deliberately *not* in document storage, because that would be a
-document write and it would impose one person's judgement on everyone else's
-report. Per-user is the correct scope for "I have looked at this and it is
-fine".
+Dismissals use **`figma.clientStorage`** — deliberately *not* document storage,
+because that would be a document write and would impose one person's judgement
+on everyone else's report. When a tier-1 config supplies
+`documentConfigId`, key by that ID plus a finding hash. When only tier 2 or 3 is
+active there is no public, stable per-file identifier: keep dismissals in
+module memory for the session and label the action "Dismiss this session".
+Never use `figma.fileKey`; it is private-plugin-only.
 
 Include a "Show dismissed (N)" toggle so dismissals are never invisible.
 
 **Check**: dismiss a finding → it disappears from the list and the count drops.
 Re-scan → it stays dismissed. Toggle "Show dismissed" → it reappears, marked.
-Reload the plugin → dismissals persist. Confirm via the plan 003 storage read
+For tier 1, reload the plugin → dismissals persist. For tier 2/3, reload → they
+reset as labelled. Confirm via the plan 003 storage read
 path that **nothing was written to document storage** — compare
 `figma.root.getSharedPluginData('figtail','meta')` before and after.
 
@@ -404,7 +441,10 @@ about it.
 
 - **Unit tests**: classification for each `Confidence` → `FindingType` mapping;
   dedup; skip rules; cancellation; severity sort; all three variable-proposal
-  outcomes plus the conflict case; name normalisation.
+  outcomes plus the conflict case; name normalisation; valid and stale existing
+  code syntax; tier-1 persistent versus tier-2/3 session dismissal scope.
+- **API surface spike**: Step 0's nine-node design/Dev Mode parity table and
+  resulting route decision.
 - **Read-only assertion**: a test that runs a full scan against a mocked `figma`
   global whose every mutation method throws, and asserts the scan completes.
   This is the mechanical proof of the plan's core claim — it belongs in the test
@@ -420,12 +460,15 @@ about it.
 ALL must hold.
 
 - [ ] `pnpm -r typecheck && pnpm -r lint && pnpm -r test` → exit 0
+- [ ] Step 0's nine-node comparison selected the linter route from evidence;
+      no parallel CSS extractor exists
 - [ ] All four finding types are produced correctly on the test file
 - [ ] Findings are deduplicated with an accurate node count
 - [ ] Findings are sorted by severity, then by node count descending
 - [ ] "Select these nodes" selects and scrolls to the affected nodes
 - [ ] The Markdown export pastes as a readable table
-- [ ] Dismissals persist in `clientStorage` and survive a plugin reload
+- [ ] Tier-1 dismissals persist by `documentConfigId`; tier-2/3 dismissals are
+      explicitly session-only and reset on reload
 - [ ] Document storage is provably unchanged by a scan (compared before/after)
 - [ ] The read-only assertion test passes (every mutation method throws, scan
       still completes)
@@ -456,6 +499,9 @@ Stop and report back — do not improvise — if:
   and needs to be known before 007 starts rather than during it.
 - Scanning a page requires `loadAllPagesAsync()` in practice (i.e. the current
   page's nodes are not fully available without it).
+- `getCSSAsync()` is unavailable or divergent in design mode **and** the plan
+  005 Dev Mode Inspect surface cannot host the linter. The first half alone is
+  not a STOP; Step 0 defines that fallback.
 - A finding type needs matching-engine support that plan 002 does not provide.
   Report it; do not edit `@fig-tail/match` from this plan.
 - A step's check fails twice after a reasonable attempt.

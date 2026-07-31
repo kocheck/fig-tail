@@ -1,11 +1,11 @@
 # Plan 002: Build the CSS→Tailwind matching engine
 
-> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
-> toolchain, commands, conventions, and failure handling shared by every plan.
-> Then read this plan in full and work through its **Build sheet** below, one
+> **Executor instructions**: This plan is self-contained. Read it in full, then
+> work through its **Build sheet** below, one
 > task at a time, confirming each *Done when* before starting the next. Commit
 > after each task. When done, update the status row for this plan in
-> `plans/README.md`.
+> `plans/README.md`. `plans/EXECUTOR-GUIDE.md` is optional expanded guidance;
+> this plan wins if they conflict.
 >
 > **Structure of this file**: the Build sheet is what you *do*. Everything after
 > it is reference — read a section when a task points you there. "Steps" gives
@@ -19,10 +19,11 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**:
-> `git diff --stat <the SHA at which plan 001 completed>..HEAD -- packages/theme`
-> If the token schema in `packages/theme` has changed since plan 001 landed,
-> re-read it before starting; the shapes quoted in this plan may be stale.
+> **Drift check (run first)**: this plan was written at commit `2157dc6`, before
+> plan 001's package existed. Confirm plan 001 is `DONE`, then run
+> `git diff --stat 2157dc6..HEAD -- packages/theme` and compare the live exports
+> with the contracts quoted below. A non-empty diff is expected; a contract
+> mismatch is a STOP condition.
 
 ## Status
 
@@ -34,13 +35,15 @@
   confidence ladder in Step 2 exists.
 - **Depends on**: 001
 - **Category**: dx
-- **Grounded at**: the commit at which plan 001 landed.
+- **Planned at**: commit `2157dc6`, 2026-07-31 — dependency contract is prospective.
 
 ## Build sheet
 
-**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
-commands, TypeScript rules, commit format, and what to do when a check fails —
-none of which is repeated here.
+Use Node 20+ and pnpm. Copy the package scripts and strict TypeScript settings
+from `packages/theme/package.json` and `packages/theme/tsconfig.json`, changing
+only the package name and entry paths. Use named exports, no `any`, no non-null
+assertions, and colocated Vitest tests. Before every commit run
+`pnpm -r typecheck && pnpm -r lint && pnpm -r test`.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command; it must produce the stated result before you start the next task.
@@ -61,7 +64,7 @@ section when a task points you at it.
 | `packages/match/src/matchers/layout.ts`, `shadow.ts`, `effects.ts` + tests | static + shadow + effects | 6 |
 | `packages/match/src/order.ts` | canonical class ordinal table | 7 |
 | `packages/match/src/index.ts` + `integration.test.ts` | `matchDeclarations`, `toClassName` | 7 |
-| `packages/match/src/summarise.ts` + test | `summarise`, empty-token-set, unknown-namespace tests | 8 |
+| `packages/match/src/summarise.ts` + test | `summarise`, no-config, namespace, prefix, and availability tests | 8 |
 
 ### Dependencies
 
@@ -76,14 +79,14 @@ pnpm add --filter @fig-tail/match -D fast-check @vitest/coverage-v8
 
 | # | Do this | Files it may touch | Done when |
 |---|---|---|---|
-| 1 | Scaffold the package. Write the public types **first** — plans 004–008 depend on them. Save the 3 CSS fixtures verbatim from the Step-1 examples. | `package.json`, `tsconfig.json`, `src/types.ts`, `fixtures/css/*` | `pnpm --filter @fig-tail/match typecheck` → exit 0; placeholder test asserting `matchDeclarations({}, tokens) === []` passes |
-| 2 | Shorthand expansion, colour canonicalisation, no-op dropping, and the collapse rules (`p-6` not four longhands). | `src/normalise.ts` + test | `test -t expand` → passes, incl. 1/2/3/4-value shorthands, the `border` shorthand, 5 colour notations comparing equal, and the 3-match-1-miss non-collapse case |
-| 3 | Colour matcher: property→prefix map, CIEDE2000, alpha modifier, full confidence ladder, `codeSyntax` hint short-circuit. | `src/matchers/color.ts` + test | `test -t color` → passes, incl. all 6 cases named in Step 3 |
+| 1 | Scaffold the package. Write the public types **first** — plans 004–008 depend on them. Save the 3 CSS fixtures verbatim from the Step-1 examples. | `package.json`, `tsconfig.json`, `src/types.ts`, `fixtures/css/*` | `pnpm --filter @fig-tail/match typecheck` → exit 0; placeholder test asserting `matchDeclarations({}, null) === []` passes |
+| 2 | Shorthand expansion, colour canonicalisation, reset-utility preservation, and collapse rules (`p-6` not four longhands). | `src/normalise.ts` + test | `test -t expand` → passes, incl. 1/2/3/4-value shorthands, the `border` shorthand, 5 colour notations, reset utilities, and the 3-match-1-miss non-collapse case |
+| 3 | Colour matcher: property→utility map, equality-first matching, CIEDE2000 for near misses, alpha modifier, and validated `codeSyntax` token hints. | `src/matchers/color.ts` + test | `test -t color` → passes, incl. all cases named in Step 3 |
 | 4 | Length matchers. **v4 divides by `spacing.base`; v3 looks up `spacing.scale`.** Branch on which is populated, not on `source.major`. | `src/matchers/length.ts` + test | `test -t length` → passes against **both** fixture token sets, incl. all 5 cases in Step 4 |
 | 5 | Typography. Pair `font-size` with `line-height` when the token defines one. | `src/matchers/typography.ts` + test | `test -t typography` → passes, incl. paired, unpaired, and font-stack cases |
 | 6 | Layout (static tables), shadow (normalised whole-string), effects. | `src/matchers/{layout,shadow,effects}.ts` + tests | `test -t layout`, `-t shadow`, `-t effects` → all pass, incl. the colour-notation shadow case |
 | 7 | Compose `matchDeclarations`, apply collapse + dedupe + canonical sort, write `toClassName`. Snapshot the 3 fixtures. | `src/index.ts`, `src/order.ts`, `src/integration.test.ts` | `test -t integration` → passes, asserting the **exact** class string and its order for the card fixture |
-| 8 | `summarise`, plus the two safety tests: empty token set, and unknown namespace **with matching tokens present in the map**. | `src/summarise.ts` + tests | `test -t summarise`, `-t empty-tokens`, `-t unknown-namespace` → pass; `test -- --coverage` ≥90% in `src/matchers`; `du -b dist/index.js` under 61440 |
+| 8 | `summarise`, plus safety tests for no config, unknown namespace, unknown prefix, and disabled core utilities. | `src/summarise.ts` + tests | `test -t summarise`, `-t no-config`, `-t unknown-namespace`, `-t availability` → pass; `test -- --coverage` ≥90% in `src/matchers`; `wc -c < packages/match/dist/index.js` under 61440 |
 
 **Task 8's unknown-namespace test is the safety-critical one.** If it regresses,
 fig-tail emits class names that do not exist in strangers' codebases.
@@ -160,8 +163,9 @@ Things to note, because they are all real and all annoying:
   matching.
 - Colours arrive in mixed notations: `#FFF`, `#E5E7EB`, `rgba(16, 24, 40, 0.05)`,
   and occasionally `linear-gradient(...)`.
-- `font-style: normal` and similar no-op declarations should produce **no class
-  at all**, not `not-italic`. Emitting defaults is noise.
+- Reset-like declarations can be semantically necessary: `font-style: normal`
+  and `text-decoration: none` may override inherited styles. Preserve their
+  Tailwind reset utilities unless the declaration set proves them redundant.
 - Some CSS has no token dimension whatsoever (`display: flex`,
   `flex-direction: column`, `align-items: flex-start`). These are pure static
   lookups and always resolve exactly.
@@ -179,16 +183,20 @@ exposes the variable ID — e.g.
 `.paddingLeft.id`, `.strokes[0].id`. Plan 004 resolves those IDs to `Variable`
 objects and can read `variable.codeSyntax.WEB`.
 
-If plan 007 has stamped that variable, `codeSyntax.WEB` is literally
-`"bg-brand-500"` — the exact class the codebase uses, with **zero inference**.
-If it has not been stamped, the variable's *name* (`brand/500`) is still a much
-better matching key than a hex value.
+If plan 007 has stamped that variable, `codeSyntax.WEB` is a reusable token key
+such as `"brand-500"`, **not** a property-specific class. The engine validates
+that the key exists, confirms the variable/CSS value still agrees, then derives
+`bg-brand-500`, `text-brand-500`, or another utility from the CSS property. A
+single Figma variable can be used for several properties, so treating code
+syntax as a literal class would make at least one use wrong. Existing arbitrary
+WEB syntax that does not name a live token is ignored with a note and falls back
+to value matching.
 
 So the engine's entry point takes an optional per-property hint:
 
 ```ts
 type VariableHint = {
-  /** Variable.codeSyntax.WEB if present — an exact, authored answer. */
+  /** Variable.codeSyntax.WEB if present — a candidate token key, never trusted blindly. */
   codeSyntax?: string
   /** Variable.name, e.g. "brand/500" or "spacing/gutter". */
   name?: string
@@ -203,7 +211,7 @@ Every match returns a confidence level. The ladder, highest to lowest:
 
 | Confidence | Meaning | Example |
 |---|---|---|
-| `exact-variable` | A bound Figma variable carried a `codeSyntax.WEB` value. Authored by a human, not inferred. | `bg-brand-500` |
+| `exact-variable` | A bound variable's WEB code syntax names a token that exists **and** its live value agrees; the property supplies the utility prefix. | `brand-500` + background → `bg-brand-500` |
 | `exact-value` | The CSS value equals a theme token's value. | `#3b82f6` → `bg-brand-500` |
 | `name-match` | A bound variable's *name* maps cleanly to a token that exists in the theme, and their values also agree. | `brand/500` → `bg-brand-500` |
 | `nearest` | No exact match, but a token is within tolerance. **This is the drift signal.** | `#3b82f1` → nearest `brand-500`, ΔE 0.4 |
@@ -227,7 +235,7 @@ colors ∈ unknownNamespaces,  background: #3b82f6   →   bg-[#3b82f6]   (arbit
 ```
 
 The reason is the whole shape of this product's risk. `bg-[#3b82f6]` compiles in
-every project on earth. `bg-blue-500` compiles to **nothing** in a project that
+standard, unprefixed projects. `bg-blue-500` compiles to **nothing** in a project that
 replaced its palette — the developer pastes it, no styling appears, and there is
 no error message anywhere to explain why. fig-tail ships publicly, so the
 projects it runs against are ones nobody here can inspect; the only safe
@@ -243,18 +251,22 @@ Two refinements:
   `arbitrary`. Plan 001's `TokenSet` distinguishes the two cases; honour the
   distinction.
 
-### The empty token set must work
+### No-config mode must work
 
 Plan 003 defines a tier-3 state: **no Tailwind config at all**. In that state the
-plugin still runs, with an empty `TokenSet`, and every value falls through to
-`arbitrary` — `bg-[#3b82f6]`, `p-[24px]`. That is exactly what every other
+plugin still runs, passing `tokens: null`, and every supported value falls
+through to labelled generic `arbitrary` output — `bg-[#3b82f6]`, `p-[24px]`.
+That is exactly what every other
 Figma→Tailwind plugin produces, so fig-tail is never *worse* than the
 alternatives for someone who has just installed it, and the surfaces show a
 banner explaining how to get real token names.
 
-So: `matchDeclarations` must accept a `TokenSet` with empty token maps and
-return sensible `arbitrary` results without special-casing at the call site. Do
-not throw, do not return `[]`, and do not require the caller to check first.
+So: `matchDeclarations` accepts `TokenSet | null`. Do not invent a schema-valid
+empty theme. With `null`, return generic arbitrary results without requiring the
+caller to branch. These classes are value-preserving for standard unprefixed
+Tailwind, but are **not config-confirmed**: a project may use a prefix or disable
+a utility. Put that limitation in the result note so surfaces can label it.
+Do not throw and do not return `[]` for non-empty CSS.
 Layout utilities (`flex`, `items-center`) are unaffected by an empty theme and
 must still resolve exactly. Step 7 tests this.
 
@@ -274,8 +286,10 @@ perception and will pick visually distant tokens over near ones. Use
 
 Thresholds, configurable but with these defaults:
 
-- ΔE ≤ **0.5** → treat as `exact-value` (absorbs rounding and 8-bit truncation)
-- ΔE ≤ **2.0** → `nearest` (a "just noticeable difference" is ~1.0; 2.0 catches
+- **Exact means canonical RGBA equality**, after both values are converted to
+  the same sRGB byte representation. A non-identical colour is never promoted
+  to exact merely because its perceptual distance is small.
+- 0 < ΔE ≤ **2.0** → `nearest` (a "just noticeable difference" is ~1.0; 2.0 catches
   real drift while excluding genuinely different colours)
 - ΔE > 2.0 → `arbitrary`
 
@@ -343,7 +357,7 @@ utility prefix — do not take a dependency on the Prettier plugin.
 | Typecheck | `pnpm -r typecheck` | exit 0 |
 | Test this package | `pnpm --filter @fig-tail/match test` | all pass |
 | Coverage | `pnpm --filter @fig-tail/match test -- --coverage` | ≥90% statements in `src/matchers` |
-| Bundle size probe | `pnpm --filter @fig-tail/match build && du -b packages/match/dist/index.js` | under 60 kB minified |
+| Bundle size probe | `pnpm --filter @fig-tail/match build && wc -c < packages/match/dist/index.js` | under 60 kB minified |
 
 Reference documentation:
 
@@ -421,31 +435,38 @@ export type MatchOptions = {
   includeLayout: boolean
   /** Treat 'nearest' as a match and emit the class. Default FALSE. */
   acceptNearest: boolean
-  /** Class prefix from the theme, e.g. "tw" → "tw:bg-brand-500". When plan 001
-   *  could not resolve the prefix it marks every namespace unknown, so this
-   *  being null never results in silently unprefixed output. */
-  prefix: string | null
   /** ΔE and px tolerances; defaults per "Context". */
-  tolerance: { colorExact: number; colorNearest: number; lengthExactPx: number; lengthNearestPx: number }
+  tolerance: { colorNearest: number; lengthExactPx: number; lengthNearestPx: number }
 }
 
 /** The main entry point. */
 export function matchDeclarations(
   css: Record<string, string>,
-  tokens: TokenSet,
+  tokens: TokenSet | null,
   options?: Partial<MatchOptions>,
   hints?: Record<string, VariableHint>,   // keyed by CSS property
 ): MatchResult[]
 
-/** Convenience: sorted, deduped class string from results. */
-export function toClassName(results: MatchResult[]): string
+/** Sorted, deduped class string. Excludes `nearest` unless explicitly opted in. */
+export function toClassName(
+  results: MatchResult[],
+  options?: { acceptNearest?: boolean },
+): string
 ```
+
+Prefixing and core-plugin availability come from `tokens.source`, never from a
+separate caller option. Apply a known v3 string prefix exactly as configured
+(`tw-` + `bg-red-500` → `tw-bg-red-500`); apply a known v4 variant prefix as
+`tw:bg-red-500`. If prefix status is `unknown`, return `none` for every utility.
+Before returning either a named or arbitrary class, map the CSS property to its
+v3 core-plugin name and honor `source.corePlugins`; a disabled/unknown utility
+returns `none` without suppressing other utilities that share the token map.
 
 Also create `packages/match/fixtures/css/*.json` — start with the three real
 `getCSSAsync()` outputs quoted in "Context" above, saved verbatim.
 
 **Check**: `pnpm --filter @fig-tail/match typecheck` → exit 0, and a placeholder
-test asserting `matchDeclarations({}, tokens)` returns `[]` passes.
+test asserting `matchDeclarations({}, null)` returns `[]` passes.
 
 ### Step 2: Implement shorthand expansion and the confidence plumbing
 
@@ -459,8 +480,12 @@ Before any matching: normalise the input.
 - Normalise colours to a canonical form (lowercase 8-digit hex or an
   `{r,g,b,a}` record) before comparison; `#FFF`, `#ffffff`, `rgb(255 255 255)`
   and `white` must all compare equal.
-- Drop no-op declarations (`font-style: normal`, `text-decoration: none`,
-  `border-style: solid` when there is no width) — return nothing, not a class.
+- Do not drop reset declarations just because they resemble defaults.
+  `font-style: normal` and `text-decoration: none` can override inherited
+  styling and map to `not-italic` / `no-underline`. Emit them when a Tailwind
+  utility is required to reproduce the reported CSS. Drop only declarations
+  proven redundant within the same normalized declaration set (for example a
+  border style with no border width and no visible border).
 
 Then implement the **collapse rules**: four equal longhands collapse back to
 `p-6`, not `pt-6 pr-6 pb-6 pl-6`. Vertical/horizontal pairs collapse to
@@ -481,8 +506,10 @@ modifier, and the full confidence ladder including `exact-variable` from a hint.
 
 **Check**: `pnpm --filter @fig-tail/match test -t color` → passes, including:
 `#3b82f6` → `bg-brand-500` (`exact-value`); a hint with
-`codeSyntax: "bg-brand-500"` short-circuits to `exact-variable` without any
-colour maths; `#3b82f1` → `nearest` with a populated `nearest` field and a ΔE
+  `codeSyntax: "brand-500"` becomes `exact-variable` only when that token exists
+  and its value equals the CSS value; an unrelated or stale WEB syntax falls
+  back to value matching with a note; `#3b82f1` → `nearest` with a populated
+  `nearest` field and a ΔE
 under 2.0; `#a1b2c3` → `arbitrary` `bg-[#a1b2c3]`; `rgba(59,130,246,0.5)` →
 `bg-brand-500/50`; `allowArbitrary: false` turns the `#a1b2c3` case into `none`.
 
@@ -534,7 +561,9 @@ the Figma value differ only in colour notation
 ### Step 7: Wire `matchDeclarations` and `toClassName`, and sort output
 
 Compose the matchers, apply collapse rules, dedupe, and sort by the canonical
-ordinal table. `toClassName` joins with single spaces and applies the prefix.
+ordinal table. `toClassName` joins with single spaces, filters `nearest` unless
+the caller explicitly opts in, and applies the major-specific prefix exactly
+once.
 
 Then run the whole thing against the three captured fixtures from Step 1 and
 snapshot the results.
@@ -555,12 +584,12 @@ Export `summarise(results: MatchResult[]): MatchSummary` returning counts per
 confidence level and the list of unmatched properties. Plan 006's linter is
 built on this; plans 004 and 005 use it to decide whether to show a warning banner.
 
-Also add the **empty-token-set test** here: run `matchDeclarations` over all
-three captured fixtures with a `TokenSet` whose token maps are empty, and assert
-that every value produces an `arbitrary` result with a valid class, that layout
-utilities still resolve `exact-value`, and that nothing throws.
+Also add the **no-config test** here: run `matchDeclarations` over all three
+captured fixtures with `tokens: null`, and assert that supported values produce
+generic `arbitrary` results with a note saying they are not config-confirmed,
+layout utilities still resolve, and nothing throws.
 
-And the **unknown-namespace test**, which is the safety-critical one: build a
+Add the **unknown-namespace test**, which is safety-critical: build a
 `TokenSet` that *has* a full colour palette but lists `colors` in
 `unknownNamespaces`, and assert that `background: #3b82f6` returns
 `bg-[#3b82f6]` and **never** a token name — even though a matching token is
@@ -571,7 +600,10 @@ fig-tail starts emitting dead classes into other people's codebases. This is pla
 and "the plugin crashes with no setup".
 
 **Check**: `pnpm --filter @fig-tail/match test -t summarise` and
-`-t empty-tokens` → pass, and `pnpm --filter @fig-tail/match test -- --coverage`
+`-t no-config`, `-t unknown-namespace`, and `-t availability` → pass. The
+availability suite covers known v3 and v4 prefixes, unknown prefix, a disabled
+`backgroundColor` with an enabled `textColor`, and `corePlugins.mode: unknown`.
+Then `pnpm --filter @fig-tail/match test -- --coverage`
 reports ≥90% statement coverage in `src/matchers`.
 
 ## Validation plan
@@ -585,7 +617,7 @@ reports ≥90% statement coverage in `src/matchers`.
   token set, feeding its own hex back in must produce `exact-value` and the
   correct class. Same for every length token. This catches whole classes of
   rounding and key-flattening bugs that hand-written cases miss.
-- **Bundle size probe**: `du -b packages/match/dist/index.js` under 60 kB
+- **Bundle size probe**: `wc -c < packages/match/dist/index.js` under 60 kB
   minified. If culori pulls in too much, switch to importing from `culori/fn`
   and re-measure.
 - **No-Figma assertion**: a test that greps the built bundle for the strings
@@ -600,13 +632,15 @@ ALL must hold.
 - [ ] Every property group in the "Property coverage" table is implemented, or
       explicitly returns `none` with a note explaining why
 - [ ] All six confidence levels are reachable and each has at least one test
-- [ ] An empty `TokenSet` produces `arbitrary` results for every value, still
-      resolves layout utilities exactly, and never throws
+- [ ] `tokens: null` produces labelled generic arbitrary results for supported
+      values, still resolves layout utilities, and never throws
 - [ ] A namespace in `unknownNamespaces` yields arbitrary values **even when
       matching tokens are present in the map** — tested explicitly
 - [ ] A namespace unknown because its core plugin is disabled yields `none`, not
       an arbitrary value
 - [ ] An unresolved `prefix` never produces unprefixed class names
+- [ ] v3 and v4 prefixes render with their distinct documented syntax, and a
+      disabled core plugin suppresses only its own utility family
 - [ ] `nearest` results always populate the `nearest` field, and never emit a
       class unless `acceptNearest: true`
 - [ ] The integration snapshot for the card fixture matches the exact expected
@@ -615,7 +649,8 @@ ALL must hold.
 - [ ] `packages/match/dist/index.js` is under 60 kB minified
 - [ ] The bundle contains no reference to `figma.` or `@figma/`
 - [ ] `packages/theme` is unchanged
-      (`git diff --stat <base> -- packages/theme` → empty)
+      (`git diff --exit-code "$(git merge-base HEAD main)"..HEAD -- packages/theme`
+      → exit 0 on the plan branch)
 - [ ] `plans/README.md` status row for 002 updated
 
 ## STOP conditions
@@ -625,11 +660,9 @@ Stop and report back — do not improvise — if:
 - **The token schema from plan 001 is missing something a matcher needs.**
   Changing it is a breaking change for plan 003, which stores and validates it.
   Report what is missing and what you would add; do not edit `packages/theme`.
-- The ΔE thresholds produce obviously wrong matches against the real fixture
-  theme — e.g. two palette steps in the same family fall within ΔE 0.5 of each
-  other, making `exact-value` ambiguous. That means the thresholds need
-  redesigning (probably: prefer exact hex equality first, and only fall back to
-  ΔE), which is a design decision to surface, not to guess at.
+- Canonical RGBA equality cannot be made stable across the v3/v4 fixture corpus,
+  or a non-identical color reaches `exact-value`. Exact matching must remain
+  equality-based; do not loosen it to a ΔE threshold to make tests pass.
 - The bundle exceeds **100 kB** minified even after tree-shaking culori. The
   fallback is a cheaper colour metric (weighted RGB distance) at the cost of
   perceptual accuracy — implement it behind a flag so the measurement is real,

@@ -1,11 +1,11 @@
 # Plan 003: Scaffold the plugin shell, dual capability, and config storage
 
-> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
-> toolchain, commands, conventions, and failure handling shared by every plan.
-> Then read this plan in full and work through its **Build sheet** below, one
+> **Executor instructions**: This plan is self-contained. Read it in full, then
+> work through its **Build sheet** below, one
 > task at a time, confirming each *Done when* before starting the next. Commit
 > after each task. When done, update the status row for this plan in
-> `plans/README.md`.
+> `plans/README.md`. `plans/EXECUTOR-GUIDE.md` is optional expanded guidance;
+> this plan wins if they conflict.
 >
 > **Structure of this file**: the Build sheet is what you *do*. Everything after
 > it is reference — read a section when a task points you there. "Steps" gives
@@ -19,10 +19,11 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**:
-> `git diff --stat <SHA at which plan 001 completed>..HEAD -- packages/theme`
-> This plan calls `resolveTheme()` and stores its `TokenSet`. If either has
-> changed since 001 landed, read the changes before starting.
+> **Drift check (run first)**: this plan was written at commit `2157dc6`, before
+> plan 001's package existed. Confirm plan 001 is `DONE`, run
+> `git diff --stat 2157dc6..HEAD -- packages/theme`, and compare its live exports
+> with the contracts quoted below. A non-empty diff is expected; a contract
+> mismatch is a STOP condition.
 
 ## Status
 
@@ -34,13 +35,15 @@
   any developer can add the config themselves without edit access.
 - **Depends on**: 001
 - **Category**: dx
-- **Grounded at**: the commit at which plan 001 landed.
+- **Planned at**: commit `2157dc6`, 2026-07-31 — dependency contract is prospective.
 
 ## Build sheet
 
-**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
-commands, TypeScript rules, commit format, and what to do when a check fails —
-none of which is repeated here.
+Use Node 20+ and pnpm. Copy package scripts and strict TypeScript settings from
+`packages/theme` where applicable; the plugin is the documented exception that
+builds with `build.mjs`. Use named exports, no `any`, no non-null assertions,
+and colocated Vitest tests. Before every commit run
+`pnpm -r typecheck && pnpm -r lint && pnpm -r test`.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command or a named in-Figma check; it must produce the stated result before you
@@ -82,10 +85,10 @@ Plus `@fig-tail/theme` as `workspace:*`.
 | # | Do this | Files it may touch | Done when |
 |---|---|---|---|
 | 1 | Scaffold the package and `build.mjs` (two esbuild passes; the UI must be inlined into one HTML file). | `package.json`, `tsconfig.json`, `build.mjs` | `pnpm --filter @fig-tail/plugin build` → exit 0; `dist/main.js` and `dist/ui.html` exist; `dist/ui.html` has `<script>` with **no** `src=` |
-| 2 | Write `manifest.json` exactly as Step 2 gives it, including `capabilities: ["codegen","inspect"]`. | `manifest.json` | Import into Figma desktop with no errors, and **all three** surfaces reachable: design-editor plugin list, Dev Mode Code-section dropdown ("Tailwind"), Dev Mode Inspect-panel plugin list |
-| 3 | Mode branching + three stubs. **Never call `figma.showUI` inside the generate callback** — use the `preferenceschange` handler. | `src/main.ts`, `mode-dev.ts`, `mode-design.ts` | By hand in Figma: Dev Mode Code section shows the fig-tail message; "Configure Tailwind config…" opens the iframe; Inspect panel shows the placeholder; design editor opens the same UI |
+| 2 | Register a development plugin in Figma to obtain a real ID, then write `manifest.json` as Step 2 specifies, including both capabilities. | `manifest.json` | Import into Figma desktop with no manifest errors, and all three entry surfaces are reachable |
+| 3 | Branch on both `figma.editorType` **and** `figma.mode`; add design, codegen, and inspect stubs. Never call `figma.showUI` inside `generate`. | `src/main.ts`, `mode-dev.ts`, `mode-design.ts` | By hand: Code section shows the codegen stub; the action opens setup; Inspect mode shows the iframe placeholder; design editor opens setup |
 | 4 | Config ingestion. Run `resolveTheme` **in the UI iframe**, not the sandbox. Handle `missing-import` by asking for the named file. | `src/setup.ts` + test | Unit tests for all 4 resolver outcomes pass; each plan-001 fixture config dropped in produces that fixture's known result |
-| 5 | Storage: the **three-tier ladder** (document / user / none), gzip + base64 + ≤80 kB chunks, meta written last, stale chunks cleared, module-level cache. | `src/storage.ts` + test | Unit tests pass: 250 kB round-trip; 4→2 chunk shrink leaves no readable `tokens.2`; truncated read returns `null` + diagnostic. Then in Figma: drop a fixture, reload, `readConfig()` returns the same token count |
+| 5 | Storage: the **three-tier ladder** (document / user / none), stable document config ID, gzip + base64 + ≤80 kB chunks, meta written last, stale chunks cleared, module-level cache. | `src/storage.ts` + test | Unit tests pass: 250 kB round-trip; stable document ID; 4→2 shrink clears stale chunks; truncated read degrades with a diagnostic. Then reload in Figma and verify the same token count |
 | 6 | Setup UI, **six** states. Must open from Dev Mode as well as the design editor. Include the credential scan and the `unknownNamespaces` callout. | `src/ui/**` | All six states walked by hand in Figma, incl. the credential warning on a config containing `apiKey: "sk-live-abc123"` |
 | 7 | Write-safety: the ESLint rule **and** the bundle test. Exactly **one** allowlist entry (`setSharedPluginData`). | `eslint.config.js`, `src/write-safety.test.ts` | Both pass. Then add `figma.currentPage.selection[0].name = 'x'` to `main.ts` → **both fail**. Remove → both pass. Record this in the commit message. |
 | 8 | Verify the ladder: every tier and transition in Step 8(a) by hand; then the cross-user read in 8(b). | none (verification only) | 8(a) fully verified and recorded. 8(b) passed **or** explicitly recorded as unverified — either is acceptable |
@@ -143,8 +146,11 @@ list in the same commit.
 3. **`inspect`** runs in the **Inspect panel** itself; its iframe takes the full
    height and width of the panel. —
    [Working in Dev Mode](https://developers.figma.com/docs/plugins/working-in-dev-mode)
-4. The `generate` callback has a **hard 15-second timeout**. It may be async. —
-   [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on)
+4. Figma's API reference says the `generate` callback has a 15-second timeout,
+   while its codegen guide says 3 seconds. Use the stricter **3-second** budget
+   and a 2-second internal deadline until an in-product measurement resolves the
+   discrepancy. — [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on)
+   · [Codegen plugins](https://developers.figma.com/docs/plugins/codegen-plugins)
 5. **`figma.showUI` is not allowed inside the `generate` callback.** Call it
    outside and use `figma.ui.postMessage`, or call it from a `preferenceschange`
    handler. — [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on)
@@ -191,7 +197,7 @@ labelled so the user knows which one they are on.
 |---|---|---|---|---|
 | 1 (preferred) | Document storage — `setSharedPluginData` on `figma.root` | whoever owns the file, once | yes, to **write** | "Using the config saved on this file" |
 | 2 (fallback) | Per-user storage — `figma.clientStorage` | any user, including a Dev-seat viewer | **no** | "Using your personal config — this file has no shared one" |
-| 3 (degraded) | No config at all | — | — | "No Tailwind config — showing raw values. Add your config for real token names." |
+| 3 (degraded) | No config at all | — | — | "No Tailwind config — generic Tailwind syntax; project prefix/settings may require changes. Add your config for confirmed names." |
 
 **Tier 2 is the answer to the unverified question.** The setup UI is reachable
 from Dev Mode (Step 3, via the `codegenPreferences` action), and `clientStorage`
@@ -201,11 +207,11 @@ everything works from then on. Paste-once-for-the-team is the *preferred* path,
 not a *required* one.
 
 **Tier 3 keeps the plugin useful with no setup whatsoever.** With no config, the
-matcher still runs with an empty token set and emits arbitrary values
-(`bg-[#3b82f6]`, `p-[24px]`) — which is exactly what every other Figma→Tailwind
-plugin produces, so fig-tail is never *worse* than the alternatives, and the
-banner tells the user how to make it better. Someone who installs the plugin out
-of curiosity gets something immediately.
+matcher receives `tokens: null` and returns labelled generic suggestions such as
+`bg-[#3b82f6]` and `p-[24px]`. They preserve values under standard unprefixed
+Tailwind, but they are not project-confirmed: a prefix, disabled core plugin, or
+future-major behavior can require adaptation. The banner states that limitation
+and tells the user how to load a config for confirmed output.
 
 **Precedence when both tier 1 and tier 2 exist**: the document config wins, so a
 team's shared truth is the default. The UI shows a one-line notice and a switch
@@ -301,7 +307,7 @@ are both fine; React is unnecessary weight for a setup form. Whatever you choose
 | Build | `pnpm --filter @fig-tail/plugin build` | `dist/main.js`, `dist/ui.html` |
 | Write-safety | `pnpm --filter @fig-tail/plugin lint` | exit 0 |
 | Bundle audit | `pnpm --filter @fig-tail/plugin test -t write-safety` | passes |
-| Bundle size | `du -b packages/plugin/dist/main.js packages/plugin/dist/ui.html` | main under 250 kB, ui under 400 kB |
+| Bundle size | `wc -c packages/plugin/dist/main.js packages/plugin/dist/ui.html` | main under 250 kB, ui under 400 kB |
 
 Needed on hand:
 
@@ -367,10 +373,16 @@ a `--watch` flag; the reload loop is frequent.
 
 ### Step 2: Write the manifest with both Dev Mode capabilities
 
+Before hand-writing the manifest, use Figma desktop's development-plugin flow
+to create/register **fig-tail** and let Figma generate a manifest with the real
+development plugin ID. Copy that exact ID into the repository manifest. A
+guessed value or publish-time placeholder is not importable and is not an
+acceptable intermediate state.
+
 ```jsonc
 {
   "name": "fig-tail",
-  "id": "<assigned by Figma on first publish — placeholder for now>",
+  "id": "<exact ID from the generated development-plugin manifest>",
   "api": "1.0.0",
   "main": "dist/main.js",
   "ui": "dist/ui.html",
@@ -402,13 +414,22 @@ plugins would change the whole program's shape.
 
 ### Step 3: Implement mode branching and the three stubs
 
-In `src/main.ts`, branch on `figma.editorType`:
+In `src/main.ts`, branch on the pair `(figma.editorType, figma.mode)`:
 
 - `'figma'` → `figma.showUI(__html__, { width: 520, height: 640 })`, hand off to
-  `mode-design.ts`.
-- `'dev'` → register `figma.codegen.on('generate', …)` and
+  `mode-design.ts`, and post an initial `{ view: 'setup' }` route after the UI is
+  ready.
+- `'dev'` + `'codegen'` → register `figma.codegen.on('generate', …)` and
   `figma.codegen.on('preferenceschange', …)`; the latter opens the setup UI when
-  `propertyName === 'settings'`. Also render the inspect-panel placeholder.
+  `propertyName === 'settings'` and then posts `{ view: 'setup' }`.
+- `'dev'` + `'inspect'` → open the single bundled iframe and post
+  `{ view: 'inspect-placeholder' }`. Do not register the Codegen callbacks on
+  this path.
+- Any other pair → close with a concise unsupported-mode message.
+
+Use one inlined `ui.html` and explicit initial-route messages. Codegen and
+Inspect are separate invocations; do not try to render the inspect iframe from
+the Codegen branch.
 
 The generate stub returns one `CodegenResult`:
 
@@ -474,8 +495,9 @@ Write path:
    listing the first three failures.
 2. `JSON.stringify` → gzip (`fflate`) → base64.
 3. Split into ≤80 kB chunks; write each as `tokens.<i>` / `source.<i>`.
-4. Write `meta` **last**, containing `{ schemaVersion, tokenChunks, sourceChunks,
-   byteLength, checksum, storedAt, tailwindMajor, tokenCount, unresolvedCount }`.
+4. Write `meta` **last**, containing `{ schemaVersion, documentConfigId,
+   tokenChunks, sourceChunks, byteLength, checksum, storedAt, tailwindMajor,
+   tokenCount, unresolvedCount }`.
    Writing meta last makes a partial write detectable.
 5. **Clear stale chunks**: if a previous write used more chunks, overwrite the
    extras with `''`. Forgetting this leaves garbage a future read may
@@ -483,15 +505,21 @@ Write path:
 
 Read path: read `meta`, read the stated chunk counts, concatenate,
 base64-decode, gunzip, parse, validate. Any failure returns `null` **plus a
-diagnostic reason** — never throw into the codegen callback, which has a
-15-second budget and no error UI.
+diagnostic reason** — never throw into the codegen callback, whose conservative
+budget is 3 seconds and which has no error UI.
+
+`documentConfigId` is a random stable ID generated on the first successful
+document write and preserved on replacements. Public plugins cannot rely on
+`figma.fileKey`, which is restricted to private plugins. Plan 006 uses this ID
+for per-document dismissal state when a shared config exists.
 
 **Implement the full three-tier ladder from "Context", not just a fallback:**
 
 - `writeConfig(payload, { target })` writes to `'document'` or `'user'`. Choosing
-  `'document'` without edit access does not error out — it writes to `'user'`
-  instead and returns `{ writtenTo: 'user', reason: 'no-edit-access' }`, so the
-  UI can explain rather than fail.
+  `'document'` without edit access returns
+  `{ writtenTo: null, reason: 'no-edit-access', needsPersonalConfirmation: true }`.
+  The UI then offers the personal target and writes there only after a second,
+  explicit click. Never silently change the requested storage scope.
 - `readConfig()` reads document storage first, then user storage, and **always
   returns the tier it used**: `{ tokens, source: 'document' | 'user',
   overridden: boolean }`. Return `null` only when neither exists — that is
@@ -534,7 +562,11 @@ Six states in the iframe:
    report, because it is the one that changes output quality most: "fig-tail
    could not read your **colours**, so it will show raw values like `#3b82f6`
    for them rather than token names." Name the affected namespaces. This is the
-   whole payoff of plan 001 Step 8; do not bury it. Offer Save and Cancel.
+   whole payoff of plan 001 Step 8; do not bury it. Before the document-target
+   button (label it **Apply to file**, not the generic **Save**), show the exact
+   dry-run storage diff: namespace, keys added/replaced/cleared, compressed byte
+   counts, and stored source filenames. Offer Apply to file, Save personally,
+   and Cancel as distinct actions.
 4. **Configured** — the same summary, plus **which tier is in use**, stated
    plainly ("Saved on this file — everyone inspecting it gets this" versus
    "Saved in your settings — only you see this"), a **staleness warning when
@@ -554,7 +586,7 @@ tokens **without** the source.
 Plain and clear beats polished. This screen is used once per file per config
 change.
 
-**Check**: in Figma desktop on the scratch file, walk all five states by hand:
+**Check**: in Figma desktop on the scratch file, walk all six states by hand:
 drop a clean fixture (→ review → configured); drop a fixture with a known
 function-valued theme key (→ the report names it with an actionable message);
 drop a v4 CSS with `@config` (→ asks for the second file); paste random text (→ a
@@ -700,7 +732,7 @@ Stop and report back — do not improvise — if:
 - `figma.showUI` from the `preferenceschange` handler does not work as
   documented — there would then be no way to configure the plugin from Dev Mode.
 - The gzipped fixture token set still needs more than ~8 chunks **and**
-  `pruneDefaults` does not bring it down. Read latency inside a 15-second codegen
+  `pruneDefaults` does not bring it down. Read latency inside a 3-second codegen
   budget becomes a real risk, and a leaner schema is a plan 001 change. (Fewer
   than 8 chunks: proceed. This is a threshold, not a hard failure.)
 - Running `resolveTheme` in the UI iframe is blocked by the iframe's CSP. (If it
@@ -717,7 +749,7 @@ Stop and report back — do not improvise — if:
 
 - **Plan 004** replaces the codegen stub with real output. It calls `readConfig()`
   on every generate — the module-level cache from Step 5 is what keeps that
-  inside the 15-second budget. Do not remove it. Plans 004 and 005 are both
+  inside the conservative 3-second budget. Do not remove it. Plans 004 and 005 are both
   responsible for **surfacing the tier label**, and for handling tier 3 by
   emitting arbitrary values with a banner rather than refusing to run.
 - **Plan 005** replaces the inspect-panel placeholder with the real surface, and

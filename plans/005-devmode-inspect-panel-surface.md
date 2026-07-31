@@ -1,11 +1,11 @@
 # Plan 005: Ship the Dev Mode Inspect-panel surface
 
-> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
-> toolchain, commands, conventions, and failure handling shared by every plan.
-> Then read this plan in full and work through its **Build sheet** below, one
+> **Executor instructions**: This plan is self-contained. Read it in full and
+> work through its **Build sheet** below, one
 > task at a time, confirming each *Done when* before starting the next. Commit
 > after each task. When done, update the status row for this plan in
-> `plans/README.md`.
+> `plans/README.md`. `plans/EXECUTOR-GUIDE.md` is optional expanded guidance;
+> this plan wins if they conflict.
 >
 > **Structure of this file**: the Build sheet is what you *do*. Everything after
 > it is reference — read a section when a task points you there. "Steps" gives
@@ -19,11 +19,11 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**:
-> `git diff --stat <SHA at which plan 004 completed>..HEAD -- packages/plugin/src`
-> This plan reuses plan 004's resolution and rendering pipeline. If
-> `src/mode-dev.ts`, `src/hints.ts`, or `src/render.ts` have changed, read them
-> before starting.
+> **Drift check (run first)**: this plan was written at commit `2157dc6`, before
+> plan 004 existed. Confirm 004 is `DONE`, locate its landing commit with
+> `git log --oneline -- plans/004-devmode-codegen-panel.md packages/plugin/src`,
+> and compare `mode-dev.ts`, `hints.ts`, and `render.ts` with the prospective
+> contracts below. A mismatch is a STOP condition; do not use a placeholder SHA.
 
 ## Status
 
@@ -34,13 +34,14 @@
   impossible rather than a matter of discipline.
 - **Depends on**: 004
 - **Category**: dx
-- **Grounded at**: the commit at which plan 004 landed.
+- **Planned at**: commit `2157dc6`, 2026-07-31 — dependency contract is prospective.
 
 ## Build sheet
 
-**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
-commands, TypeScript rules, commit format, and what to do when a check fails —
-none of which is repeated here.
+Use Node 20+ and pnpm. Preserve plan 004's package scripts and strict TypeScript
+settings; use named exports, no `any`, no non-null assertions, and colocated
+Vitest tests. Before every commit run
+`pnpm -r typecheck && pnpm -r lint && pnpm -r test`.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command or a named in-Figma check; it must produce the stated result before you
@@ -72,7 +73,7 @@ No new dependencies.
 |---|---|---|---|
 | 1 | Answer the 5 discovery questions in Step 1 by hand and write them up with screenshots. **Do not skip to task 2 first.** | `notes/devmode-discovery.md` | The file answers all 5 and ends with **one sentence** stating what a first-time developer must do. Plan 010's README is built from that sentence |
 | 2 | **Refactor before building anything new.** Extract `resolveNode` into `src/pipeline.ts`; point `mode-dev.ts` at it. Add the test asserting `matchDeclarations` is imported in **exactly one file**. | `src/pipeline.ts`, `mode-dev.ts`, `render.ts` + test | The single-import-site test passes, **and** plan 004's full 9-node matrix produces byte-identical output to `fixtures/figma/README.md`. Any difference is a refactor bug, not an improvement |
-| 3 | Build the panel: config status (3 tiers + `unknownNamespaces`), header w/ multi-select stepper, all-classes + format toggle, grouped classes w/ confidence badges, needs-attention, empty state. Debounce `selectionchange` at ~120 ms. | `src/inspect/**`, `src/ui/inspect/**` | Every state walked by hand. **Every copy button pasted into a text editor and compared** — they must copy exactly what they display |
+| 3 | Build the panel: config status (3 tiers + `unknownNamespaces`), header w/ multi-select stepper, all-classes + format toggle, grouped classes w/ confidence badges, needs-attention, empty state. Debounce `selectionchange` at ~120 ms and enforce latest-request-wins. | `src/inspect/**`, `src/ui/inspect/**` | Every state walked by hand. Rapid A→B selection can never render stale A after B. **Every copy button pasted into a text editor and compared** — they must copy exactly what they display |
 | 4 | Add the cross-surface consistency test, then verify by hand across all 9 nodes. | `src/consistency.test.ts` | Test passes; the 9-node hand comparison shows zero differences; comparison recorded in the commit message |
 | 5 | Measure warm / rapid / cold. Verify the 3 fallback modes on **both** surfaces. | `src/inspect/**` | Warm <250 ms, cold <1 s, rapid selection stays responsive. No config → arbitrary classes + banner on both surfaces, never an error |
 | 6 | README "Two ways to see it" — Code section and Inspect panel, with task 1's sentence and a screenshot of each. | `README.md` | Someone followed it from a fresh Figma session and reached class names by **both** routes |
@@ -96,8 +97,10 @@ centre, and forum. If it does not persist, every developer re-selects it on ever
 file, which is exactly the hunting this program exists to eliminate.
 
 The `inspect` capability is the answer to that risk. It is a separate,
-persistent surface: a full-height panel in Dev Mode's Inspect panel that does not
-depend on a dropdown. Org admins can **pin** it so it appears automatically for
+full-height surface in Dev Mode's Inspect panel that does not depend on the Code
+language dropdown. Whether an ordinary user must launch/select it again is an
+in-product discovery question for Step 1; do not call it persistent until that
+test proves it. Org admins can **pin** it so it appears automatically for
 every developer in the organisation — and while the repo owner's account cannot
 pin (no Organization tier), this plugin is being published publicly, and org-tier
 teams are exactly the ones who will install it.
@@ -141,9 +144,9 @@ contradicts a line here, the page wins; fix the line in the same commit.
    for all users, and can set a default code language. Both are
    Organization/Enterprise features. —
    [Manage Dev Mode settings for an organization](https://help.figma.com/hc/en-us/articles/22927410880535-Manage-Dev-Mode-settings-for-an-organization)
-7. The **15-second `generate` timeout applies to codegen only.** This surface has
-   no such hard limit — but it must stay responsive, and it shares the sandbox
-   with Figma's own UI. —
+7. The conflicting 3-/15-second `generate` timeout applies to Codegen only.
+   This surface has no documented equivalent hard limit — but it must stay
+   responsive, and it shares the sandbox with Figma's own UI. —
    [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on)
 
 Background reading: [Guide to Dev Mode](https://help.figma.com/hc/en-us/articles/15023124644247-Guide-to-Dev-Mode)
@@ -156,9 +159,10 @@ sessions.** No documentation found either way. Step 1 tests it and records the
 result.
 
 This is deliberately non-blocking, because **this plan is the fallback.**
-Whichever way persistence resolves, the Inspect panel is a persistent surface
-that does not depend on a dropdown, so at least one route always works without
-hunting. The answer changes what the README tells developers to do *first*
+Whichever way persistence resolves, the Inspect panel is a second surface that
+does not depend on the Code language dropdown. Step 1 must document the actual
+ordinary-user launch path; only org pinning may be described as automatic
+without further evidence. The answer changes what the README tells developers to do *first*
 (plan 010), not whether anything ships. If Step 1 cannot be run at all — no
 second account, say — record that and carry on.
 
@@ -185,8 +189,7 @@ all trust in the tool, and that failure would be invisible in testing because it
 only appears when the two code paths drift months apart.
 
 Therefore: extract the shared work into `src/pipeline.ts` —
-`resolveNode(node, options): Promise<NodeResult>` — returning `{ results,
-summary, className, tokens }`. Both `mode-dev.ts` (codegen) and this surface call
+`resolveNode(node, options): Promise<NodeResult>`. Both `mode-dev.ts` (codegen) and this surface call
 it. **Neither may call `matchDeclarations` directly.** Enforced by a test in
 Step 2.
 
@@ -200,7 +203,10 @@ The iframe needs to know what is selected and re-render when it changes.
 - Sandbox: `figma.on('selectionchange', …)` → post the resolved `NodeResult` to
   the iframe.
 - **Debounce** at ~120 ms. Dragging across a canvas fires selection changes
-  rapidly, and resolving on every one will make Figma feel sluggish.
+  rapidly, and resolving on every one will make Figma feel sluggish. Debounce
+  alone is insufficient because async request A can finish after request B;
+  increment a request sequence and discard every result that is no longer the
+  latest before posting it to the iframe.
 - Handle multi-select explicitly: Figma's codegen surface is handed a single
   node, but `figma.currentPage.selection` may hold several. Show the first
   node's classes with a clear "3 layers selected — showing <name>" header and a
@@ -236,7 +242,7 @@ day; it should not compete with it.
 | Test | `pnpm --filter @fig-tail/plugin test` | all pass |
 | Build | `pnpm --filter @fig-tail/plugin build` | `dist/main.js`, `dist/ui.html` |
 | Write-safety | `pnpm --filter @fig-tail/plugin lint && pnpm --filter @fig-tail/plugin test -t write-safety` | exit 0, passes |
-| Bundle size | `du -b packages/plugin/dist/ui.html` | under 500 kB |
+| Bundle size | `wc -c < packages/plugin/dist/ui.html` | under 500 kB |
 
 Needed on hand:
 
@@ -319,8 +325,14 @@ export type NodeResult = {
   summary: MatchSummary
   className: string          // sorted, canonical order
   groups: Array<{ label: string; classNames: string[]; results: MatchResult[] }>
+  configSource: 'document' | 'user' | null
+  configLabel: string
+  tokens: TokenSet | null
   configWarnings: string[]   // from the stored unresolved report
+  unknownNamespaces: string[]
 }
+
+export type UiNodeResult = Omit<NodeResult, 'tokens'>
 
 export async function resolveNode(
   node: SceneNode,
@@ -330,7 +342,12 @@ export async function resolveNode(
 
 It does what plan 004's generate handler currently does inline: `readConfig()`,
 `getCSSAsync()`, `buildHints()`, `matchDeclarations()`, `toClassName()`,
-`summarise()`, plus the grouping used by both surfaces.
+`summarise()`, plus the grouping used by both surfaces. It carries config tier,
+tokens/null, and unresolved status in the result so neither presentation layer
+re-reads storage or reconstructs that state independently. `tokens` is internal
+pipeline context only: before posting to the iframe, convert to `UiNodeResult`
+and strip the full TokenSet. Do not structured-clone ~120 kB of tokens on every
+selection change.
 
 Refactor `mode-dev.ts` to call it. Behaviour must be **unchanged** — plan 004's
 test matrix is the regression net.
@@ -346,13 +363,15 @@ records. Any difference is a refactor bug, not an improvement.
 
 ### Step 3: Build the inspect-panel UI
 
-The panel, rendering a `NodeResult`. Sections top to bottom:
+The panel renders a `UiNodeResult`; the full `TokenSet` never crosses into the
+iframe message. Sections top to bottom:
 
 1. **Config status** — always present, one line, naming which tier of plan 003's
    config-source ladder is in use:
    - tier 1 → "Tailwind config: saved on this file"
    - tier 2 → "Tailwind config: your personal settings (this file has none shared)"
-   - tier 3 → a prominent banner, "No Tailwind config — showing raw values",
+   - tier 3 → a prominent banner, "No Tailwind config — generic Tailwind
+     suggestions; your project prefix/settings may require changes",
      with an **Add your config** button that opens the setup UI inline. Tier 3
      is not an error state and must not look like one: the panel below it still
      shows complete, copyable arbitrary-value classes, and the button works
@@ -386,7 +405,14 @@ The panel, rendering a `NodeResult`. Sections top to bottom:
    config banner and the selection hint, not one masking the other.
 
 Wire selection: `figma.on('selectionchange')` in the sandbox, debounced at
-~120 ms, resolving and posting a `NodeResult`.
+~120 ms, resolving and posting a `NodeResult`. Increment a monotonically
+increasing request ID before each resolve and post only if it still equals the
+latest ID. Add a deferred-promise test in which A starts, B starts, B resolves,
+then A resolves; the iframe must receive B only.
+
+Use plan 003's single inlined `ui.html`. The Inspect sandbox path posts the
+initial `{ view: 'inspect' }` route and the UI mounts this panel; it does not
+introduce a second manifest UI entry or a second HTML artifact.
 
 **Check**: in Dev Mode on the test file, walk every state by hand — clean node,
 drift node, unsupported node, text node, multi-select, empty selection, and a
@@ -429,9 +455,10 @@ produce readable output rather than a blank or frozen panel.
 ### Step 6: Document both surfaces
 
 Extend the README with a "Two ways to see it" section: the Code section (inline
-with Figma's CSS, chosen from the language dropdown) and the Inspect panel (a
-persistent panel; org admins can pin it for everyone). State plainly, from Step
-1's evidence, what a first-time developer has to do. Include a screenshot of each.
+with Figma's CSS, chosen from the language dropdown) and the Inspect panel.
+Describe ordinary-user persistence/launch behavior only as Step 1 observed it;
+state separately that org admins can pin it for everyone. State plainly what a
+first-time developer has to do. Include a screenshot of each.
 
 **Check**: someone who has never used fig-tail can follow this section on a file
 that already has a config and reach class names by either route. Confirm by
@@ -440,7 +467,8 @@ following it literally from a fresh Figma session.
 ## Validation plan
 
 - **Unit tests**: `resolveNode` for each node shape; grouping and ordering; the
-  single-import-site enforcement; multi-select handling; debounce behaviour;
+  single-import-site enforcement; multi-select handling; debounce and
+  out-of-order async completion behaviour;
   the three failure modes.
 - **Cross-surface consistency test**: Step 4, byte-identical class strings.
 - **Plan 004 regression**: the full nine-node matrix, re-run after the Step 2
@@ -474,6 +502,8 @@ ALL must hold.
       **and** verified by hand across nine nodes
 - [ ] Selection-change to rendered panel under 250 ms warm; under 1 s cold
 - [ ] Rapid selection changes stay responsive
+- [ ] Latest-request-wins test proves a late stale resolve cannot replace the
+      current selection
 - [ ] All three fallback/failure modes produce readable, usable output on both
       surfaces — a corrupt config degrades to a lower tier rather than failing
 - [ ] Plan 003's write-safety guards pass with no new allowlist entries

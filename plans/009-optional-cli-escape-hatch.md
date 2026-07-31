@@ -1,11 +1,11 @@
 # Plan 009: Add the optional CLI escape hatch for complex configs
 
-> **Executor instructions**: Read `plans/EXECUTOR-GUIDE.md` first — it holds the
-> toolchain, commands, conventions, and failure handling shared by every plan.
-> Then read this plan in full and work through its **Build sheet** below, one
+> **Executor instructions**: This plan is self-contained. Read it in full and
+> work through its **Build sheet** below, one
 > task at a time, confirming each *Done when* before starting the next. Commit
 > after each task. When done, update the status row for this plan in
-> `plans/README.md`.
+> `plans/README.md`. `plans/EXECUTOR-GUIDE.md` is optional expanded guidance;
+> this plan wins if they conflict.
 >
 > **Structure of this file**: the Build sheet is what you *do*. Everything after
 > it is reference — read a section when a task points you there. "Steps" gives
@@ -19,10 +19,12 @@
 > "partly working and clearly labelled" beats "stopped and waiting" everywhere
 > except write-safety and executing user input.
 >
-> **Drift check (run first)**:
-> `git diff --stat <SHA at which plan 001 completed>..HEAD -- packages/theme`
-> This plan reuses `@fig-tail/theme`'s schema and validator, and produces the
-> same `TokenSet`. If either changed since 001, read the changes first.
+> **Drift check (run first)**: this plan was written at commit `2157dc6`, before
+> plans 001 and 003 existed. Confirm both are `DONE`, locate their landing
+> commits with `git log --oneline -- plans/001-in-plugin-tailwind-theme-resolver.md packages/theme`
+> and `git log --oneline -- plans/003-plugin-shell-and-config-storage.md packages/plugin/src/setup.ts`,
+> and compare the live schema, validator, and setup import path with the
+> prospective contracts below. A mismatch is a STOP condition.
 
 ## Status
 
@@ -31,15 +33,16 @@
 - **Risk**: LOW technically. The real risk is **positioning**: if the CLI creeps
   into the normal setup path, it breaks the program's central promise. The Scope
   section draws that line; hold it.
-- **Depends on**: 001
+- **Depends on**: 001, 003
 - **Category**: dx
-- **Grounded at**: the commit at which plan 001 landed.
+- **Planned at**: commit `2157dc6`, 2026-07-31 — dependency contracts are prospective.
 
 ## Build sheet
 
-**Read `plans/EXECUTOR-GUIDE.md` before starting.** It holds the toolchain,
-commands, TypeScript rules, commit format, and what to do when a check fails —
-none of which is repeated here.
+Use Node 20+ and pnpm. Preserve the landed workspace scripts and strict
+TypeScript settings; use named exports, no `any`, no non-null assertions, and
+colocated Vitest tests. Before every commit run
+`pnpm -r typecheck && pnpm -r lint && pnpm -r test`.
 
 Do the tasks below **in order, one at a time**. Each task's *Done when* is a
 command or a named in-Figma check; it must produce the stated result before you
@@ -66,17 +69,21 @@ If a task seems to require making the CLI a required step, stop and report.
 | `fixtures/projects/tw4-config/**` | installable v4 project using `@config` | 3 |
 | `packages/cli/src/equivalence.test.ts` | CLI output == browser output | 4 |
 | `packages/cli/src/index.ts` | the `export` command | 5 |
-| `packages/plugin/src/setup.ts` (edit) | accept a pre-resolved token JSON | 6 |
+| `fixtures/projects/no-tailwind/package.json` | deterministic negative CLI fixture | 5 |
+| `packages/plugin/src/setup.ts`, `storage.ts` (edit) | validate/import the export envelope and preserve provenance | 6 |
 | `README.md` (section only) | placed **after** normal setup | 7 |
 
 ### Dependencies
 
 ```bash
 pnpm add --filter @fig-tail/cli jiti cac
-pnpm add --filter @fig-tail/cli -D tailwindcss@3 tailwindcss@4
 ```
 
-The CLI resolves the **target project's** `tailwindcss`, never a bundled copy.
+The CLI resolves the **target project's** Tailwind packages, never a bundled
+copy. Each fixture project owns an exact dependency (`tailwindcss@3.4.19` for
+the v3 fixture; `tailwindcss@4.3.1` plus its required Node compiler package for
+the v4 fixture). Do not install two majors under the same package name in the
+CLI package.
 
 ### Tasks
 
@@ -84,10 +91,10 @@ The CLI resolves the **target project's** `tailwindcss`, never a bundled copy.
 |---|---|---|---|
 | 1 | Scaffold `packages/cli`. Export the conversion helpers from `@fig-tail/theme` **without changing their behaviour**. | `packages/cli/*`, `packages/theme/src/index.ts` | `pnpm -r typecheck && pnpm -r test` → exit 0 **and** plan 001's snapshot files show an empty `git diff`. If a snapshot moved, you changed behaviour — revert |
 | 2 | The v3 path: resolve the project's `tailwindcss`, `require()` the config via `jiti`, run its `resolveConfig`, hand the result to the shared helpers. Build the fixture project. | `src/v3.ts` + test, `fixtures/projects/tw3-preset/**` | `test -t v3` passes, asserting in **one test** both that the CLI resolves the preset/fn/plugin values **and** that the browser resolver reports them unresolvable for the same config |
-| 3 | The v4 path: filesystem `@import`/`@config` resolution, project's `theme.css` for defaults. | `src/v4.ts` + test, `fixtures/projects/tw4-config/**` | `test -t v4` passes, and the CLI resolves the `@config`-referenced preset the browser resolver cannot |
-| 4 | The equivalence suite: for **every** plan-001 fixture the browser resolver fully resolves, assert byte-identical `TokenSet` (normalise `generatedAt` only). | `src/equivalence.test.ts` | `test -t equivalence` passes for every fully-resolvable fixture; the count is in the commit message. **Do not add tolerances to make it pass** — find which path is wrong |
-| 5 | The `export` command: detect major by **installed version**, dispatch, validate, write, print a stderr summary whose last line says to drop the file into the plugin's setup screen. | `src/index.ts` | All four commands in Step 5 behave as stated, incl. a non-zero exit with an actionable message on a non-Tailwind directory |
-| 6 | Make the plugin's setup UI accept a pre-resolved `figtail.tokens.json` (validate, store directly, no resolve step), and show the CLI as the source. | `packages/plugin/src/setup.ts`, `src/ui/**` | Drop a CLI-produced file in Figma → stores, Configured names the CLI, Dev Mode produces classes. Then drop the **raw** config for the same project → the unresolved report appears |
+| 3 | The v4 path: use the target project's v4 Node compiler/design-system API with filesystem `@import`/`@config` callbacks. Never route v4 through v3 `resolveConfig`. | `src/v4.ts` + test, `fixtures/projects/tw4-config/**` | `test -t v4` passes, and generated token values are cross-checked against utilities produced by that same target compiler |
+| 4 | The equivalence suite: for every fully-resolvable plan-001 fixture, compare the defined semantic projection; verify route-specific provenance separately. | `src/equivalence.test.ts` | `test -t equivalence` passes for every fully-resolvable fixture; the count is in the commit message. **Do not add value tolerances** — find which path is wrong |
+| 5 | The `export` command: detect major by **installed version**, require explicit `--allow-config-execution` before loading JS/TS, dispatch, validate, write, and print a stderr summary whose last line says to drop the file into the plugin setup screen. | `src/index.ts` | All commands in Step 5 behave as stated, including refusal without the trust flag and an actionable non-zero exit on a non-Tailwind directory |
+| 6 | Make setup accept the versioned CLI export envelope, validate its nested `TokenSet`, preserve import provenance separately, and show the CLI as the source. | `packages/plugin/src/setup.ts`, `storage.ts`, `src/ui/**` | Drop a CLI-produced file in Figma → stores, Configured names CLI/target versions, Dev Mode produces classes. Malformed provenance or tokens are rejected. Raw config still shows its unresolved report |
 | 7 | README section, placed **after** the normal setup instructions. | `README.md` | A reader following the normal setup path never meets an instruction to install the CLI |
 
 ---
@@ -109,10 +116,16 @@ design systems with a shared config package. Plan 001 reports each case
 precisely rather than guessing, which is correct — but a report is not a
 solution.
 
-This CLI is the solution. It runs in the codebase, where `require()` works and
-`resolveConfig()` is available, produces a `TokenSet` in the same schema, and the
-designer drops **that** into the plugin instead of the raw config. Same setup
-flow, same storage, same everything downstream.
+This CLI is the solution. It runs in the codebase, where project code and the
+installed Tailwind v3 resolver or v4 compiler APIs are available, produces a
+`TokenSet` in the same schema, and the designer drops **that** into the plugin
+instead of the raw config. Same setup flow, same storage, same everything
+downstream.
+
+Executing a Tailwind config executes project code with the current user's Node
+permissions. The CLI is for a **trusted checkout only** and requires an explicit
+`--allow-config-execution` flag whenever a JS/TS config, preset, or plugin will
+load. It is not a sandbox and must say so before execution.
 
 **It does not change what a developer installs.** A developer still installs the
 plugin and nothing else. This is a one-time setup tool for whoever configures the
@@ -151,9 +164,10 @@ It can execute the config the way Tailwind itself does:
   from the **project's own** installed `tailwindcss` — the project's version is
   the source of truth, not a version bundled with the CLI. That resolves presets,
   plugins, and function-valued theme keys exactly as the build does.
-- **v4**: locate the CSS entry, resolve `@import` and `@config` chains against
-  the real filesystem, and read `node_modules/tailwindcss/theme.css` from the
-  project's install for the defaults.
+- **v4**: locate the CSS entry and invoke the target project's v4 Node
+  compiler/design-system API with filesystem callbacks for `@import`, plugins,
+  and `@config`. Tailwind v4 removed the v3 `resolveConfig` API; do not emulate a
+  v4 build by calling a bundled v3 resolver or merely reading `theme.css`.
 
 The CLI then **converts that fully-resolved theme into the same `TokenSet`**,
 reusing `@fig-tail/theme`'s conversion helpers. The only thing it replaces is the
@@ -171,13 +185,42 @@ allowed change to `packages/theme`** — but it must be export-only. Do not alte
 their behaviour, and re-run plan 001's snapshot suite afterwards to prove you
 did not.
 
-### Output equivalence is the acceptance bar
+### Semantic equivalence is the acceptance bar
 
-For a config the browser resolver **can** fully handle, the CLI must produce a
-`TokenSet` **identical** to the browser resolver's. If the two paths can disagree
+For a config the browser resolver **can** fully handle, the CLI must produce the
+same semantic token projection. If the two paths can disagree
 on a config both can read, users get different class names depending on which
 route they took — the same trust-destroying failure plan 005 guards against
 between surfaces. Step 4 tests this across the whole plan 001 fixture corpus.
+
+Define `semanticProjection(TokenSet)` once in the test: schema version, Tailwind
+major, prefix status/style/value, rem base, core-plugin availability, unknown
+namespaces, and every normalized token key/value. Exclude only `generatedAt`
+and source/provenance fields whose truth legitimately differs by route.
+
+The file written by the CLI is a versioned envelope, not a schema mutation:
+
+```ts
+type FigTailExport = {
+  formatVersion: 1
+  tokens: TokenSet
+  provenance: {
+    kind: 'cli'
+    cliVersion: string
+    tailwindVersion: string
+    projectName: string          // target-root basename only; never an absolute path
+    entry: string                // path relative to target root
+    inputsSha256: string          // hash of sorted relative paths + bytes + resolved package versions
+  }
+}
+```
+
+Separately assert those CLI provenance fields and the browser TokenSet's own
+`source.entry`/`defaultThemeVersion`. Keep CLI-only fields outside `TokenSet` so
+plan 001's schema and validator remain unchanged. Never export an absolute local
+path, which could leak a username or workstation layout when the file is stored
+on Figma. A byte-identical whole object would incorrectly require truthful
+sources to lie in the same way.
 
 ## Inputs & resources
 
@@ -191,8 +234,12 @@ between surfaces. Step 4 tests this across the whole plan 001 fixture corpus.
 
 Reference documentation:
 
-- Tailwind v3 configuration — https://v3.tailwindcss.com/docs/configuration
-- Tailwind v4 theme variables — https://tailwindcss.com/docs/theme
+- [Tailwind v3 configuration](https://v3.tailwindcss.com/docs/configuration)
+- [Tailwind v4 theme variables](https://tailwindcss.com/docs/theme)
+- The exact v4 Node/compiler API documentation or package export used by the
+  fixture's installed version; record its link and version in the implementation
+  commit. If only an explicitly unstable API is available, surface that in the
+  package support matrix and STOP before promising unbounded v4 compatibility.
 
 No accounts or credentials. This plan is pure Node.
 
@@ -226,6 +273,8 @@ No accounts or credentials. This plan is pure Node.
   plugin. No Figma REST API, no personal access tokens, no credential handling
   in this repo.
 - A watch mode. The export is one-shot; re-running is cheap.
+- Running configs from untrusted repositories. The CLI is not a sandbox and
+  does not reduce the permissions of evaluated project code.
 - Publishing — plan 010, which already covers the npm packages.
 
 ## Working approach
@@ -253,6 +302,11 @@ Resolve `tailwindcss` from the target project root, `require()` the config
 (through `jiti` for `.ts`), call the project's `resolveConfig`, then hand the
 resolved theme to the shared conversion helpers.
 
+Loading begins only after the caller supplies `--allow-config-execution` and the
+CLI prints to stderr that configs, presets, and plugins run with the caller's
+Node permissions. Resolve every package from the target project; never fall
+back to the CLI's dependency tree.
+
 Build `fixtures/projects/tw3-preset/` — a real installable project with a shared
 preset, a function-valued theme key, a plugin contributing theme values, and a
 `.ts` config. This is exactly the config category the browser resolver reports as
@@ -267,21 +321,29 @@ in the suite.
 
 ### Step 3: Implement the v4 evaluation path
 
-Locate the CSS entry, resolve `@import` and `@config` against the filesystem,
-read the project's `node_modules/tailwindcss/theme.css` for defaults, and hand
-the merged `@theme` set to the shared helpers.
+Locate the CSS entry and use the target project's installed v4 Node
+compiler/design-system API. Supply explicit filesystem module/stylesheet
+loaders rooted at the importing file for `@import`, `@plugin`, and `@config`.
+Extract the compiler's resolved design-system token entries and hand them to the
+shared conversion helpers. Feature-detect the exact API and reject unsupported
+minor versions with a clear support message; never import private files by an
+unversioned deep path and never call v3 `resolveConfig` for a v4 project.
 
 Build `fixtures/projects/tw4-config/` — a v4 project using `@config` to pull in a
 v3 config with a preset.
 
-**Check**: `pnpm --filter @fig-tail/cli test -t v4` → passes, and the CLI resolves
-the `@config`-referenced preset that the browser resolver cannot.
+**Check**: `pnpm --filter @fig-tail/cli test -t v4` → passes. It resolves the
+`@config`-referenced preset that the browser resolver cannot. For representative
+colour, spacing, radius, and typography tokens, build corresponding utilities
+through the same target compiler and assert their CSS values agree with the
+exported tokens. Record the exact tested Tailwind/compiler versions.
 
 ### Step 4: Prove equivalence with the browser resolver
 
 For **every** config in plan 001's `fixtures/configs/` that the browser resolver
-fully resolves, assert the CLI produces a byte-identical `TokenSet` (normalising
-only `generatedAt`).
+fully resolves, assert `semanticProjection(cliExport.tokens)` deep-equals
+`semanticProjection(browserTokens)` as defined in Context. Then separately
+assert the export-envelope provenance and the browser TokenSet source fields.
 
 Any difference is a bug in one of the two paths. Do not add tolerances to make
 the test pass — find which one is wrong.
@@ -291,14 +353,17 @@ fully-resolvable fixture. Record the count in the commit message.
 
 ### Step 5: Wire the `export` command
 
-`fig-tail export [--cwd <dir>] [--out <file>] [--prune-defaults] [--stdout]`
+`fig-tail export [--cwd <dir>] [--out <file>] [--prune-defaults] [--stdout] [--allow-config-execution]`
 
 1. Resolve the project root (default `process.cwd()`).
 2. Detect the Tailwind major by resolving `tailwindcss/package.json` from the
    project root and reading `version` — **by installed version, not by which
    files exist**, since a v4 project may still have a `tailwind.config.js` via
    `@config`.
-3. Dispatch, validate with `validateTokenSet`, write `figtail.tokens.json` (or
+3. Before loading any JS/TS config, preset, or plugin, require
+   `--allow-config-execution`; otherwise exit non-zero with the trusted-checkout
+   warning. Then dispatch, validate with `validateTokenSet`, create and validate
+   the versioned `FigTailExport` envelope, and write `figtail.tokens.json` (or
    stdout).
 4. Print a summary to **stderr**: Tailwind version, entry file, token counts,
    byte size with a warning above 120 kB naming `--prune-defaults`, and a final
@@ -310,10 +375,11 @@ fully-resolvable fixture. Record the count in the commit message.
 **Check**: all five of these behave as stated —
 
 ```
-pnpm --filter @fig-tail/cli exec fig-tail export --cwd ../../fixtures/projects/tw3-preset   # exit 0, writes file
-pnpm --filter @fig-tail/cli exec fig-tail export --cwd ../../fixtures/projects/tw4-config   # exit 0, writes file
-pnpm --filter @fig-tail/cli exec fig-tail export --cwd /tmp                                 # exit != 0, names the missing tailwindcss
-pnpm --filter @fig-tail/cli exec fig-tail export --cwd ../../fixtures/projects/tw3-preset --stdout | head -c 200   # JSON on stdout, summary on stderr
+pnpm --filter @fig-tail/cli exec fig-tail export --cwd ../../fixtures/projects/tw3-preset   # exit != 0; requests explicit trust flag before execution
+pnpm --filter @fig-tail/cli exec fig-tail export --cwd ../../fixtures/projects/tw3-preset --allow-config-execution --out /tmp/figtail-tw3.tokens.json   # exit 0; valid JSON file
+pnpm --filter @fig-tail/cli exec fig-tail export --cwd ../../fixtures/projects/tw4-config --allow-config-execution --out /tmp/figtail-tw4.tokens.json   # exit 0; valid JSON file
+pnpm --filter @fig-tail/cli exec fig-tail export --cwd ../../fixtures/projects/no-tailwind  # exit != 0; names the missing package
+pnpm --filter @fig-tail/cli exec fig-tail export --cwd ../../fixtures/projects/tw3-preset --allow-config-execution --stdout | head -c 200   # JSON on stdout; summary remains on stderr
 ```
 
 plus: the summary's closing line names the plugin setup screen as the next step.
@@ -321,13 +387,19 @@ plus: the summary's closing line names the plugin setup screen as the next step.
 ### Step 6: Confirm the plugin accepts the CLI's output
 
 Plan 003's setup UI accepts config source text. It must also accept a
-pre-resolved `figtail.tokens.json` — drop it in, `validateTokenSet` it, store it
-directly with no resolution step. If plan 003 already wired this (its handoff
-notes flag it), verify it; if not, add it here as a small change to the setup UI.
+pre-resolved `figtail.tokens.json`: validate `formatVersion` and every provenance
+field, validate the nested `tokens` with `validateTokenSet`, then store the
+TokenSet directly with no resolution step and store `importProvenance`
+alongside it in `StoredConfig`. Do not add CLI fields to the TokenSet schema. If
+plan 003 already wired a preliminary raw-TokenSet import, migrate it to this
+versioned envelope and reject the ambiguous old shape with an actionable
+regeneration message.
 
 The Configured state must show **where the tokens came from** — "resolved from
-`tailwind.config.js`" versus "imported from `figtail.tokens.json` (CLI)" — so a
-future maintainer knows why re-dropping the raw config might behave differently.
+`tailwind.config.js`" versus "imported from `figtail.tokens.json` (CLI 0.1.0,
+Tailwind 4.3.1)" — so a future maintainer knows why re-dropping the raw config
+might behave differently. The envelope and Figma UI contain only the target
+root's basename and a relative entry path, never an absolute local path.
 
 **Check**: in Figma desktop, drop a CLI-produced `figtail.tokens.json` into the
 setup UI. It stores without a resolution step, the Configured state names the CLI
@@ -351,8 +423,8 @@ led to this section from the plugin's own message.
 - **Unit tests**: v3 evaluation (presets, function values, plugins, `.ts`), v4
   evaluation (`@import`, `@config`, defaults), version detection, all error
   exits.
-- **Equivalence suite**: Step 4 — byte-identical output for every
-  fully-resolvable fixture.
+- **Equivalence suite**: Step 4 — identical semantic projection for every
+  fully-resolvable fixture, with provenance asserted separately.
 - **Complement test**: Step 2 — the CLI resolves what the browser resolver
   reports as unresolvable, asserted in one test.
 - **`packages/theme` regression**: plan 001's full suite and snapshots unchanged.
@@ -368,10 +440,15 @@ ALL must hold.
 - [ ] The CLI resolves presets, function-valued theme keys, plugin-contributed
       values, and `.ts` configs
 - [ ] The equivalence suite passes for every fully-resolvable plan 001 fixture
+- [ ] CLI provenance records exact target/CLI versions, entry, and checksum;
+      it remains outside `TokenSet`, and browser source metadata remains
+      truthful to its own route
 - [ ] A single test asserts the CLI resolves what the browser resolver reports as
       unresolvable
 - [ ] `fig-tail export` succeeds on both project fixtures and fails with an
       actionable message elsewhere
+- [ ] JS/TS config execution is refused without `--allow-config-execution`, and
+      docs say this is for trusted checkouts only
 - [ ] The CLI's summary tells the user what to do with the output file
 - [ ] The plugin accepts `figtail.tokens.json` and shows the CLI as its source
 - [ ] The README presents the CLI **after** normal setup, framed as an escape
@@ -393,6 +470,10 @@ Stop and report back — do not improvise — if:
 - Anything here would need Figma credentials or REST API access.
 - `resolveConfig` is unavailable in the target Tailwind version in a way that
   breaks the v3 path.
+- The target v4 release exposes no supportable compiler/design-system API for
+  extracting canonical resolved tokens. Do not substitute v3 `resolveConfig`
+  or a hand-rolled approximation; report the exact export surface and narrow
+  the supported v4 version range or split v4 support into a follow-up decision.
 - A step's check fails twice after a reasonable attempt.
 
 ## Handoff / after it lands

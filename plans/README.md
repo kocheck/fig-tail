@@ -69,7 +69,9 @@ three places:
 ## Verified Figma platform facts, with sources
 
 Checked against Figma's documentation on 2026-07-31. Individual plans restate
-the ones they depend on and carry the same links.
+the ones they depend on and carry the same links. Where Figma's own pages
+conflict, these plans use the stricter interpretation and require an in-product
+measurement before relaxing it.
 
 > **How these were gathered, and what you owe them.** These facts come from
 > Figma's published documentation, located by search. The pages themselves
@@ -84,19 +86,20 @@ the ones they depend on and carry the same links.
 | 1 | A single plugin may declare **both** `"codegen"` and `"inspect"` in `manifest.capabilities`. Possible values are `codegen`, `inspect`, `textreview`, `vscode`. | [Plugin manifest](https://developers.figma.com/docs/plugins/manifest) |
 | 2 | **`codegen`** runs in the **Code section** of the Dev Mode Inspect panel; the plugin appears in Figma's native language dropdown. | [Codegen plugins](https://developers.figma.com/docs/plugins/codegen-plugins) · [Working in Dev Mode](https://developers.figma.com/docs/plugins/working-in-dev-mode) |
 | 3 | **`inspect`** runs in the **Inspect panel** itself; a Dev Mode plugin's iframe takes the full height and width of the panel. | [Working in Dev Mode](https://developers.figma.com/docs/plugins/working-in-dev-mode) |
-| 4 | `figma.codegen.on('generate')` fires on every selection change; the callback has a **hard 15-second timeout** and may be async. | [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on) · [figma.codegen](https://developers.figma.com/docs/plugins/api/figma-codegen) |
+| 4 | `figma.codegen.on('generate')` fires on every selection change and may be async. Figma's API reference says **15 seconds**, while its codegen guide says **3 seconds**. Treat **3 seconds as the hard limit**, use a 2-second internal deadline, and record the observed product behaviour before changing that budget. | [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on) · [Codegen plugins](https://developers.figma.com/docs/plugins/codegen-plugins) |
 | 5 | **`figma.showUI` is not allowed inside the `generate` callback.** Move it outside and use `figma.ui.postMessage`. A hidden iframe is created with `figma.showUI(…, { visible: false })`. | [figma.codegen.on](https://developers.figma.com/docs/plugins/api/properties/figma-codegen-on) · [figma.ui](https://developers.figma.com/docs/plugins/api/figma-ui/) |
-| 6 | `codegenPreferences` with `"itemType": "action"` adds a menu item that fires `preferenceschange`; **that** handler may call `figma.showUI`. Item types: `select`, `unit`, `bool`, `action`. | [CodegenPreference](https://developers.figma.com/docs/plugins/api/CodegenPreference/) · [Plugin manifest](https://developers.figma.com/docs/plugins/manifest) |
+| 6 | `codegenPreferences` with `"itemType": "action"` adds a menu item that fires `preferenceschange`; **that** handler may call `figma.showUI`. The documented item types are `select`, `unit`, and `action` — there is no `bool` item type. | [CodegenPreference](https://developers.figma.com/docs/plugins/api/CodegenPreference/) · [Plugin manifest](https://developers.figma.com/docs/plugins/manifest) |
 | 7 | **`setSharedPluginData` enforces 100 kB per entry** (namespace + key + value), enforced from 17 March 2025. Chunking across keys is the documented workaround. | [Update 109](https://developers.figma.com/docs/plugins/updates/2025/03/17/version-1-update-109/) · [setSharedPluginData](https://developers.figma.com/docs/plugins/api/properties/nodes-setsharedplugindata) |
 | 8 | `figma.clientStorage` has a **5 MB** total limit (raised from 1 MB) and is per-user, per-plugin. | [Update 109](https://developers.figma.com/docs/plugins/updates/2025/03/17/version-1-update-109/) |
 | 9 | `"documentAccess": "dynamic-page"` is required for all new plugins. A Dev Mode plugin runs on the **current page only** unless pages are loaded explicitly. | [Migrating to dynamic loading](https://www.figma.com/plugin-docs/migrating-to-dynamic-loading/) · [Working in Dev Mode](https://developers.figma.com/docs/plugins/working-in-dev-mode) |
-| 10 | `node.getCSSAsync()` resolves to a JSON object of the node's CSS properties — the same CSS the Inspect panel shows. Dev Mode only. | [Update 68](https://developers.figma.com/docs/plugins/updates/2023/06/21/version-1-update-68) · [Shared node properties](https://www.figma.com/plugin-docs/api/node-properties/) |
-| 11 | `variable.setVariableCodeSyntax(platform, value)` adds or modifies a platform definition on `codeSyntax`; platforms are `'WEB'`, `'ANDROID'`, `'iOS'`. | [setVariableCodeSyntax](https://www.figma.com/plugin-docs/api/properties/Variable-setvariablecodesyntax/) · [Working with variables](https://developers.figma.com/docs/plugins/working-with-variables) |
+| 10 | `node.getCSSAsync()` resolves to a JSON object of CSS properties. The current shared-node reference does not clearly guarantee design-mode parity; plan 006 therefore compares the same fixtures in design and Dev Mode before choosing its linter surface. | [Update 68](https://developers.figma.com/docs/plugins/updates/2023/06/21/version-1-update-68) · [Shared node properties](https://www.figma.com/plugin-docs/api/node-properties/) |
+| 11 | `variable.setVariableCodeSyntax(platform, value)` adds or modifies a platform definition on `codeSyntax`; `removeVariableCodeSyntax(platform)` removes one. Platforms are `'WEB'`, `'ANDROID'`, `'iOS'`. Code syntax is custom token syntax, not inherently a CSS utility class. | [Variable API](https://developers.figma.com/docs/plugins/api/Variable/) · [setVariableCodeSyntax](https://developers.figma.com/docs/plugins/api/properties/Variable-setvariablecodesyntax/) |
 | 12 | `networkAccess.allowedDomains` restricts outbound requests; the keyword `"none"` blocks all network access. | [Plugin manifest](https://developers.figma.com/docs/plugins/manifest) |
-| 13 | `figma.editorType` is `'dev'` in Dev Mode and `'figma'` in the design editor. | [figma.mode](https://developers.figma.com/docs/plugins/api/properties/figma-mode/) |
+| 13 | `figma.editorType` is `'dev'` in Dev Mode and `'figma'` in the design editor. Inside Dev Mode, `figma.mode` distinguishes Codegen from Inspect, so the shell must branch on both values. | [figma.mode](https://developers.figma.com/docs/plugins/api/properties/figma-mode/) |
 | 14 | Users can **save** a plugin to their account (the ribbon icon) for access across files. | [Use plugins in files](https://help.figma.com/hc/en-us/articles/360042532714-Use-plugins-in-files) |
 | 15 | **Org admins** can *pin* a Dev Mode plugin so it appears in the Inspect panel for all users, and can set a default code language. Both are Organization/Enterprise features. | [Manage Dev Mode settings for an organization](https://help.figma.com/hc/en-us/articles/22927410880535-Manage-Dev-Mode-settings-for-an-organization) |
 | 16 | Language/plugin selection in the Code section happens via the dropdown at its top right. | [Use code snippets in Dev Mode](https://help.figma.com/hc/en-us/articles/15023202277399-Use-code-snippets-in-Dev-Mode) |
+| 17 | `figma.fileKey` is unavailable to public plugins; it requires the private plugin API. Public-plugin per-file state must use an identifier the plugin already stores on the document, or explicitly degrade to session-only state when none exists. | [Plugin API: `figma.fileKey`](https://developers.figma.com/docs/plugins/api/figma/) |
 
 ### Further reading for implementers
 
@@ -115,11 +118,11 @@ Neither of these blocks the program. Both have a designed fallback, per the
 and sessions.** No documentation found either way.
 
 *Fallback*: plan 005 builds the **Inspect panel surface** alongside the Code
-section. The inspect panel is persistent and org-pinnable, and does not depend
-on a dropdown selection. Whichever way the persistence question resolves, at
-least one surface works without hunting. Plan 005 Step 1 tests it and records
-the answer in `packages/plugin/notes/devmode-discovery.md`; plan 010's docs are
-written from that.
+section. It does not depend on the language dropdown and org admins can pin it,
+but whether an ordinary user sees it automatically is also verified rather than
+assumed. Plan 005 Step 1 records both discovery paths in
+`packages/plugin/notes/devmode-discovery.md`; plan 010's docs are written from
+that evidence.
 
 **B. Whether a Dev-seat user without edit access can read
 `getSharedPluginData`.** Reading ought to be permitted for anyone who can open
@@ -164,12 +167,12 @@ The fallback ladders this program commits to:
 | Config partly readable, **extending** key missed (`theme.extend.colors`) | Everything that resolved, plus Tailwind's defaults — still correct, just missing the extensions | "N settings in your config could not be read" + what each was |
 | Config partly readable, **replacing** key missed (`theme.colors`) | That namespace is marked **unknown**, so it emits arbitrary values — *not* Tailwind's defaults, which the project does not have | "fig-tail could not read your colours; showing raw values for them" |
 | No config on the document | The developer's own pasted config (`clientStorage`) | "Using your personal config — this file has no shared one" |
-| No config at all | **Arbitrary-value output** (`bg-[#3b82f6]`, `p-[24px]`) | "No Tailwind config — showing raw values. Add your config for real token names." |
+| No config at all | **Generic arbitrary-value suggestions** (`bg-[#3b82f6]`, `p-[24px]`), not project-confirmed | "No Tailwind config — generic Tailwind syntax; project prefix/settings may require changes. Add your config for confirmed names." |
 | Variable bound but unresolvable (e.g. from an unavailable library) | Value matching against the theme | confidence drops from `exact-variable` to `exact-value` |
 | No token matches a value | Arbitrary value | `arbitrary` confidence badge |
 | Value is *near* a token | **Nothing is emitted for it** — the near-miss is reported instead | "no exact token; nearest is `brand-500`, ΔE 0.4" |
 | Subtree too large or too slow | A truncated tree | an explicit truncation marker saying why |
-| Config resolution fails entirely | The CLI escape hatch (plan 009) | the plugin's own message points there |
+| Config resolution fails entirely | Generic raw suggestions, plus the optional CLI escape hatch when plan 009 ships | the plugin labels the generic output and points to the escape hatch only when it exists |
 
 Every fallback carries a visible label naming **what was used**, **why**, and
 **what to do to get the better version**. A fallback the user cannot see is a
@@ -180,11 +183,14 @@ silent wrong answer, which invariant 6 forbids.
 This program ships publicly, to teams whose configs nobody here will ever see.
 So fallbacks have a required **direction**, and it is not the intuitive one:
 
-> **Never emit a class name unless the config confirms it exists. When in doubt,
-> emit an arbitrary value.**
+> **Never emit a named token class unless the config confirms it exists. When
+> the config is partly known, prefer a labelled arbitrary value.**
 
-`bg-[#3b82f6]` always compiles, in every project, whatever the config says. It
-is ugly and it bypasses the design system, and it is *never wrong*.
+`bg-[#3b82f6]` preserves the value in standard, unprefixed Tailwind and is safer
+than inventing a named token. It is **not universally guaranteed**: a project
+may use a prefix, disable the relevant core utility, or use an unsupported
+future major. When fig-tail lacks the config entirely, it labels arbitrary
+output as generic Tailwind syntax rather than claiming the class is confirmed.
 `bg-brand-500` compiles to **nothing at all** in a project that has no
 `brand-500` — the developer pastes it, the styling silently does not apply, and
 they blame the design or their build before they blame fig-tail.
@@ -296,17 +302,16 @@ each plan's Done criteria; it is the subset a demo will expose.
 ## For executors — how to run one of these plans
 
 These plans are written to be executed by a small model or a busy human with
-**zero context from the conversation that produced them**. Two files make that
-possible:
+**zero context from the conversation that produced them**. Each numbered plan
+contains its own commands, scope, contracts, checks, and STOP conditions.
 
-1. **`plans/EXECUTOR-GUIDE.md`** — read this first, every time. It holds the
-   toolchain, exact commands, TypeScript and testing conventions, package import
-   rules, commit format, the failure-handling decision tree, and a list of
-   anti-patterns specific to this problem. No plan repeats any of it.
-2. **The plan's own Build sheet** — the first section of every plan. It lists
+1. **The plan's own Build sheet** — the first section of every plan. It lists
    the exact files that plan creates, the exact `pnpm add` commands, and a
    numbered task table where each task names the files it may touch and a single
    *Done when* command.
+2. **`plans/EXECUTOR-GUIDE.md`** — optional expanded guidance for shared
+   conventions and the failure-report format. It is not a substitute for the
+   numbered plan; if they conflict, the numbered plan wins.
 
 ### The structure of every plan
 
@@ -327,9 +332,9 @@ possible:
 
 Each Build-sheet task is sized to be independently committable and independently
 verifiable. Do not batch them, and do not start a task while the previous one's
-check is unverified. If a check fails twice, follow the decision tree in
-`EXECUTOR-GUIDE.md` §6 — which, in almost every case, says take the labelled
-fallback and keep going rather than stopping.
+check is unverified. If a check fails twice, follow the plan's own STOP
+conditions and fallback rules. `EXECUTOR-GUIDE.md` §6 is optional expanded
+guidance; the numbered plan wins if the two conflict.
 
 ---
 
@@ -342,11 +347,11 @@ fallback and keep going rather than stopping.
 | 003 | Scaffold the plugin shell, dual capability, and config storage | P1 | M | 001 | TODO |
 | 004 | Ship the Dev Mode Code-section panel (codegen) | P1 | M | 002, 003 | TODO |
 | 005 | Ship the Dev Mode Inspect-panel surface | P1 | M | 004 | TODO |
-| 006 | Add the read-only drift linter (designer dry-run) | P2 | M | 002, 003 | TODO |
+| 006 | Add the read-only drift linter (designer dry-run) | P2 | M | 005 | TODO |
 | 007 | Add opt-in variable Code-syntax stamping | P2 | M | 006 | TODO |
-| 008 | Add whole-subtree className export | P3 | L | 004 | TODO |
-| 009 | Add the optional CLI escape hatch for complex configs | P3 | M | 001 | TODO |
-| 010 | Package, document, and publish | P1 | S | 005 | TODO |
+| 008 | Add whole-subtree className export | P3 | L | 005 | TODO |
+| 009 | Add the optional CLI escape hatch for complex configs | P3 | M | 001, 003 | TODO |
+| 010 | Package, document, and publish | P2 | S | 005 | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale)
 
@@ -365,18 +370,22 @@ upside.
 - **005 depends on 004** and deliberately reuses its rendering pipeline. The two
   surfaces must never diverge in what they report; 005 Step 2 enforces that with
   a shared render path rather than a parallel implementation.
-- **006 depends on 002 and 003**, not 004 — the linter is a setup-side surface.
+- **006 depends on 005**. It reuses the shared node pipeline and first verifies
+  whether `getCSSAsync()` behaves equivalently in design mode; if not, the
+  linter lives in the Dev Mode Inspect surface rather than rebuilding CSS.
 - **007 depends on 006** deliberately. 006 builds the dry-run diff UI and the
   variable→token proposal logic; 007 adds an Apply button and its guardrails on
   top. Building 007 first would mean building 006's proposal engine anyway,
   without its safety review.
 - **007 materially upgrades 004 and 005 after the fact**: once a variable carries
-  `codeSyntax.WEB = "bg-brand-500"`, both surfaces read that string directly off
-  the node's bound variable and report `exact-variable` confidence — no value
-  inference at all. Biggest output-quality lever in the program, which is why it
-  is P2 and not P3.
-- **008 depends on 004**. **009 depends on 001** and is independent of the
-  plugin entirely.
+  a validated token key such as `codeSyntax.WEB = "brand-500"`, both surfaces
+  derive the property-specific utility (`bg-brand-500`, `text-brand-500`, and so
+  on) and report `exact-variable` only when the key exists and the live value
+  still agrees. A variable is reusable across properties, so plan 007 never
+  stamps a property-specific utility into it.
+- **008 depends on 005** so both surfaces use the same pipeline. **009 depends
+  on 001 and 003**: it reuses the theme schema and adds token-JSON ingestion to
+  the plugin setup UI.
 - **010 depends on 005**, since the Inspect surface is part of the core promise
   and the docs describe it.
 
@@ -428,7 +437,8 @@ Recorded so these are not re-raised without new information.
   built so they benefit.
 
 - **AI/LLM-based conversion.** Every value here is a deterministic lookup or a
-  numeric distance. An LLM would add latency against a hard 15-second timeout,
+  numeric distance. An LLM would add latency against the stricter 3-second
+  codegen budget,
   nondeterminism, and a network dependency the program has ruled out.
 
 - **Generating full component code from frames.** Anima, Locofy and Builder.io
