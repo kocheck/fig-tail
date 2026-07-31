@@ -50,8 +50,11 @@ describe('pipeline', () => {
     const output = runPipeline({
       css: { display: 'flex', padding: '24px', 'background-color': '#3b82f6' },
       config: {
-        tier: 3,
-        config: null,
+        active: null,
+        available: { document: false, user: false },
+        preferred: 'document',
+        overridden: false,
+        failures: [],
         label:
           'No Tailwind config — generic Tailwind syntax; project prefix/settings may require changes. Add your config for confirmed names.',
       },
@@ -61,13 +64,50 @@ describe('pipeline', () => {
   })
 })
 
+// Property-assignment mutations (`.name =`, `.fills =`, …) are intentionally
+// NOT substring-checked here: bundled third-party code (e.g. the acorn-based
+// evaluator inside @fig-tail/theme) legitimately assigns `.name=` on AST
+// nodes, which would false-positive a plain substring scan. The ESLint rule
+// in `eslint.config.js` covers those assignments — but only in first-party
+// `packages/plugin/src/**` source, since it never sees bundled dependency code.
+const BANNED_BUNDLE_SUBSTRINGS = [
+  '.setName(',
+  '.appendChild(',
+  'createRectangle',
+  'createFrame(',
+  'createText(',
+  'createComponent(',
+  'createEllipse(',
+  'createPolygon(',
+  'createStar(',
+  'createVector(',
+  'createBooleanOperation(',
+  'createSlice(',
+  'createPage(',
+  'createPaintStyle(',
+  'createTextStyle(',
+  'createEffectStyle(',
+  'createGridStyle(',
+  'createVariable(',
+  'createVariableCollection(',
+  'setBoundVariable(',
+  'setValueForMode(',
+  'addDevResourceAsync(',
+  'editDevResourceAsync(',
+  'deleteDevResourceAsync(',
+  'createNodeFromSvg(',
+]
+
 describe('write-safety', () => {
   it('builds current source and forbids document mutation APIs in the bundle', () => {
     const root = path.dirname(fileURLToPath(import.meta.url))
     const bundle = readFileSync(path.join(root, '../dist/main.js'), 'utf8')
+    // The bundle must exist and reflect current source.
+    // Permitted document writes: setPluginData (storage) + setVariableCodeSyntax (stamp).
     expect(bundle.includes('setPluginData')).toBe(true)
-    expect(bundle.includes('.setName(')).toBe(false)
-    expect(bundle.includes('.appendChild(')).toBe(false)
-    expect(bundle.includes('createRectangle')).toBe(false)
+    expect(bundle.includes('setVariableCodeSyntax')).toBe(true)
+    for (const banned of BANNED_BUNDLE_SUBSTRINGS) {
+      expect(bundle.includes(banned), `bundle must not contain "${banned}"`).toBe(false)
+    }
   })
 })

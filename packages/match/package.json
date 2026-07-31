@@ -17,7 +17,7 @@
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --coverage",
     "lint": "eslint src",
     "probe:browser": "node scripts/browser-bundle-probe.mjs"
   },

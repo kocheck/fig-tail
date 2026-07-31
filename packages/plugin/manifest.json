@@ -16,6 +16,44 @@
       "itemType": "action",
       "propertyName": "openSetup",
       "label": "Configure Tailwind…"
+    },
+    {
+      "itemType": "select",
+      "propertyName": "includeLayout",
+      "label": "Include layout utilities",
+      "options": [
+        { "label": "Yes", "value": "yes", "isDefault": true },
+        { "label": "No", "value": "no" }
+      ]
+    },
+    {
+      "itemType": "select",
+      "propertyName": "allowArbitrary",
+      "label": "Allow arbitrary values",
+      "options": [
+        { "label": "Yes", "value": "yes", "isDefault": true },
+        { "label": "No", "value": "no" }
+      ]
+    },
+    {
+      "itemType": "select",
+      "propertyName": "output",
+      "label": "Output",
+      "options": [
+        { "label": "Classes", "value": "classes" },
+        { "label": "Classes + notes", "value": "classes-notes", "isDefault": true }
+      ]
+    },
+    {
+      "itemType": "select",
+      "propertyName": "subtreeFormat",
+      "label": "Subtree export",
+      "options": [
+        { "label": "Off", "value": "off", "isDefault": true },
+        { "label": "HTML", "value": "html" },
+        { "label": "JSX", "value": "jsx" },
+        { "label": "Outline", "value": "outline" }
+      ]
     }
   ]
 }

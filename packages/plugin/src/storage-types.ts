@@ -1,45 +1,67 @@
-import type { ConfigProvenance, TokenSet, Unresolved } from '@fig-tail/theme'
+import type { ConfigProvenance, TokenSet } from '@fig-tail/theme'
 
-/** Redacted diagnostic safe to persist and message across the iframe. */
+/**
+ * Redacted diagnostic safe to persist and message across the iframe.
+ * `reason` widens `Unresolved['reason']` from `@fig-tail/theme` to `string` for
+ * storage; `snippet` is a compile-time guard proving raw resolver snippets
+ * never cross the iframe boundary or land in persisted storage.
+ */
 export type PersistedDiagnostic = {
   path: string
-  reason: Unresolved['reason']
+  reason: string
   message: string
   source: string
   line?: number
+  snippet?: never
 }
 
 /** Stored config payload — never includes raw Tailwind source. */
 export type StoredConfig = {
-  schemaVersion: 1
+  formatVersion: 1
   tokens: TokenSet
+  resolution: { unresolved: PersistedDiagnostic[]; warnings: string[] }
   provenance: ConfigProvenance
-  diagnostics: PersistedDiagnostic[]
-  warnings: string[]
-  savedAt: string
-  documentId: string
+  storedAt: string
+  documentConfigId: string
 }
 
-/** Result of reading config across the 3-tier ladder. */
-export type ReadConfigResult =
-  | {
-      tier: 1
-      config: StoredConfig
-      label: 'Using the config saved on this file'
-    }
-  | {
-      tier: 2
-      config: StoredConfig
-      label: 'Using your personal config — this file has no shared one'
-    }
-  | {
-      tier: 3
-      config: null
-      label: 'No Tailwind config — generic Tailwind syntax; project prefix/settings may require changes. Add your config for confirmed names.'
-      reason?: 'missing' | 'corrupt' | 'read-failure'
-    }
+/** One typed, non-throwing read failure for a single storage tier. */
+export type StorageFailure = {
+  tier: 'document' | 'user'
+  reason:
+    | 'missing'
+    | 'no-access'
+    | 'invalid-meta'
+    | 'missing-chunk'
+    | 'checksum'
+    | 'decompress'
+    | 'parse'
+    | 'schema'
+  detail: string
+}
 
-/** Result of writing config. */
+/** Result of reading config across the two-tier ladder. Never throws. */
+export type ReadConfigResult = {
+  active: null | {
+    config: StoredConfig
+    tier: 'document' | 'user'
+    documentConfigId: string | null
+  }
+  available: { document: boolean; user: boolean }
+  preferred: 'document' | 'user'
+  overridden: boolean
+  failures: StorageFailure[]
+  /** Convenience label for UI/codegen */
+  label: string
+}
+
+/** Result of writing or clearing config for one tier. */
 export type WriteResult =
-  | { ok: true; tier: 1 | 2; bytes: number; chunks: number }
-  | { ok: false; error: string }
+  | { ok: true; writtenTo: 'document' | 'user'; documentConfigId: string | null }
+  | {
+      ok: false
+      writtenTo: null
+      reason: 'no-edit-access' | 'validation' | 'quota' | 'write-failed'
+      needsPersonalConfirmation: boolean
+      errors: string[]
+    }

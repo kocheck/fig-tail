@@ -11,6 +11,7 @@ await esbuild.build({
   entryPoints: [path.join(root, 'src/main.ts')],
   outfile: path.join(dist, 'main.js'),
   bundle: true,
+  minify: true,
   platform: 'neutral',
   format: 'iife',
   target: 'es2020',
@@ -20,6 +21,7 @@ await esbuild.build({
 const uiResult = await esbuild.build({
   entryPoints: [path.join(root, 'src/ui/main.tsx')],
   bundle: true,
+  minify: true,
   platform: 'browser',
   format: 'iife',
   target: 'es2020',

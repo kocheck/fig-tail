@@ -30,6 +30,90 @@ const post = (message: PluginMessage) => {
   parent.postMessage({ pluginMessage: message }, '*')
 }
 
+const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+
+/**
+ * Copy text exactly as displayed. Prefers the Clipboard API; falls back to
+ * selecting the already-rendered `sourceElementId` node and `execCommand`,
+ * so the copy is always byte-identical to what is on screen without
+ * creating or removing any DOM nodes (write-safety's DOM-mutation ban is
+ * blanket across this package, including the UI iframe).
+ */
+const copyText = async (text: string, sourceElementId: string): Promise<void> => {
+  try {
+    await navigator.clipboard.writeText(text)
+    return
+  } catch {
+    // Fall through to the selection-based fallback below.
+  }
+  const target = document.getElementById(sourceElementId)
+  const selection = window.getSelection()
+  if (!target || !selection) return
+  const range = document.createRange()
+  range.selectNodeContents(target)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  document.execCommand('copy')
+  selection.removeAllRanges()
+}
+
+/** Render the Inspect section: config status, class string, per-result badges, empty/multi-select states. */
+const renderInspectBody = (inspect: InspectPayload | null): string => {
+  if (!inspect) {
+    return `<p class="muted">Inspect results appear in Dev Mode Inspect.</p>`
+  }
+  if (inspect.empty) {
+    return `<p class="muted">Select a layer to see its Tailwind classes.</p>`
+  }
+
+  const isNoConfig = inspect.tierLabel.startsWith('No Tailwind config')
+  const tierBanner = `
+    <div class="banner${isNoConfig ? ' warn' : ''}">
+      ${escapeHtml(inspect.tierLabel)}
+      ${isNoConfig ? `<div class="row"><button type="button" id="inspect-add-config">Add your config</button></div>` : ''}
+    </div>`
+
+  const namespaceNotes = [
+    inspect.unknownNamespaces?.length
+      ? `<div class="item muted">Could not read from your config: ${escapeHtml(inspect.unknownNamespaces.join(', '))} — showing raw values for them.</div>`
+      : '',
+    inspect.partialNamespaces?.length
+      ? `<div class="item muted">Exact Tailwind version not confirmed for: ${escapeHtml(inspect.partialNamespaces.join(', '))} — bundled defaults withheld; explicit tokens still match.</div>`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('')
+
+  const selectionNote =
+    inspect.selectionCount > 1
+      ? `<div class="item muted">${inspect.selectionCount} layers selected — showing the first</div>`
+      : ''
+
+  const classOut = `
+    <pre class="class-out" id="inspect-class-out">${escapeHtml(inspect.className || '/* no classes */')}</pre>
+    <div class="row"><button type="button" id="inspect-copy" aria-label="Copy classes">Copy classes</button></div>`
+
+  const resultsList = inspect.results.length
+    ? `<div class="list">${inspect.results
+        .map(
+          (r) =>
+            `<div class="item"><span class="badge badge-${escapeHtml(r.confidence)}">${escapeHtml(r.confidence)}</span> <strong>${escapeHtml(r.property)}</strong>: ${escapeHtml(r.className ?? r.note ?? '—')}</div>`,
+        )
+        .join('')}</div>`
+    : ''
+
+  const warnings = inspect.warnings.length
+    ? `<div class="list">${inspect.warnings.map((w) => `<div class="item muted">${escapeHtml(w)}</div>`).join('')}</div>`
+    : ''
+
+  return `${tierBanner}${namespaceNotes}${selectionNote}${classOut}${resultsList}${warnings}`
+}
+
 const render = () => {
   const setup = state.setup
   const setupBody = (() => {
@@ -41,18 +125,20 @@ const render = () => {
     if (setup.kind === 'no-edit') {
       return `<div class="banner">${escapeHtml(setup.label)}<ul>${setup.details.map((d) => `<li>${escapeHtml(d)}</li>`).join('')}</ul></div>`
     }
-    const warnings =
-      setup.kind === 'partial'
-        ? `<ul class="banner warn">${setup.warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('')}</ul>`
+    const switchNotice =
+      setup.available.document && setup.available.user
+        ? `<div class="banner">Both a shared and a personal config exist — currently using <strong>${setup.tier}</strong>.
+           <button type="button" id="switch-source" data-target="${setup.tier === 'document' ? 'user' : 'document'}">
+             Switch to ${setup.tier === 'document' ? 'personal' : 'shared'} config
+           </button></div>`
         : ''
-    return `<div class="banner"><strong>${escapeHtml(setup.label)}</strong><ul>${setup.details.map((d) => `<li>${escapeHtml(d)}</li>`).join('')}</ul></div>${warnings}`
+    const warnings = setup.warnings.length
+      ? `<ul class="banner warn">${setup.warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('')}</ul>`
+      : ''
+    return `<div class="banner"><strong>${escapeHtml(setup.label)}</strong><ul>${setup.details.map((d) => `<li>${escapeHtml(d)}</li>`).join('')}</ul></div>${switchNotice}${warnings}`
   })()
 
-  const inspectBody = state.inspect
-    ? `<div class="banner">${escapeHtml(state.inspect.tierLabel)}</div>
-       <pre class="class-out">${escapeHtml(state.inspect.className || '/* no classes */')}</pre>
-       <div class="list">${state.inspect.warnings.map((w) => `<div class="item muted">${escapeHtml(w)}</div>`).join('')}</div>`
-    : `<p class="muted">Inspect results appear in Dev Mode Inspect.</p>`
+  const inspectBody = renderInspectBody(state.inspect)
 
   root.innerHTML = `
     <main>
@@ -70,10 +156,10 @@ const render = () => {
             <input id="pkg-file" type="file" accept=".json,application/json" />
           </label>
           <button type="button" class="primary" id="resolve" aria-label="Resolve config">Resolve</button>
-          <button type="button" id="save-doc" aria-label="Save on this file">Save on file</button>
-          <button type="button" id="save-personal" aria-label="Save personally">Save personal</button>
-          <button type="button" id="remove-doc" aria-label="Remove file config">Remove file</button>
-          <button type="button" id="remove-personal" aria-label="Remove personal config">Remove personal</button>
+          <button type="button" id="save-doc" aria-label="Apply to file">Apply to file</button>
+          <button type="button" id="save-personal" aria-label="Save personally">Save personally</button>
+          <button type="button" id="remove-doc" aria-label="Remove file config">Remove file config</button>
+          <button type="button" id="remove-personal" aria-label="Remove personal config">Remove personal config</button>
         </div>
         <p class="muted" id="file-names"></p>
       </section>
@@ -136,69 +222,90 @@ const render = () => {
     }
     ;(window as unknown as { __figTailPending?: typeof resolved }).__figTailPending = resolved
     state.setup = {
-      kind: resolved.diagnostics.length ? 'partial' : 'ready',
+      kind: 'configured',
+      tier: 'document',
       label: 'Resolved — choose where to save',
       details: [resolved.message, 'Raw source is discarded after resolve'],
       warnings: resolved.diagnostics.map((d) => d.message),
+      available: { document: false, user: false },
+      preferred: 'document',
+      overridden: false,
       canWriteDocument: true,
     }
     render()
   })
 
+  const pendingPayload = () => {
+    const pending = (window as unknown as { __figTailPending?: Awaited<ReturnType<typeof resolveSetupInput>> })
+      .__figTailPending
+    if (!pending?.tokens || !pending.provenance) return null
+    return pending
+  }
+
   document.getElementById('save-doc')?.addEventListener('click', () => {
-    const pending = (window as unknown as { __figTailPending?: Awaited<ReturnType<typeof resolveSetupInput>> }).__figTailPending
+    const pending = pendingPayload()
     if (!pending?.tokens || !pending.provenance) return
     post({
-      type: 'save-config',
-      tier: 1,
-      // extended fields consumed by sandbox handler via closure replacement below
-    } as PluginMessage)
-    // Send resolved payload through a dedicated path
-    parent.postMessage(
-      {
-        pluginMessage: {
-          type: 'save-resolved',
-          tier: 1,
-          tokens: pending.tokens,
-          provenance: pending.provenance,
-          diagnostics: pending.diagnostics,
-          warnings: pending.warnings,
-        },
-      },
-      '*',
-    )
+      type: 'save-resolved',
+      target: 'document',
+      tokens: pending.tokens,
+      provenance: pending.provenance,
+      diagnostics: pending.diagnostics,
+      warnings: pending.warnings,
+    })
   })
   document.getElementById('save-personal')?.addEventListener('click', () => {
-    const pending = (window as unknown as { __figTailPending?: Awaited<ReturnType<typeof resolveSetupInput>> }).__figTailPending
+    const pending = pendingPayload()
     if (!pending?.tokens || !pending.provenance) return
-    parent.postMessage(
-      {
-        pluginMessage: {
-          type: 'save-resolved',
-          tier: 2,
-          tokens: pending.tokens,
-          provenance: pending.provenance,
-          diagnostics: pending.diagnostics,
-          warnings: pending.warnings,
-        },
-      },
-      '*',
-    )
+    post({
+      type: 'save-resolved',
+      target: 'user',
+      tokens: pending.tokens,
+      provenance: pending.provenance,
+      diagnostics: pending.diagnostics,
+      warnings: pending.warnings,
+    })
   })
-  document.getElementById('remove-doc')?.addEventListener('click', () => post({ type: 'remove-config', tier: 1 }))
-  document.getElementById('remove-personal')?.addEventListener('click', () => post({ type: 'remove-config', tier: 2 }))
+  document.getElementById('remove-doc')?.addEventListener('click', () => post({ type: 'remove-config', target: 'document' }))
+  document
+    .getElementById('remove-personal')
+    ?.addEventListener('click', () => post({ type: 'remove-config', target: 'user' }))
+  document.getElementById('switch-source')?.addEventListener('click', (event) => {
+    const target = (event.currentTarget as HTMLElement).dataset.target
+    if (target === 'document' || target === 'user') {
+      post({ type: 'prefer-source', preferred: target })
+    }
+  })
   document.getElementById('lint')?.addEventListener('click', () => post({ type: 'run-lint' }))
-  document.getElementById('export')?.addEventListener('click', () => post({ type: 'export-subtree' }))
+  document.getElementById('export')?.addEventListener('click', () =>
+    post({ type: 'export-subtree', format: 'html' }),
+  )
   document.getElementById('stamp-prep')?.addEventListener('click', () => post({ type: 'stamp-prepare' }))
-  document.getElementById('stamp-apply')?.addEventListener('click', () => post({ type: 'stamp-apply' }))
+  document.getElementById('stamp-apply')?.addEventListener('click', () => {
+    const stamp = state.stamp
+    if (!stamp) {
+      post({ type: 'stamp-prepare' })
+      return
+    }
+    const applicable = stamp.changes.filter((c) => c.status === 'high' || c.status === 'medium')
+    if (applicable.length === 0) {
+      state.status = 'No appliable stamp rows (conflicts are blocked)'
+      render()
+      return
+    }
+    const selectedIds = applicable.map((c) => c.variableId)
+    const overwriteIds = applicable.filter((c) => c.overwriteRequired).map((c) => c.variableId)
+    const confirmed = window.confirm(
+      `Apply WEB code syntax to ${selectedIds.length} variable(s)? Conflicts are skipped. Use Figma undo to reverse.`,
+    )
+    if (!confirmed) return
+    post({ type: 'stamp-apply', selectedIds, overwriteIds })
+  })
+  document.getElementById('inspect-copy')?.addEventListener('click', () => {
+    void copyText(state.inspect?.className || '', 'inspect-class-out')
+  })
+  document.getElementById('inspect-add-config')?.addEventListener('click', () => post({ type: 'open-setup' }))
 }
-
-const escapeHtml = (value: string): string =>
-  value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
 
 onmessage = (event: MessageEvent) => {
   const msg = event.data?.pluginMessage as PluginMessage | { type: string; [key: string]: unknown } | undefined
@@ -215,7 +322,8 @@ onmessage = (event: MessageEvent) => {
   }
   if (msg.type === 'lint-result') {
     state.lint = (msg as Extract<PluginMessage, { type: 'lint-result' }>).payload
-    state.status = `${state.lint.findings.length} findings${state.lint.truncated ? ' (truncated)' : ''}`
+    state.status = `${state.lint.findings.length} findings · ${state.lint.visited} nodes · ${state.lint.durationMs}ms${state.lint.truncated ? ' (truncated)' : ''}`
+    state.exportCode = state.lint.markdown
     render()
     return
   }

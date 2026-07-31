@@ -1,21 +1,8 @@
 import type { PluginMessage } from './shared/messages'
-import { readConfig, removeConfig, writeDocumentConfig, writePersonalConfig } from './storage'
+import { buildStoredConfig, clearConfig, readConfig, setPreferredSource, writeConfig } from './storage'
 import { runLint } from './lint/run-lint'
 import { exportSubtree } from './export/subtree'
 import { applyStamp, prepareStampDiff } from './stamp/stamp'
-import type { ConfigProvenance, TokenSet } from '@fig-tail/theme'
-import type { PersistedDiagnostic } from './storage-types'
-
-type SaveResolvedMessage = {
-  type: 'save-resolved'
-  tier: 1 | 2
-  tokens: TokenSet
-  provenance: ConfigProvenance
-  diagnostics: PersistedDiagnostic[]
-  warnings: string[]
-}
-
-type UiInbound = PluginMessage | SaveResolvedMessage
 
 /** Open the setup UI from design or codegen preferences. */
 export const openSetupUi = () => {
@@ -24,38 +11,26 @@ export const openSetupUi = () => {
 }
 
 const publishSetupState = async () => {
-  const config = await readConfig()
+  const result = await readConfig()
   const canWriteDocument = figma.editorType === 'figma'
-  if (config.tier === 3) {
-    figma.ui.postMessage({
-      type: 'setup-state',
-      state: { kind: 'empty' },
-    } satisfies PluginMessage)
+  if (!result.active) {
+    figma.ui.postMessage({ type: 'setup-state', state: { kind: 'empty' } } satisfies PluginMessage)
     return
   }
-  const details = [
-    `Saved ${config.config.savedAt}`,
-    `Defaults: ${config.config.tokens.source.defaults.status}`,
-  ]
-  if (config.config.diagnostics.length) {
-    figma.ui.postMessage({
-      type: 'setup-state',
-      state: {
-        kind: 'partial',
-        label: config.label,
-        details,
-        warnings: config.config.diagnostics.map((d) => d.message),
-        canWriteDocument,
-      },
-    } satisfies PluginMessage)
-    return
-  }
+  const { config, tier } = result.active
+  const details = [`Saved ${config.storedAt}`, `Defaults: ${config.tokens.source.defaults.status}`]
+  const warnings = config.resolution.unresolved.map((d) => d.message)
   figma.ui.postMessage({
     type: 'setup-state',
     state: {
-      kind: 'ready',
-      label: config.label,
+      kind: 'configured',
+      label: result.label,
+      tier,
       details,
+      warnings,
+      available: result.available,
+      preferred: result.preferred,
+      overridden: result.overridden,
       canWriteDocument,
     },
   } satisfies PluginMessage)
@@ -67,7 +42,7 @@ export const runDesignMode = () => {
 }
 
 /** Handle UI messages shared across modes. */
-export const handleUiMessage = async (msg: UiInbound) => {
+export const handleUiMessage = async (msg: PluginMessage) => {
   if (msg.type === 'ready') {
     await publishSetupState()
     return
@@ -77,28 +52,36 @@ export const handleUiMessage = async (msg: UiInbound) => {
     return
   }
   if (msg.type === 'save-resolved') {
-    const result =
-      msg.tier === 1
-        ? writeDocumentConfig(msg.tokens, msg.provenance, msg.diagnostics, msg.warnings)
-        : await writePersonalConfig(msg.tokens, msg.provenance, msg.diagnostics, msg.warnings)
+    const draft = buildStoredConfig(msg.tokens, msg.provenance, msg.diagnostics, msg.warnings)
+    const result = await writeConfig(draft, { target: msg.target })
+    if (!result.ok && result.reason === 'no-edit-access') {
+      const availability = await readConfig()
+      figma.ui.postMessage({
+        type: 'setup-state',
+        state: {
+          kind: 'no-edit',
+          label: 'Saving to this file needs edit access',
+          details: [...result.errors, 'Save to your personal settings instead — it needs no edit access.'],
+          available: availability.available,
+        },
+      } satisfies PluginMessage)
+      return
+    }
     figma.ui.postMessage({
       type: 'resolve-result',
       ok: result.ok,
-      message: result.ok ? `Saved (${result.bytes} bytes, ${result.chunks} chunks)` : result.error,
+      message: result.ok ? `Saved to ${result.writtenTo}` : result.errors.join('; '),
     } satisfies PluginMessage)
     await publishSetupState()
     return
   }
-  if (msg.type === 'save-config') {
-    figma.ui.postMessage({
-      type: 'resolve-result',
-      ok: false,
-      message: 'Resolve in the UI, then save',
-    } satisfies PluginMessage)
+  if (msg.type === 'remove-config') {
+    await clearConfig(msg.target)
+    await publishSetupState()
     return
   }
-  if (msg.type === 'remove-config') {
-    await removeConfig(msg.tier)
+  if (msg.type === 'prefer-source') {
+    await setPreferredSource(msg.preferred)
     await publishSetupState()
     return
   }
@@ -108,7 +91,7 @@ export const handleUiMessage = async (msg: UiInbound) => {
     return
   }
   if (msg.type === 'export-subtree') {
-    const code = await exportSubtree()
+    const code = await exportSubtree({ format: msg.format ?? 'html' })
     figma.ui.postMessage({ type: 'export-result', code } satisfies PluginMessage)
     return
   }
@@ -122,7 +105,16 @@ export const handleUiMessage = async (msg: UiInbound) => {
       figma.notify('Stamping can only apply in the design editor')
       return
     }
-    await applyStamp()
-    figma.notify('Code syntax updated')
+    const count = msg.selectedIds.length
+    if (count === 0) {
+      figma.notify('Select at least one row to apply')
+      return
+    }
+    const { applied, skipped } = await applyStamp({
+      selectedIds: msg.selectedIds,
+      overwriteIds: msg.overwriteIds,
+    })
+    figma.notify(`Updated ${applied} variable(s); skipped ${skipped}. Undo with ⌘Z if needed.`)
+    await publishSetupState()
   }
 }

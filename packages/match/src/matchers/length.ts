@@ -270,6 +270,15 @@ export const matchLength = (
   }
 
   if (mapping.ns === 'borderWidth') {
+    if (px === 1) {
+      const className = applyPrefix(tokens, 'border')
+      return {
+        property,
+        className,
+        confidence: 'exact-value',
+        provenance: { property, hintStatus: 'absent', tokenKey: 'DEFAULT', utility: mapping.util },
+      }
+    }
     const hit = matchScale(px, tokens.borderWidth, exactTol, nearTol)
     if (hit?.kind === 'exact') {
       const className = applyPrefix(
@@ -285,11 +294,18 @@ export const matchLength = (
     }
   }
 
+  const partialNote = tokens.partialNamespaces.includes(
+    mapping.ns === 'size' ? 'spacing' : mapping.ns,
+  )
+    ? `Bundled default ${mapping.ns} tokens were withheld; showing raw values for unmatched lengths`
+    : undefined
+
   const className = applyPrefix(tokens, `${mapping.util}-[${value}]`)
   return {
     property,
     className,
     confidence: className ? 'arbitrary' : 'none',
+    ...(partialNote !== undefined ? { note: partialNote } : {}),
     provenance,
   }
 }

@@ -39,6 +39,7 @@ export default tseslint.config(
       '**/*.mjs',
       '**/build.mjs',
       '**/*.test.ts',
+      '**/test-helpers.ts',
     ],
   },
   {
@@ -71,6 +72,17 @@ export default tseslint.config(
     },
   },
   {
+    // Write-safety invariant (plan 003 Step 7, program-wide per plans/README.md):
+    // fig-tail never mutates the Figma document except via
+    // `figma.root.setPluginData` under `figtail`-prefixed keys (this plan) and
+    // `Variable.setVariableCodeSyntax('WEB', …)` (plan 007). Every other
+    // document-mutation API is banned below. `setPluginData` itself is
+    // intentionally left off this list — `no-restricted-syntax`/
+    // `no-restricted-properties` have no clean "ban except one call site"
+    // allowlist mechanism, so the single permitted call in `src/storage.ts`
+    // instead carries a targeted `eslint-disable-next-line` comment naming
+    // this plan, and `write-safety.test.ts` independently audits the built
+    // bundle for every OTHER banned identifier.
     files: ['packages/plugin/src/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-properties': [
@@ -90,19 +102,39 @@ export default tseslint.config(
           message: 'Use named exports only.',
         },
         {
-          selector:
-            "CallExpression[callee.property.name='setName']",
+          selector: "CallExpression[callee.property.name='setName']",
           message: 'Write-safety: node name mutation is forbidden.',
         },
         {
-          selector:
-            "CallExpression[callee.property.name='appendChild']",
+          selector: "CallExpression[callee.property.name='appendChild']",
           message: 'Write-safety: document structure mutation is forbidden.',
         },
         {
+          selector: "CallExpression[callee.property.name='remove']",
+          message: 'Write-safety: node removal is forbidden.',
+        },
+        {
+          selector: "CallExpression[callee.property.name='setBoundVariable']",
+          message: 'Write-safety: variable binding mutation is forbidden.',
+        },
+        {
+          selector: "CallExpression[callee.property.name='setValueForMode']",
+          message: 'Write-safety: variable mode value mutation is forbidden.',
+        },
+        {
           selector:
-            "MemberExpression[property.name='characters'][parent.type='AssignmentExpression']",
-          message: 'Write-safety: text content mutation is forbidden.',
+            "CallExpression[callee.property.name=/^(createVariable|createVariableCollection|createRectangle|createFrame|createText|createComponent|createEllipse|createPolygon|createStar|createVector|createBooleanOperation|createSlice|createPage|createPaintStyle|createTextStyle|createEffectStyle|createGridStyle)$/]",
+          message: 'Write-safety: node/variable/style creation is forbidden.',
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name=/^(addDevResourceAsync|editDevResourceAsync|deleteDevResourceAsync)$/]",
+          message: 'Write-safety: dev resource mutation is forbidden.',
+        },
+        {
+          selector:
+            "AssignmentExpression[left.type='MemberExpression'][left.property.name=/^(name|characters|fills|strokes|cornerRadius|paddingTop|paddingBottom|paddingLeft|paddingRight|topLeftRadius|topRightRadius|bottomLeftRadius|bottomRightRadius)$/]",
+          message: 'Write-safety: node/variable property mutation is forbidden.',
         },
       ],
     },

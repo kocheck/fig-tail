@@ -106,33 +106,65 @@ const matchOne = (
   }
 }
 
-const collapsePadding = (results: MatchResult[]): MatchResult[] => {
-  const sides = ['padding-top', 'padding-right', 'padding-bottom', 'padding-left'].map((property) =>
-    results.find((result) => result.property === property),
-  )
+const collapseSides = (
+  results: MatchResult[],
+  properties: string[],
+  utilPrefix: string,
+  collapsedProperty: string,
+): MatchResult[] => {
+  const sides = properties.map((property) => results.find((result) => result.property === property))
   if (sides.some((side) => !side?.className || side.confidence === 'nearest' || side.confidence === 'none')) {
     return results
   }
-  const tokens = sides.map((side) => side?.className?.replace(/^p[trbl]-/, '') ?? '')
-  if (new Set(tokens).size !== 1 || !tokens[0]) {
+  const suffixes = sides.map((side) => {
+    const className = side?.className ?? ''
+    const roundedMatch = /^rounded-(?:tl|tr|br|bl)-(.+)$/.exec(className)
+    if (roundedMatch?.[1]) return roundedMatch[1]
+    const boxMatch = new RegExp(`^${utilPrefix}[trblxy]-(.+)$`).exec(className)
+    if (boxMatch?.[1]) return boxMatch[1]
+    const shorthandMatch = new RegExp(`^${utilPrefix}-(.+)$`).exec(className)
+    if (shorthandMatch?.[1]) return shorthandMatch[1]
+    return ''
+  })
+  if (suffixes.some((suffix) => !suffix) || new Set(suffixes).size !== 1) {
     return results
   }
   const first = sides[0]
   if (!first) return results
+  const suffix = suffixes[0]
+  const collapsedClass =
+    utilPrefix === 'rounded'
+      ? `rounded-${suffix}`
+      : (first.className?.replace(new RegExp(`^${utilPrefix}[trbl]-`), `${utilPrefix}-`) ?? null)
   const collapsed: MatchResult = {
-    property: 'padding',
-    className: first.className?.replace(/^p[trbl]-/, 'p-') ?? null,
+    property: collapsedProperty,
+    className: collapsedClass,
     confidence: first.confidence,
     provenance: first.provenance,
   }
-  return [
-    ...results.filter(
-      (result) =>
-        !['padding-top', 'padding-right', 'padding-bottom', 'padding-left'].includes(result.property),
-    ),
-    collapsed,
-  ]
+  return [...results.filter((result) => !properties.includes(result.property)), collapsed]
 }
+
+const collapsePadding = (results: MatchResult[]): MatchResult[] =>
+  collapseSides(
+    results,
+    ['padding-top', 'padding-right', 'padding-bottom', 'padding-left'],
+    'p',
+    'padding',
+  )
+
+const collapseRadius = (results: MatchResult[]): MatchResult[] =>
+  collapseSides(
+    results,
+    [
+      'border-top-left-radius',
+      'border-top-right-radius',
+      'border-bottom-right-radius',
+      'border-bottom-left-radius',
+    ],
+    'rounded',
+    'border-radius',
+  )
 
 /** Match a CSS declaration map to Tailwind classes. */
 export const matchDeclarations = (
@@ -145,7 +177,7 @@ export const matchDeclarations = (
     const hint = options.hints?.[property]
     results.push(matchOne(property, value, options.tokens, hint, options, expanded))
   }
-  return collapsePadding(results)
+  return collapseRadius(collapsePadding(results))
 }
 
 /** Join copyable classes; nearest results are structurally excluded. */

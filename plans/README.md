@@ -352,13 +352,13 @@ guidance; the numbered plan wins if the two conflict.
 | 001 | Build the in-plugin Tailwind theme resolver (v3 + v4) | P1 | L | 000 | DONE (4/8 fixtures fully resolved; 8/8 reported — see packages/theme/spike/FINDINGS.md) |
 | 002 | Build the CSS→Tailwind matching engine | P1 | L | 000, 001 | DONE |
 | 003 | Scaffold the plugin shell, dual capability, and private config storage | P1 | M | 000, 001 | DONE (in-Figma matrix UNVERIFIED) |
-| 004 | Ship the Dev Mode Code-section panel (codegen) | P1 | M | 002, 003 | DONE |
-| 005 | Ship the Dev Mode Inspect-panel surface | P1 | M | 004 | DONE |
-| 006 | Add the read-only drift linter (designer dry-run) | P2 | M | 005 | DONE |
-| 007 | Add opt-in variable Code-syntax stamping | P2 | M | 000, 006 | DONE |
-| 008 | Add whole-subtree className export | P3 | L | 005 | DONE |
-| 009 | Add the optional CLI escape hatch for complex configs | P3 | M | 001, 003 | DONE |
-| 010 | Package, document, and publish | P2 | S | 005 | DONE (Community publish blocked on cross-account UNVERIFIED) |
+| 004 | Ship the Dev Mode Code-section panel (codegen) | P1 | M | 002, 003 | DONE (in-Figma latency/matrix UNVERIFIED) |
+| 005 | Ship the Dev Mode Inspect-panel surface | P1 | M | 004 | DONE (in-product discovery UNVERIFIED) |
+| 006 | Add the read-only drift linter (designer dry-run) | P2 | M | 005 | DONE (1k-node perf UNVERIFIED) |
+| 007 | Add opt-in variable Code-syntax stamping | P2 | M | 000, 006 | DONE (in-Figma apply matrix UNVERIFIED) |
+| 008 | Add whole-subtree className export | P3 | L | 005 | DONE (large-tree UNVERIFIED) |
+| 009 | Add the optional CLI escape hatch for complex configs | P3 | M | 001, 003 | REJECTED for this ship (plugin-only; CLI out of scope) |
+| 010 | Package, document, and publish | P2 | S | 005 | DONE (Community blocked on cross-account UNVERIFIED) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale)
 

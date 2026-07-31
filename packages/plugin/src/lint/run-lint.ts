@@ -1,52 +1,25 @@
-import { readConfig } from '../storage'
-import { runPipeline } from '../pipeline'
+import { scanDrift, findingsToMarkdown } from './scan'
 import type { LintPayload } from '../shared/messages'
 
-const MAX_NODES = 200
-
-/** Read-only drift linter over the current page selection/page. */
+/** Back-compat entry used by mode-design Tools button. */
 export const runLint = async (): Promise<LintPayload> => {
-  const config = await readConfig()
-  const roots =
-    figma.currentPage.selection.length > 0
-      ? figma.currentPage.selection
-      : figma.currentPage.children
-  const findings: LintPayload['findings'] = []
-  let visited = 0
-  let truncated = false
-
-  const walk = async (node: SceneNode) => {
-    if (visited >= MAX_NODES) {
-      truncated = true
-      return
-    }
-    visited += 1
-    if ('getCSSAsync' in node && typeof node.getCSSAsync === 'function') {
-      const css = await node.getCSSAsync()
-      const output = runPipeline({ css, config })
-      for (const result of output.results) {
-        if (result.confidence === 'nearest' && result.nearest) {
-          findings.push({
-            nodeName: node.name,
-            property: result.property,
-            note: result.note ?? 'near miss',
-            nearest: result.nearest.className,
-          })
-        }
-      }
-    }
-    if ('children' in node) {
-      for (const child of node.children) {
-        await walk(child)
-        if (truncated) return
-      }
-    }
+  const result = await scanDrift({ scope: 'selection' })
+  return {
+    findings: result.findings.map((f) => ({
+      id: f.id,
+      kind: f.kind,
+      severity: f.severity,
+      nodeIds: f.nodeIds,
+      nodeName: f.nodeNames[0] ?? '',
+      nodeNames: f.nodeNames,
+      property: f.property,
+      note: f.message,
+      ...(f.nearestToken ? { nearest: f.nearestToken } : {}),
+      ...(f.distance !== undefined ? { distance: f.distance } : {}),
+    })),
+    truncated: result.truncated || result.cancelled,
+    markdown: findingsToMarkdown(result),
+    visited: result.visited,
+    durationMs: result.durationMs,
   }
-
-  for (const root of roots) {
-    await walk(root)
-    if (truncated) break
-  }
-
-  return { findings, truncated }
 }

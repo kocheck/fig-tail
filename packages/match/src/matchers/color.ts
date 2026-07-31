@@ -1,7 +1,7 @@
 import { differenceCiede2000, parse } from 'culori'
 import type { ColorToken, TokenSet } from '@fig-tail/theme'
 import type { MatchResult, VariableHint } from '../types'
-import { applyPrefix, utilityAvailable } from '../availability'
+import { applyPrefix, utilityAvailable, withKnownPrefix } from '../availability'
 
 const deltaE = differenceCiede2000()
 
@@ -61,22 +61,25 @@ const toRgba = (value: string): Rgba | null => {
 }
 
 const colourEquals = (a: string, token: ColorToken): boolean => {
+  const alpha = readAlpha(a)
   const left = toRgba(a)
   if (left) {
-    return (
+    const rgbMatch =
       left.r === token.rgb[0] &&
       left.g === token.rgb[1] &&
-      left.b === token.rgb[2] &&
-      Math.abs(left.alpha - token.alpha) < 0.005
-    )
+      left.b === token.rgb[2]
+    if (alpha < 0.995) {
+      return rgbMatch && Math.abs(token.alpha - 1) < 0.005
+    }
+    return rgbMatch && Math.abs(left.alpha - token.alpha) < 0.005
   }
   // Fallback: parse both and compare via zero deltaE + alpha
   const parsed = parse(a)
   const tokenParsed = parse(token.hex)
   if (!parsed || !tokenParsed) return false
   const delta = deltaE(parsed, tokenParsed)
-  const alpha = 'alpha' in parsed && typeof parsed.alpha === 'number' ? parsed.alpha : 1
-  return delta < 0.001 && Math.abs(alpha - token.alpha) < 0.005
+  const parsedAlpha = 'alpha' in parsed && typeof parsed.alpha === 'number' ? parsed.alpha : 1
+  return delta < 0.001 && Math.abs(parsedAlpha - token.alpha) < 0.005
 }
 
 const opacityModifier = (alpha: number): string => {
@@ -178,14 +181,16 @@ export const matchColor = (
   if (hint?.codeSyntax && tokens?.colors[hint.codeSyntax]) {
     const token = tokens.colors[hint.codeSyntax]
     if (token && colourEquals(value, token)) {
-      const className = applyPrefix(
+      const prefixed = withKnownPrefix(
         tokens,
         `${utility}-${hint.codeSyntax}${opacityModifier(readAlpha(value))}`,
+        'exact-variable',
       )
       return {
         property,
-        className,
-        confidence: 'exact-variable',
+        className: prefixed.className,
+        confidence: prefixed.confidence,
+        ...(prefixed.note !== undefined ? { note: prefixed.note } : {}),
         provenance: {
           property,
           hintStatus: 'applied',
@@ -208,17 +213,18 @@ export const matchColor = (
 
   const exact = pickExact(tokens.colors, value, hint)
   if (exact) {
-    const className = applyPrefix(
+    const prefixed = withKnownPrefix(
       tokens,
       `${utility}-${exact.key}${opacityModifier(readAlpha(value))}`,
+      hint?.name && exact.key === hint.name.replace(/\//g, '-')
+        ? 'name-match'
+        : 'exact-value',
     )
     const result: MatchResult = {
       property,
-      className,
-      confidence:
-        hint?.name && exact.key === hint.name.replace(/\//g, '-')
-          ? 'name-match'
-          : 'exact-value',
+      className: prefixed.className,
+      confidence: prefixed.confidence,
+      ...(prefixed.note !== undefined ? { note: prefixed.note } : {}),
       provenance: {
         property,
         hintStatus: hint ? 'applied' : 'absent',
@@ -262,11 +268,16 @@ export const matchColor = (
     }
   }
 
+  const partialNote = tokens.partialNamespaces.includes('colors')
+    ? 'Bundled default colours were withheld; showing raw values for unmatched colours'
+    : undefined
+
   const className = applyPrefix(tokens, `${utility}-[${value}]`)
   return {
     property,
     className,
     confidence: className ? 'arbitrary' : 'none',
+    ...(partialNote !== undefined ? { note: partialNote } : {}),
     provenance: provenanceBase,
   }
 }
