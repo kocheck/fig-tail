@@ -21,5 +21,6 @@ export const runLint = async (): Promise<LintPayload> => {
     markdown: findingsToMarkdown(result),
     visited: result.visited,
     durationMs: result.durationMs,
+    resolutionFailures: result.resolutionFailures,
   }
 }

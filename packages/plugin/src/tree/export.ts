@@ -1,4 +1,4 @@
-import { createResolutionContext, resolveNodes } from '../pipeline'
+import { createResolutionContext, resolveNodes, ResolutionError } from '../pipeline'
 
 export type TreeFormat = 'html' | 'jsx' | 'outline'
 
@@ -123,6 +123,8 @@ export const exportSubtree = async (options: TreeExportOptions = { format: 'html
   const maxNodes = options.maxNodes ?? 150
   const maxDepth = options.maxDepth ?? 12
   const { nodes, truncated: walkTruncated } = collectTree(selection, maxNodes, maxDepth)
+  if (nodes.length === 0) return '/* fig-tail could not export: empty subtree */'
+
   const ctx = await createResolutionContext({ deadlineMs: options.deadlineMs ?? 2000, maxInFlight: 8 })
   const resolved = await resolveNodes(
     nodes.map((n) => n.id),
@@ -130,13 +132,26 @@ export const exportSubtree = async (options: TreeExportOptions = { format: 'html
   )
   const classes = new Map<string, string>()
   let timeTruncated = false
+  let hardFailures = 0
   for (const item of resolved) {
-    if (item.error === 'Resolution deadline exceeded') {
+    if (item.error === ResolutionError.DEADLINE_EXCEEDED) {
       timeTruncated = true
+      continue
+    }
+    if (item.error) {
+      hardFailures += 1
       continue
     }
     classes.set(item.nodeId, item.output?.className ?? '')
   }
+
+  if (classes.size === 0 && (hardFailures > 0 || timeTruncated)) {
+    const reason = timeTruncated
+      ? 'resolution deadline exceeded'
+      : `${hardFailures} layer(s) failed to resolve`
+    return `/* fig-tail could not export: ${reason} */`
+  }
+
   const truncated = walkTruncated || timeTruncated
   if (options.format === 'jsx') return emitJsx(nodes, classes, truncated)
   if (options.format === 'outline') return emitOutline(nodes, classes, truncated)

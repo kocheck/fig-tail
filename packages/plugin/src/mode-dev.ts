@@ -4,6 +4,7 @@ import { renderCodegenSections, type CodegenSection } from './codegen/render'
 import { openSetupUi } from './mode-design'
 import { createResolutionContext, resolveNodes, runPipeline } from './pipeline'
 import { readConfig } from './storage'
+import { meaningfulStorageFailures } from './shared/errors'
 import type { InspectPayload } from './shared/messages'
 import { exportSubtree } from './tree/export'
 
@@ -106,17 +107,21 @@ export const runDevMode = () => {
 
   const emptyPayload = async (selectionCount: number): Promise<InspectPayload> => {
     const config = await readConfig()
+    const failures = meaningfulStorageFailures(config.failures)
+    const activeTier = config.active?.tier ?? null
     return {
       className: '',
       warnings: [],
       results: [],
       tierLabel: config.label,
+      activeTier,
       ...(config.active?.config.tokens.unknownNamespaces.length
         ? { unknownNamespaces: config.active.config.tokens.unknownNamespaces }
         : {}),
       ...(config.active?.config.tokens.partialNamespaces.length
         ? { partialNamespaces: config.active.config.tokens.partialNamespaces }
         : {}),
+      ...(failures.length ? { storageFailures: failures } : {}),
       selectionCount,
       empty: true,
     }
@@ -132,14 +137,18 @@ export const runDevMode = () => {
     const resolved = await resolveNodes(nodeIds, ctx)
     const first = resolved[0]
     const tokens = ctx.config.active?.config.tokens ?? null
+    const failures = meaningfulStorageFailures(ctx.config.failures)
+    const activeTier = ctx.config.active?.tier ?? null
     if (!first?.output) {
       return {
         className: '',
-        warnings: [first?.error ?? 'Could not read this layer'],
+        warnings: [first?.detail ?? first?.error ?? 'Could not read this layer'],
         results: [],
         tierLabel: ctx.config.label,
+        activeTier,
         ...(tokens?.unknownNamespaces.length ? { unknownNamespaces: tokens.unknownNamespaces } : {}),
         ...(tokens?.partialNamespaces.length ? { partialNamespaces: tokens.partialNamespaces } : {}),
+        ...(failures.length ? { storageFailures: failures } : {}),
         selectionCount: selection.length,
         empty: false,
       }
@@ -155,8 +164,10 @@ export const runDevMode = () => {
         ...(result.note ? { note: result.note } : {}),
       })),
       tierLabel: output.tierLabel,
+      activeTier,
       ...(output.tokens?.unknownNamespaces.length ? { unknownNamespaces: output.tokens.unknownNamespaces } : {}),
       ...(output.tokens?.partialNamespaces.length ? { partialNamespaces: output.tokens.partialNamespaces } : {}),
+      ...(failures.length ? { storageFailures: failures } : {}),
       selectionCount: selection.length,
       empty: false,
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createResolutionContext, resolveNodes } from './pipeline'
+import { createResolutionContext, resolveNodes, ResolutionError } from './pipeline'
 
 const CSS = { display: 'flex', padding: '24px' }
 
@@ -111,7 +111,7 @@ describe('resolveNodes', () => {
     const results = await resolveNodes(['first', 'second', 'third'], ctx)
     expect(results[0]?.output).not.toBeNull()
     const laterResults = results.slice(1)
-    expect(laterResults.some((r) => r.error === 'Resolution deadline exceeded')).toBe(true)
+    expect(laterResults.some((r) => r.error === ResolutionError.DEADLINE_EXCEEDED)).toBe(true)
   })
 
   it('stops starting new work once signal.cancelled is set', async () => {
@@ -122,7 +122,7 @@ describe('resolveNodes', () => {
     })
     const ctx = await createResolutionContext({ signal })
     const results = await resolveNodes(['a', 'b'], ctx)
-    expect(results.every((r) => r.error === 'Resolution deadline exceeded')).toBe(true)
+    expect(results.every((r) => r.error === ResolutionError.DEADLINE_EXCEEDED)).toBe(true)
   })
 
   it('reports a readable error instead of throwing when a node cannot be found', async () => {
@@ -133,7 +133,8 @@ describe('resolveNodes', () => {
     const ctx = await createResolutionContext()
     const [result] = await resolveNodes(['missing'], ctx)
     expect(result?.output).toBeNull()
-    expect(result?.error).toBe('Node not found')
+    expect(result?.error).toBe(ResolutionError.NODE_NOT_FOUND)
+    expect(result?.detail).toBe('Node not found')
   })
 
   it('reports a readable error instead of throwing when getCSSAsync rejects', async () => {
@@ -149,6 +150,7 @@ describe('resolveNodes', () => {
     const ctx = await createResolutionContext()
     const [result] = await resolveNodes(['broken'], ctx)
     expect(result?.output).toBeNull()
-    expect(result?.error).toBe('boom')
+    expect(result?.error).toBe(ResolutionError.RESOLVE_FAILED)
+    expect(result?.detail).toBe('boom')
   })
 })

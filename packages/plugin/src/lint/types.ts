@@ -42,6 +42,8 @@ export type ScanResult = {
   truncated: boolean
   cancelled: boolean
   durationMs: number
+  /** Nodes that failed to resolve (deadline, missing, or resolve error). */
+  resolutionFailures: number
 }
 
 const SEVERITY_RANK: Record<Severity, number> = { high: 0, medium: 1, low: 2 }

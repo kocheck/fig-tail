@@ -1,4 +1,4 @@
-import { createResolutionContext, resolveNodes } from '../pipeline'
+import { createResolutionContext, resolveNodes, ResolutionError } from '../pipeline'
 import { loadDismissals } from './dismiss'
 import {
   classifyResult,
@@ -63,10 +63,14 @@ export const scanDrift = async (options: ScanOptions): Promise<ScanResult> => {
   const documentConfigId = ctx.config.active?.documentConfigId ?? null
   const dismissed = await loadDismissals(documentConfigId)
 
+  let resolutionFailures = 0
   const buckets = new Map<string, Finding>()
   for (const item of resolved) {
     if (options.signal?.cancelled) break
-    if (!item.output) continue
+    if (!item.output) {
+      resolutionFailures += 1
+      continue
+    }
     for (const result of item.output.results) {
       const classified = classifyResult(result)
       if (!classified) continue
@@ -102,9 +106,11 @@ export const scanDrift = async (options: ScanOptions): Promise<ScanResult> => {
   return {
     findings: sortFindings([...buckets.values()]),
     visited: ids.length,
-    truncated: walkTruncated || resolved.some((r) => r.error === 'Resolution deadline exceeded'),
+    truncated:
+      walkTruncated || resolved.some((r) => r.error === ResolutionError.DEADLINE_EXCEEDED),
     cancelled,
     durationMs: Date.now() - started,
+    resolutionFailures,
   }
 }
 
@@ -115,5 +121,9 @@ export const findingsToMarkdown = (result: ScanResult): string => {
     (f) =>
       `| ${f.severity} | ${f.kind} | ${f.nodeNames.join(', ')} | ${f.property} | ${f.message.replace(/\|/g, '/')} |`,
   )
-  return [header, ...rows].join('\n')
+  const footer =
+    result.resolutionFailures > 0
+      ? `\n\n_Skipped ${result.resolutionFailures} layer(s) (deadline / missing / resolve error)._`
+      : ''
+  return [header, ...rows].join('\n') + footer
 }

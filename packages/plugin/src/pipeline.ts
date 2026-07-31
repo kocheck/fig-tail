@@ -62,8 +62,22 @@ export type ResolutionContext = {
   varCache: Map<string, Variable | null>
 }
 
+/** Stable resolution failure codes — consumers must not string-compare free text. */
+export const ResolutionError = {
+  NODE_NOT_FOUND: 'node-not-found',
+  DEADLINE_EXCEEDED: 'deadline-exceeded',
+  RESOLVE_FAILED: 'resolve-failed',
+} as const
+
+export type ResolutionErrorCode = (typeof ResolutionError)[keyof typeof ResolutionError]
+
 /** One node's resolution outcome — `output` is `null` only when `error` is set. */
-export type ResolvedNode = { nodeId: string; output: PipelineOutput | null; error?: string }
+export type ResolvedNode = {
+  nodeId: string
+  output: PipelineOutput | null
+  error?: ResolutionErrorCode
+  detail?: string
+}
 
 /** Create a resolution context. Reads storage exactly once for the whole operation. */
 export const createResolutionContext = async (opts?: {
@@ -99,14 +113,19 @@ const resolveOne = async (nodeId: string, ctx: ResolutionContext): Promise<Resol
   try {
     const node = await figma.getNodeByIdAsync(nodeId)
     if (!node) {
-      return { nodeId, output: null, error: 'Node not found' }
+      return { nodeId, output: null, error: ResolutionError.NODE_NOT_FOUND, detail: 'Node not found' }
     }
     const css = await getCachedCss(node, ctx)
     const hints = 'boundVariables' in node ? collectHints(node as SceneNode, ctx.varCache) : {}
     const output = runPipeline({ css, hints, config: ctx.config })
     return { nodeId, output }
   } catch (error) {
-    return { nodeId, output: null, error: error instanceof Error ? error.message : String(error) }
+    return {
+      nodeId,
+      output: null,
+      error: ResolutionError.RESOLVE_FAILED,
+      detail: error instanceof Error ? error.message : String(error),
+    }
   }
 }
 
@@ -133,7 +152,12 @@ export const resolveNodes = async (nodeIds: string[], ctx: ResolutionContext): P
       const nodeId = uniqueIds[index]
       if (nodeId === undefined) continue
       if (isExpired()) {
-        resolvedById.set(nodeId, { nodeId, output: null, error: 'Resolution deadline exceeded' })
+        resolvedById.set(nodeId, {
+          nodeId,
+          output: null,
+          error: ResolutionError.DEADLINE_EXCEEDED,
+          detail: 'Resolution deadline exceeded',
+        })
         continue
       }
       resolvedById.set(nodeId, await resolveOne(nodeId, ctx))
@@ -144,7 +168,13 @@ export const resolveNodes = async (nodeIds: string[], ctx: ResolutionContext): P
   await Promise.all(Array.from({ length: workerCount }, () => worker()))
 
   return nodeIds.map(
-    (nodeId) => resolvedById.get(nodeId) ?? { nodeId, output: null, error: 'Resolution deadline exceeded' },
+    (nodeId) =>
+      resolvedById.get(nodeId) ?? {
+        nodeId,
+        output: null,
+        error: ResolutionError.DEADLINE_EXCEEDED,
+        detail: 'Resolution deadline exceeded',
+      },
   )
 }
 

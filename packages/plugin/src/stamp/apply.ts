@@ -1,6 +1,7 @@
 import { proposeVariableToken } from '../lint/variables'
 import { readConfig } from '../storage'
-import type { StampDiffPayload } from '../shared/messages'
+import type { StampApplyResult, StampDiffPayload } from '../shared/messages'
+import { messageOf } from '../shared/errors'
 
 export type StampApplyRequest = {
   selectedIds: string[]
@@ -52,39 +53,51 @@ export const prepareStampDiff = async (): Promise<StampDiffPayload> => {
 /**
  * Apply selected stamp rows after re-reading config and revalidating.
  * Single write site for WEB code syntax — design editor only.
+ * Returns structured applied / skipped-with-reasons / failed (never throws for row skips).
  */
-export const applyStamp = async (request: StampApplyRequest): Promise<{ applied: number; skipped: number }> => {
+export const applyStamp = async (request: StampApplyRequest): Promise<StampApplyResult> => {
   if (figma.editorType !== 'figma') {
-    throw new Error('Stamp apply is design-editor only')
+    return {
+      applied: [],
+      skipped: [],
+      failed: [{ id: '', error: 'Stamp apply is design-editor only' }],
+    }
   }
   const fresh = await prepareStampDiff()
-  let applied = 0
-  let skipped = 0
-  const selected = new Set(request.selectedIds)
+  const applied: string[] = []
+  const skipped: Array<{ id: string; reason: string }> = []
+  const failed: Array<{ id: string; error: string }> = []
   const overwrite = new Set(request.overwriteIds)
+  const freshById = new Map(fresh.changes.map((c) => [c.variableId, c]))
 
-  for (const change of fresh.changes) {
-    if (!selected.has(change.variableId)) {
-      skipped += 1
+  for (const id of request.selectedIds) {
+    const change = freshById.get(id)
+    if (!change) {
+      skipped.push({ id, reason: 'stale' })
       continue
     }
     if (change.status === 'conflict' || !change.to) {
-      skipped += 1
+      skipped.push({ id, reason: 'conflict' })
       continue
     }
     if (change.overwriteRequired && !overwrite.has(change.variableId)) {
-      skipped += 1
+      skipped.push({ id, reason: 'overwrite-required' })
       continue
     }
     const variable = await figma.variables.getVariableByIdAsync(change.variableId)
     if (!variable) {
-      skipped += 1
+      skipped.push({ id, reason: 'missing-variable' })
       continue
     }
-    // Revalidate against live config value agreement is deferred to matcher;
-    // we only stamp token keys that still appear in the fresh proposal set.
-    variable.setVariableCodeSyntax('WEB', change.to)
-    applied += 1
+    try {
+      // Revalidate against live config value agreement is deferred to matcher;
+      // we only stamp token keys that still appear in the fresh proposal set.
+      variable.setVariableCodeSyntax('WEB', change.to)
+      applied.push(change.variableId)
+    } catch (error) {
+      failed.push({ id: change.variableId, error: messageOf(error) })
+    }
   }
-  return { applied, skipped }
+
+  return { applied, skipped, failed }
 }

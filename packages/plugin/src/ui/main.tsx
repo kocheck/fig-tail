@@ -1,4 +1,12 @@
-import type { PluginMessage, SetupUiState, InspectPayload, LintPayload, StampDiffPayload } from '../shared/messages'
+import type {
+  PluginMessage,
+  SetupUiState,
+  InspectPayload,
+  LintPayload,
+  StampDiffPayload,
+  StampApplyResult,
+} from '../shared/messages'
+import { storageFailureMessages } from '../shared/errors'
 import { resolveSetupInput } from '../setup'
 
 declare const parent: Window
@@ -13,8 +21,10 @@ type ViewState = {
   inspect: InspectPayload | null
   lint: LintPayload | null
   stamp: StampDiffPayload | null
+  stampResult: StampApplyResult | null
   exportCode: string
   status: string
+  statusKind: 'info' | 'warn' | 'danger' | ''
 }
 
 const state: ViewState = {
@@ -22,8 +32,10 @@ const state: ViewState = {
   inspect: null,
   lint: null,
   stamp: null,
+  stampResult: null,
   exportCode: '',
   status: '',
+  statusKind: '',
 }
 
 const post = (message: PluginMessage) => {
@@ -62,13 +74,42 @@ const copyText = async (text: string, sourceElementId: string): Promise<void> =>
   selection.removeAllRanges()
 }
 
+const renderStorageFailureBanner = (
+  failures: NonNullable<InspectPayload['storageFailures']> | undefined,
+  activeTier: 'document' | 'user' | null,
+): string => {
+  if (!failures?.length) return ''
+  const messages = storageFailureMessages(failures, activeTier)
+  if (messages.length === 0) return ''
+  return `<ul class="banner warn">${messages.map((m) => `<li>${escapeHtml(m)}</li>`).join('')}</ul>`
+}
+
+const renderStampSummary = (result: StampApplyResult | null): string => {
+  if (!result) return ''
+  const lines: string[] = [
+    `Applied ${result.applied.length}`,
+    `Skipped ${result.skipped.length}`,
+    `Failed ${result.failed.length}`,
+  ]
+  const skipLines = result.skipped
+    .slice(0, 8)
+    .map((s) => `<div class="item muted">${escapeHtml(s.id)} — ${escapeHtml(s.reason)}</div>`)
+    .join('')
+  const failLines = result.failed
+    .slice(0, 8)
+    .map((f) => `<div class="item muted">${escapeHtml(f.id || '—')} — ${escapeHtml(f.error)}</div>`)
+    .join('')
+  return `<div class="banner ${result.failed.length ? 'warn' : 'info'}">${escapeHtml(lines.join(' · '))}</div>${skipLines}${failLines}`
+}
+
 /** Render the Inspect section: config status, class string, per-result badges, empty/multi-select states. */
 const renderInspectBody = (inspect: InspectPayload | null): string => {
   if (!inspect) {
     return `<p class="muted">Inspect results appear in Dev Mode Inspect.</p>`
   }
   if (inspect.empty) {
-    return `<p class="muted">Select a layer to see its Tailwind classes.</p>`
+    const storageBanner = renderStorageFailureBanner(inspect.storageFailures, inspect.activeTier ?? null)
+    return `${storageBanner}<p class="muted">Select a layer to see its Tailwind classes.</p>`
   }
 
   const isNoConfig = inspect.tierLabel.startsWith('No Tailwind config')
@@ -77,6 +118,8 @@ const renderInspectBody = (inspect: InspectPayload | null): string => {
       ${escapeHtml(inspect.tierLabel)}
       ${isNoConfig ? `<div class="row"><button type="button" id="inspect-add-config">Add your config</button></div>` : ''}
     </div>`
+
+  const storageBanner = renderStorageFailureBanner(inspect.storageFailures, inspect.activeTier ?? null)
 
   const namespaceNotes = [
     inspect.unknownNamespaces?.length
@@ -111,17 +154,34 @@ const renderInspectBody = (inspect: InspectPayload | null): string => {
     ? `<div class="list">${inspect.warnings.map((w) => `<div class="item muted">${escapeHtml(w)}</div>`).join('')}</div>`
     : ''
 
-  return `${tierBanner}${namespaceNotes}${selectionNote}${classOut}${resultsList}${warnings}`
+  return `${tierBanner}${storageBanner}${namespaceNotes}${selectionNote}${classOut}${resultsList}${warnings}`
+}
+
+const toolOutContent = (): string => {
+  if (state.stampResult) {
+    return [
+      `Applied: ${state.stampResult.applied.length}`,
+      ...state.stampResult.skipped.map((s) => `skipped ${s.id}: ${s.reason}`),
+      ...state.stampResult.failed.map((f) => `failed ${f.id || '—'}: ${f.error}`),
+    ].join('\n')
+  }
+  if (state.status) return state.status
+  if (state.exportCode) return state.exportCode
+  return JSON.stringify(state.lint ?? state.stamp ?? {}, null, 2)
 }
 
 const render = () => {
   const setup = state.setup
   const setupBody = (() => {
     if (setup.kind === 'empty') {
-      return `<p class="muted">Drop your <code>tailwind.config.js</code>/<code>.ts</code> or v4 <code>app.css</code>, plus <code>package.json</code> for exact version evidence.</p>`
+      const storageBanner = renderStorageFailureBanner(setup.storageFailures, null)
+      return `${storageBanner}<p class="muted">Drop your <code>tailwind.config.js</code>/<code>.ts</code> or v4 <code>app.css</code>, plus <code>package.json</code> for exact version evidence.</p>`
     }
     if (setup.kind === 'loading') return `<p class="muted">Resolving…</p>`
     if (setup.kind === 'error') return `<p class="banner danger">${escapeHtml(setup.message)}</p>`
+    if (setup.kind === 'write-warn') {
+      return `<div class="banner warn">${escapeHtml(setup.label)}<ul>${setup.details.map((d) => `<li>${escapeHtml(d)}</li>`).join('')}</ul></div>`
+    }
     if (setup.kind === 'no-edit') {
       return `<div class="banner warn">${escapeHtml(setup.label)}<ul>${setup.details.map((d) => `<li>${escapeHtml(d)}</li>`).join('')}</ul></div>`
     }
@@ -132,13 +192,19 @@ const render = () => {
              Switch to ${setup.tier === 'document' ? 'personal' : 'shared'} config
            </button></div></div>`
         : ''
+    const storageBanner = renderStorageFailureBanner(setup.storageFailures, setup.tier)
     const warnings = setup.warnings.length
       ? `<ul class="banner warn">${setup.warnings.map((w) => `<li>${escapeHtml(w)}</li>`).join('')}</ul>`
       : ''
-    return `<div class="banner info"><strong>${escapeHtml(setup.label)}</strong><ul>${setup.details.map((d) => `<li>${escapeHtml(d)}</li>`).join('')}</ul></div>${switchNotice}${warnings}`
+    return `<div class="banner info"><strong>${escapeHtml(setup.label)}</strong><ul>${setup.details.map((d) => `<li>${escapeHtml(d)}</li>`).join('')}</ul></div>${switchNotice}${storageBanner}${warnings}`
   })()
 
   const inspectBody = renderInspectBody(state.inspect)
+  const stampSummary = renderStampSummary(state.stampResult)
+  const statusBanner =
+    state.status && state.statusKind
+      ? `<div class="banner ${state.statusKind === 'info' ? 'info' : state.statusKind}">${escapeHtml(state.status)}</div>`
+      : ''
 
   root.innerHTML = `
     <main>
@@ -175,7 +241,9 @@ const render = () => {
           <button type="button" id="stamp-prep" aria-label="Prepare stamp diff">Stamp dry-run</button>
           <button type="button" id="stamp-apply" aria-label="Apply stamp">Apply stamp</button>
         </div>
-        <pre class="class-out" id="tool-out">${escapeHtml(state.status || state.exportCode || JSON.stringify(state.lint ?? state.stamp ?? {}, null, 2))}</pre>
+        ${statusBanner}
+        ${stampSummary}
+        <pre class="class-out" id="tool-out">${escapeHtml(toolOutContent())}</pre>
       </section>
     </main>
   `
@@ -290,6 +358,7 @@ const render = () => {
     const applicable = stamp.changes.filter((c) => c.status === 'high' || c.status === 'medium')
     if (applicable.length === 0) {
       state.status = 'No appliable stamp rows (conflicts are blocked)'
+      state.statusKind = 'warn'
       render()
       return
     }
@@ -312,6 +381,8 @@ onmessage = (event: MessageEvent) => {
   if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string') return
   if (msg.type === 'setup-state') {
     state.setup = (msg as Extract<PluginMessage, { type: 'setup-state' }>).state
+    state.status = ''
+    state.statusKind = ''
     render()
     return
   }
@@ -322,25 +393,70 @@ onmessage = (event: MessageEvent) => {
   }
   if (msg.type === 'lint-result') {
     state.lint = (msg as Extract<PluginMessage, { type: 'lint-result' }>).payload
-    state.status = `${state.lint.findings.length} findings · ${state.lint.visited} nodes · ${state.lint.durationMs}ms${state.lint.truncated ? ' (truncated)' : ''}`
+    const skipNote =
+      state.lint.resolutionFailures > 0
+        ? ` · skipped ${state.lint.resolutionFailures} layers`
+        : ''
+    state.status = `${state.lint.findings.length} findings · ${state.lint.visited} nodes · ${state.lint.durationMs}ms${state.lint.truncated ? ' (truncated)' : ''}${skipNote}`
+    state.statusKind = state.lint.resolutionFailures > 0 || state.lint.truncated ? 'warn' : 'info'
     state.exportCode = state.lint.markdown
+    state.stampResult = null
     render()
     return
   }
   if (msg.type === 'export-result') {
     state.exportCode = (msg as Extract<PluginMessage, { type: 'export-result' }>).code
     state.status = ''
+    state.statusKind = ''
+    state.stampResult = null
     render()
     return
   }
   if (msg.type === 'stamp-diff') {
     state.stamp = (msg as Extract<PluginMessage, { type: 'stamp-diff' }>).payload
+    state.stampResult = null
     state.status = `${state.stamp.changes.length} stamp changes`
+    state.statusKind = 'info'
+    render()
+    return
+  }
+  if (msg.type === 'stamp-result') {
+    state.stampResult = (msg as Extract<PluginMessage, { type: 'stamp-result' }>).payload
+    const r = state.stampResult
+    state.status = `Updated ${r.applied.length}; skipped ${r.skipped.length}; failed ${r.failed.length}. Undo with ⌘Z if needed.`
+    state.statusKind = r.failed.length ? 'warn' : 'info'
+    render()
+    return
+  }
+  if (msg.type === 'operation-error') {
+    const err = msg as Extract<PluginMessage, { type: 'operation-error' }>
+    state.status = `${err.operation} failed: ${err.message}`
+    state.statusKind = 'danger'
     render()
     return
   }
   if (msg.type === 'resolve-result') {
-    state.status = (msg as Extract<PluginMessage, { type: 'resolve-result' }>).message
+    const result = msg as Extract<PluginMessage, { type: 'resolve-result' }>
+    state.status = result.message
+    if (result.ok) {
+      state.statusKind = 'info'
+    } else if (result.reason === 'quota') {
+      state.statusKind = 'warn'
+      if (state.setup.kind !== 'write-warn' && state.setup.kind !== 'no-edit') {
+        state.setup = {
+          kind: 'write-warn',
+          label: 'Could not save — storage quota exceeded',
+          details: [result.message, 'Try saving personally, or use a smaller config.'],
+        }
+      }
+    } else if (result.reason === 'validation' || result.reason === 'write-failed') {
+      state.statusKind = 'danger'
+      if (state.setup.kind !== 'error' && state.setup.kind !== 'no-edit') {
+        state.setup = { kind: 'error', message: result.message }
+      }
+    } else {
+      state.statusKind = 'danger'
+    }
     render()
   }
 }

@@ -1,5 +1,5 @@
 import type { ConfigProvenance, TokenSet } from '@fig-tail/theme'
-import type { PersistedDiagnostic } from '../storage-types'
+import type { PersistedDiagnostic, StorageFailure, WriteResult } from '../storage-types'
 
 /** Sandbox ↔ UI message contract. */
 export type PluginMessage =
@@ -14,7 +14,13 @@ export type PluginMessage =
       diagnostics: PersistedDiagnostic[]
       warnings: string[]
     }
-  | { type: 'resolve-result'; ok: boolean; message: string }
+  | {
+      type: 'resolve-result'
+      ok: boolean
+      message: string
+      reason?: Extract<WriteResult, { ok: false }>['reason']
+    }
+  | { type: 'operation-error'; operation: string; message: string }
   | { type: 'remove-config'; target: 'document' | 'user' }
   | { type: 'prefer-source'; preferred: 'document' | 'user' }
   | { type: 'inspect-result'; payload: InspectPayload }
@@ -25,10 +31,11 @@ export type PluginMessage =
   | { type: 'stamp-prepare' }
   | { type: 'stamp-diff'; payload: StampDiffPayload }
   | { type: 'stamp-apply'; selectedIds: string[]; overwriteIds: string[] }
+  | { type: 'stamp-result'; payload: StampApplyResult }
 
 /** Setup UI state machine. */
 export type SetupUiState =
-  | { kind: 'empty' }
+  | { kind: 'empty'; storageFailures?: StorageFailure[] }
   | { kind: 'loading' }
   | {
       kind: 'configured'
@@ -40,6 +47,7 @@ export type SetupUiState =
       preferred: 'document' | 'user'
       overridden: boolean
       canWriteDocument: boolean
+      storageFailures?: StorageFailure[]
     }
   | { kind: 'error'; message: string }
   | {
@@ -48,6 +56,11 @@ export type SetupUiState =
       details: string[]
       available: { document: boolean; user: boolean }
     }
+  | {
+      kind: 'write-warn'
+      label: string
+      details: string[]
+    }
 
 /** Inspect panel payload. */
 export type InspectPayload = {
@@ -55,8 +68,10 @@ export type InspectPayload = {
   warnings: string[]
   results: Array<{ property: string; className: string | null; confidence: string; note?: string }>
   tierLabel: string
+  activeTier?: 'document' | 'user' | null
   unknownNamespaces?: string[]
   partialNamespaces?: string[]
+  storageFailures?: StorageFailure[]
   selectionCount: number
   empty: boolean
 }
@@ -79,6 +94,7 @@ export type LintPayload = {
   markdown: string
   visited: number
   durationMs: number
+  resolutionFailures: number
 }
 
 /** Stamp dry-run diff. */
@@ -95,4 +111,11 @@ export type StampDiffPayload = {
   }>
   canApply: boolean
   editorType: string
+}
+
+/** Stamp apply outcome with per-row skip/fail reasons. */
+export type StampApplyResult = {
+  applied: string[]
+  skipped: Array<{ id: string; reason: string }>
+  failed: Array<{ id: string; error: string }>
 }
