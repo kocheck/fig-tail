@@ -1,4 +1,4 @@
-# Plan 006: Add opt-in variable Code-syntax stamping
+# Plan 007: Add opt-in variable Code-syntax stamping
 
 > **Executor instructions**: Follow this plan step by step. Confirm each step's
 > **Check** before moving to the next. If anything in "STOP conditions" occurs,
@@ -6,8 +6,8 @@
 > plan in `plans/README.md`.
 >
 > **Drift check (run first)**:
-> `git diff --stat <SHA at which 005 completed>..HEAD -- packages/plugin/src/lint`
-> This plan consumes plan 005's `unmapped-variable` findings and its proposal
+> `git diff --stat <SHA at which 006 completed>..HEAD -- packages/plugin/src/lint`
+> This plan consumes plan 006's `unmapped-variable` findings and its proposal
 > logic verbatim. If `src/lint/variables.ts` has changed, read it first.
 >
 > **⚠️ Read the "Hard constraints" section below before writing any code.**
@@ -22,9 +22,9 @@
 - **Risk**: **HIGH** — not because it is technically hard, but because it is the
   only code in the program that changes someone's Figma file. A bug here damages
   real design work that may not be recoverable through undo.
-- **Depends on**: 005
+- **Depends on**: 006
 - **Category**: design
-- **Grounded at**: the commit at which plan 005 landed.
+- **Grounded at**: the commit at which plan 006 landed.
 
 ## Why this matters
 
@@ -34,7 +34,8 @@ is never certain.
 
 This plan removes the inference. Once a Figma variable carries
 `codeSyntax.WEB = "bg-brand-500"`, that string was authored by a human who knew
-the answer, and every subsequent lookup is exact. Plan 004's confidence ladder
+the answer, and every subsequent lookup is exact. The confidence ladder on both
+Dev Mode surfaces (plans 004 and 005)
 jumps from `exact-value` to `exact-variable` across the whole file at once. It
 is the single largest quality improvement available in the program.
 
@@ -67,7 +68,7 @@ in the Done criteria.
    session. There is no "apply all without reviewing" affordance, no CLI flag,
    no keyboard shortcut that bypasses it.
 5. **No node, style, page, or document property is ever written.** This plan
-   adds exactly one entry to the write-safety allowlist from plan 003 Step 5:
+   adds exactly one entry to the write-safety allowlist from plan 003 Step 7:
    `setVariableCodeSyntax`. If you find yourself wanting a second, stop.
 
 If a step in this plan appears to require breaking one of these, that is a STOP
@@ -75,7 +76,7 @@ condition, not a judgement call.
 
 ## Context the executor needs
 
-### What exists after plan 005
+### What exists after plan 006
 
 - `src/lint/variables.ts` exports the proposal logic: for each local variable
   lacking `codeSyntax.WEB`, it proposes a Tailwind class by value-matching and
@@ -158,7 +159,7 @@ Needed on hand:
 - Figma desktop app.
 - **A throwaway Figma file with local variables that you can afford to damage.**
   Duplicate one; do not develop against anything real. Steps 1–5 all write.
-- A theme configured in that file via the plan 003 settings UI.
+- A Tailwind config loaded into that file via the plan 003 setup UI.
 - A file that *consumes* variables from a library, for the Step 1 library test.
 
 ## Scope
@@ -181,16 +182,16 @@ Needed on hand:
 - **Writing anything other than `codeSyntax.WEB`** — no values, no modes, no
   scopes, no descriptions, no `ANDROID`/`iOS` syntax.
 - **Creating or deleting variables or collections.**
-- **Binding variables to node properties.** Even though it would fix plan 005's
+- **Binding variables to node properties.** Even though it would fix plan 006's
   "unbound" findings, it is a document mutation of a kind the owner ruled out.
 - **Any automatic or scheduled stamping.** No "keep in sync" mode, no re-stamp
   on theme update. Every write is one human click.
 - Whole-document / cross-file stamping.
-- Publishing — plan 009.
+- Publishing — plan 010.
 
 ## Working approach
 
-- Branch as instructed. Commit per step, prefixed `006-N:`.
+- Branch as instructed. Commit per step, prefixed `007-N:`.
 - **Work on the throwaway file only.** If you need to demonstrate against a real
   file, duplicate it first.
 - The write call should exist in exactly one function, in one file, with the
@@ -287,8 +288,8 @@ to a snapshot taken before opening the screen.
 `src/stamp/apply.ts`. One exported function, one write site:
 
 ```ts
-// eslint-disable-next-line no-restricted-properties -- plan 006: the single
-// permitted document write. See plans/006-variable-codesyntax-stamping.md.
+// eslint-disable-next-line no-restricted-properties -- plan 007: the single
+// permitted variable write. See plans/007-variable-codesyntax-stamping.md.
 variable.setVariableCodeSyntax('WEB', value)
 ```
 
@@ -371,7 +372,8 @@ A guardrail nobody has watched fail is not a guardrail.
 A README section: what stamping does, that it **writes to your Figma file**, why
 it goes in Code syntax rather than the variable name, that library variables must
 be stamped in the library file (per Step 1), how to undo, and what improves
-afterwards (plan 004's output becomes exact). Lead with the fact that it writes.
+afterwards (both Dev Mode surfaces become exact). Lead with the fact that it
+writes.
 ~60 lines.
 
 **Check**: a designer reading only this section can correctly answer: does this
@@ -397,7 +399,7 @@ automatically? (No, never.)
   - [ ] Names, values, scopes, modes, descriptions, `ANDROID`/`iOS` syntax:
         unchanged in every case
 - **Downstream verification**: after stamping, open the file in Dev Mode and
-  confirm plan 004's panel reports `exact-variable` for stamped properties, and
+  confirm both Dev Mode surfaces report `exact-variable` for stamped properties, and
   that Figma's own Inspect panel shows the code syntax.
 
 ## Done criteria
@@ -420,10 +422,10 @@ ALL must hold.
 - [ ] Undo is documented, tested, and shown on the result screen
 - [ ] `packages/plugin/spike/FINDINGS.md` answers all six Step 1 questions with
       evidence
-- [ ] After stamping, plan 004's panel reports `exact-variable` for stamped
+- [ ] After stamping, both Dev Mode surfaces report `exact-variable` for stamped
       properties
 - [ ] No files outside the in-scope list were changed
-- [ ] `plans/README.md` status row for 006 updated
+- [ ] `plans/README.md` status row for 007 updated
 
 ## STOP conditions
 
@@ -448,10 +450,11 @@ Stop and report back — do not improvise — if:
 
 ## Handoff / after it lands
 
-- **Re-run plan 004's Step 6 test matrix.** Stamped properties should move from
+- **Re-run plan 004's Step 6 test matrix on both surfaces.** Stamped properties
+  should move from
   `exact-value`/`name-match` to `exact-variable`. If they do not, `hints.ts` has
   a bug — the whole point of this plan is that upgrade.
-- **Plan 005's `unmapped-variable` findings should drop to near zero** on a
+- **Plan 006's `unmapped-variable` findings should drop to near zero** on a
   stamped file. That is the cheapest regression check available: scan before,
   stamp, scan after.
 - **What a reviewer should scrutinise most**: Step 6, and specifically the

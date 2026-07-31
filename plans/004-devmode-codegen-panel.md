@@ -1,4 +1,4 @@
-# Plan 004: Ship the Dev Mode codegen panel
+# Plan 004: Ship the Dev Mode Code-section panel (codegen)
 
 > **Executor instructions**: Follow this plan step by step. Confirm each step's
 > **Check** before moving to the next. If anything in "STOP conditions" occurs,
@@ -24,8 +24,8 @@
 ## Why this matters
 
 This is the plan where the program becomes useful to somebody. Everything before
-it is infrastructure: a CLI that emits JSON nobody reads, an engine with no
-caller, a plugin that says "theme loaded" and stops.
+it is infrastructure: a resolver that produces tokens nobody reads, an engine
+with no caller, a plugin that says "config loaded" and stops.
 
 After this plan, a developer opens a Figma file in Dev Mode, clicks a button,
 and reads `flex flex-col items-start gap-4 rounded-xl bg-white p-6 shadow-xs`
@@ -37,8 +37,11 @@ matching token, the panel says so instead of quietly emitting an arbitrary
 value. That single behaviour is what separates fig-tail from the half-dozen
 existing Figma→Tailwind plugins.
 
-**Completing 001 → 004 plus 009 is the minimum shippable product.** Treat this
-plan as the release gate, not a waypoint.
+This plan delivers the first of fig-tail's two Dev Mode surfaces. Plan 005 adds
+the second — a persistent Inspect-panel view — and refactors the shared work
+out of this plan into `src/pipeline.ts`. Build this one so that refactor is
+easy: keep `mode-dev.ts` thin and put nothing surface-specific into the
+resolution path.
 
 ## Context the executor needs
 
@@ -82,15 +85,17 @@ true. That default is deliberate — see Step 4.
 
 **From `@fig-tail/plugin`** (plan 003):
 
-- `src/storage.ts` → `readTokens(): Promise<TokenSet | null>`, with a
+- `src/storage.ts` → `readConfig(): Promise<StoredConfig | null>`, with a
   module-level cache invalidated on write. Reads from document storage
   (`figma.root.getSharedPluginData('figtail', …)`, chunked + gzipped) with a
   `clientStorage` fallback.
 - `src/mode-dev.ts` → currently a stub that returns one `CodegenResult`
-  reporting whether a theme is configured. **You are replacing that stub.**
-- A manifest already declaring `capabilities: ["codegen"]`,
+  reporting whether a config is loaded. **You are replacing that stub.**
+- A manifest already declaring `capabilities: ["codegen", "inspect"]`,
+  `editorType: ["figma", "dev"]`,
   `codegenLanguages: [{ label: 'Tailwind', value: 'tailwind' }]`, and one
-  `codegenPreferences` action (`settings`).
+  `codegenPreferences` action (`settings`). The `inspect` surface is a
+  placeholder until plan 005 — leave it alone.
 
 ### Verified Figma platform facts this plan depends on
 
@@ -138,10 +143,10 @@ Two things to get right:
   variable ID** — a card with four padding sides bound to the same token would
   otherwise make four identical async calls inside a 15-second budget.
 
-When plan 006 has stamped variables, `codeSyntax.WEB` is the literal class
+When plan 007 has stamped variables, `codeSyntax.WEB` is the literal class
 (`bg-brand-500`) and the match is `exact-variable` with no inference at all.
 When it has not, `variable.name` still beats a hex value. Both paths must work
-from day one — do not gate this on plan 006.
+from day one — do not gate this on plan 007.
 
 ### Performance budget
 
@@ -149,7 +154,7 @@ from day one — do not gate this on plan 006.
 selection change**, so slowness is felt constantly. Target **under 200 ms** for
 a single node.
 
-Where the time goes: `readTokens()` (gunzip + parse — cached after the first
+Where the time goes: `readConfig()` (gunzip + parse — cached after the first
 call, so amortised to ~0), `getCSSAsync()` (one await), variable resolution
 (N awaits, parallelised and deduped), matching (pure, microseconds).
 
@@ -172,8 +177,8 @@ Needed on hand:
 
 - **Figma desktop app** (local plugin development requires it).
 - A **test Figma file** — build this in Step 6; it is a deliverable, not scratch.
-- The fixture token JSON from plan 001 (`fixtures/tw4-app/figtail.tokens.json`),
-  pasted into the test file via the plan 003 settings UI.
+- A fixture Tailwind config from plan 001 (`fixtures/configs/`), dropped into the
+  test file via the plan 003 setup UI.
 
 ## Scope
 
@@ -191,17 +196,19 @@ Needed on hand:
 **Out of scope**:
 
 - **Walking child nodes.** This plan generates classes for the *selected node
-  only*. Subtree export is plan 007, and it is a materially different problem
+  only*. Subtree export is plan 008, and it is a materially different problem
   (structure, nesting, naming). If you find yourself writing a recursive
   traversal, stop.
 - **Any document write.** No `setVariableCodeSyntax`, no node mutation. The
-  write-safety guards from plan 003 Step 5 must still pass unchanged.
-- **The linter UI** — plan 005. This plan surfaces drift for the *selected node*
+  write-safety guards from plan 003 Step 7 must still pass unchanged.
+- **The Inspect-panel surface** — plan 005. This plan owns the Code section only.
+- **The linter UI** — plan 006. This plan surfaces drift for the *selected node*
   inline; it does not scan pages or produce reports.
-- **Code Connect** — plan 008.
-- Modifying `@fig-tail/match` or `@fig-tail/tokens`. If the engine is wrong, fix
+- **Code Connect** — deferred by the repo owner; not in this program. See
+  `plans/README.md`, "Considered and set aside".
+- Modifying `@fig-tail/match` or `@fig-tail/theme`. If the engine is wrong, fix
   it in a plan-002 follow-up commit, not here — but see STOP conditions.
-- Publishing — plan 009.
+- Publishing — plan 010.
 
 ## Working approach
 
@@ -220,7 +227,8 @@ Rewrite `src/mode-dev.ts`:
 ```ts
 figma.codegen.on('generate', async ({ node }) => {
   try {
-    const tokens = await readTokens()
+    const stored = await readConfig()
+    const tokens = stored?.tokens ?? null
     if (!tokens) return notConfiguredResult()
     const css = await node.getCSSAsync()
     const results = matchDeclarations(css, tokens, optionsFromPreferences())
@@ -231,9 +239,11 @@ figma.codegen.on('generate', async ({ node }) => {
 })
 ```
 
-`notConfiguredResult()` must be actionable: name the CLI command
-(`npx @fig-tail/cli export`) and say to paste the file via the "Configure
-theme…" action. A developer who hits this has no idea what fig-tail is.
+`notConfiguredResult()` must be actionable, and must **not** mention a CLI —
+the whole point is that a developer installs nothing else. Say that whoever owns
+the file needs to add the team's `tailwind.config.js` via fig-tail's setup
+screen, and name the "Configure Tailwind config…" action. A developer who hits
+this message has no idea what fig-tail is; write it for them.
 
 `errorResult(err)` returns a `PLAINTEXT` section containing the message and a
 one-line "report this" pointer. **Never rethrow.**
@@ -242,8 +252,8 @@ For this step, `renderSections` just returns one section with
 `toClassName(results)`.
 
 **Check**: in Figma desktop, in Dev Mode on the test file, select a simple frame
-→ the Code panel's Tailwind section shows a class string. Remove the theme via
-the settings UI → the same panel shows the actionable "not configured" message.
+→ the Code panel's Tailwind section shows a class string. Remove the config via
+the setup UI → the same panel shows the actionable "not configured" message.
 Confirm both by hand.
 
 ### Step 2: Resolve bound variables into hints
@@ -261,7 +271,7 @@ table produces the right CSS-property key; a TextNode `fills` binding produces
 `getVariableByIdAsync` call; an unresolvable alias is skipped without throwing.
 Then in Figma: bind a frame's fill to a colour variable, select it, and confirm
 the panel's confidence for that property changed (it will be `name-match` until
-plan 006 stamps codeSyntax — verify via a temporary debug section).
+plan 007 stamps codeSyntax — verify via a temporary debug section).
 
 ### Step 3: Render the primary output section
 
@@ -330,7 +340,7 @@ so no custom UI is needed:
 
 ```jsonc
 "codegenPreferences": [
-  { "itemType": "action", "propertyName": "settings", "label": "Configure theme…" },
+  { "itemType": "action", "propertyName": "settings", "label": "Configure Tailwind config…" },
   { "itemType": "bool", "propertyName": "includeLayout",
     "label": "Include layout utilities (flex, items-center…)", "defaultValue": true },
   { "itemType": "bool", "propertyName": "allowArbitrary",
@@ -396,7 +406,7 @@ then measure on the test file:
 - The most variable-heavy node
 
 Target: **under 200 ms warm**, under 1 s cold. If the cold path is slow, the
-token cache from plan 003 Step 4 is the place to look, not the matcher.
+config cache from plan 003 Step 5 is the place to look, not the matcher.
 
 Then verify the failure modes explicitly: corrupt one stored chunk by hand via
 the settings UI (or by writing garbage to `tokens.1`) and confirm the panel
@@ -410,7 +420,7 @@ case produces a readable error section. No selection change takes more than 1 s.
 
 Add a "Using it in Dev Mode" section: select a node, open the Code section,
 choose Tailwind, what the two sections mean, and what each preference does.
-Include one real screenshot of the panel. ~40 lines; plan 009 writes the rest.
+Include one real screenshot of the panel. ~40 lines; plan 010 writes the rest.
 
 **Check**: someone who has never used fig-tail can follow this section, from a
 file that already has a theme configured, and get a class string. Confirm by
@@ -423,7 +433,7 @@ session.
   row plus the TextNode and dedupe cases; `renderSections` for the four
   scenarios (configured + clean, configured + drift, not configured, error);
   `optionsFromPreferences` mapping every preference to `MatchOptions`.
-- **Error-path tests**: `getCSSAsync` rejecting, `readTokens` returning `null`,
+- **Error-path tests**: `getCSSAsync` rejecting, `readConfig` returning `null`,
   a corrupt token set, an unresolvable variable alias — each must return a
   `CodegenResult`, never throw.
 - **The Step 6 manual matrix** — nine nodes, each with a recorded expected
@@ -446,7 +456,8 @@ ALL must hold.
       reported in the drift section with token, value, and distance
 - [ ] The drift section is absent when there is nothing to report
 - [ ] All five codegen preferences work live without a plugin reload
-- [ ] The "not configured" message names the CLI command and the settings action
+- [ ] The "not configured" message is actionable, names the setup action, and
+      does **not** tell a developer to install or run anything
 - [ ] No exception escapes the generate callback (error-path tests pass)
 - [ ] Warm selection-change latency under 200 ms; cold under 1 s; measurements
       recorded
@@ -481,18 +492,19 @@ Stop and report back — do not improvise — if:
 
 ## Handoff / after it lands
 
-- **This is the release gate.** With 001–004 and 009 done, fig-tail is
-  shippable. Consider publishing before starting 005–008, so real usage informs
-  what gets built next.
-- **Plan 005** reuses `buildHints` and `summarise` to scan a whole page instead
+- **Plan 005 is next and is not optional** — it adds the persistent
+  Inspect-panel surface and extracts `src/pipeline.ts` from this plan's generate
+  handler. With 001–005 and 010 done, fig-tail is shippable. Consider publishing
+  there, before starting 006–009, so real usage informs what gets built next.
+- **Plan 006** reuses `buildHints` and `summarise` to scan a whole page instead
   of one node. Keep both exported and free of Dev-Mode-only assumptions.
-- **Plan 006** will make `exact-variable` the common case rather than the rare
-  one. After 006 lands, re-run the Step 6 matrix — several nodes should improve
+- **Plan 007** will make `exact-variable` the common case rather than the rare
+  one. After 007 lands, re-run the Step 6 matrix — several nodes should improve
   from `name-match` or `exact-value` to `exact-variable`, and if they do not,
   the hint plumbing in `hints.ts` has a bug.
-- **Plan 007** calls the same pipeline per node while walking a tree; the 200 ms
-  budget becomes 200 ms × N. Whatever caching 007 needs, put it at the
-  `readTokens`/`buildHints` boundary, not inside the matcher.
+- **Plan 008** calls the same pipeline per node while walking a tree; the 200 ms
+  budget becomes 200 ms × N. Whatever caching 008 needs, put it at the
+  `readConfig`/`buildHints` boundary, not inside the matcher.
 - **What a reviewer should scrutinise most**: Step 4's rule that `nearest` never
   enters the primary class string. It is the difference between a tool that
   tells the truth and one that produces plausible-looking wrong code. Any

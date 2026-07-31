@@ -1,4 +1,4 @@
-# Plan 009: Package, document, and publish
+# Plan 010: Package, document, and publish
 
 > **Executor instructions**: Follow this plan step by step. Confirm each step's
 > **Check** before moving to the next. If anything in "STOP conditions" occurs,
@@ -7,7 +7,7 @@
 >
 > **Drift check (run first)**: `git log --oneline -20` and read
 > `plans/README.md`. This plan documents whatever has actually shipped. Confirm
-> which of plans 004–008 are DONE before writing a word of documentation —
+> which of plans 005–009 are DONE before writing a word of documentation —
 > documenting an unbuilt feature is the main failure mode here.
 >
 > **⚠️ Steps 4 and 5 are outward-facing and irreversible-ish.** Publishing to
@@ -20,10 +20,10 @@
 - **Effort**: S
 - **Risk**: MED — low technical risk, real reputational risk. This is the plan
   that makes the work public under the owner's name.
-- **Depends on**: 004 (the minimum shippable product). Plans 005–008 are
-  documented if done and omitted if not.
+- **Depends on**: 005 (with 001–004, the minimum shippable product). Plans
+  006–009 are documented if done and omitted if not.
 - **Category**: docs
-- **Grounded at**: the commit at which plan 004 landed, or later.
+- **Grounded at**: the commit at which plan 005 landed, or later.
 
 ## Why this matters
 
@@ -43,12 +43,14 @@ someone else can follow without asking questions.
 
 ### What ships
 
-Check `plans/README.md` for what is actually DONE. The minimum is 001–004:
+Check `plans/README.md` for what is actually DONE. The minimum is 001–005:
 
-- `@fig-tail/cli` — `fig-tail export`, Tailwind v3 and v4
-- `@fig-tail/tokens` — the schema (published so others can validate)
-- `@fig-tail/match` — the engine (published; it is independently useful)
+- `@fig-tail/theme` — the Tailwind config resolver, v3 and v4 (published; the
+  schema and validator are useful on their own)
+- `@fig-tail/match` — the engine (published; independently useful)
 - `@fig-tail/plugin` — not published to npm; it ships to the Figma Community
+- `@fig-tail/cli` — **only if plan 009 shipped.** It is an escape hatch, not a
+  setup step, and the docs must place it that way (see Step 2).
 
 ### Distribution constraints, verified 2026-07-31
 
@@ -86,7 +88,7 @@ Lead with the developer path. It is the larger audience and the shorter read.
 | Full check | `pnpm -r typecheck && pnpm -r lint && pnpm -r test` | exit 0 |
 | Build all | `pnpm -r build` | every package's `dist/` present |
 | Package dry-run | `pnpm -r publish --dry-run --no-git-checks` | no errors, correct file lists |
-| Plugin bundle | `pnpm --filter @fig-tail/plugin build && du -b packages/plugin/dist/*` | main under 400 kB |
+| Plugin bundle | `pnpm --filter @fig-tail/plugin build && du -b packages/plugin/dist/*` | main under 400 kB, ui under 500 kB |
 
 Needed on hand:
 
@@ -95,7 +97,7 @@ Needed on hand:
   secrets. **Never commit it, never paste it into a file, never echo it.** If it
   does not exist yet, the owner creates it; you do not.
 - A **Figma account with Community publishing enabled** (the owner's).
-- Screenshots from the plan 004 and plan 005 test files.
+- Screenshots of both Dev Mode surfaces (plans 004 and 005) and the setup UI.
 
 ## Scope
 
@@ -126,7 +128,7 @@ Needed on hand:
 
 ## Working approach
 
-- Branch as instructed. Commit per step, prefixed `009-N:`.
+- Branch as instructed. Commit per step, prefixed `010-N:`.
 - Write the docs by **following them literally on a clean machine or a fresh
   clone**. Every instruction you could not follow exactly is a bug in the docs.
 - Steps 4 and 5 are gated on Step 3. Do not run ahead.
@@ -154,11 +156,16 @@ document anything.
    config, not arbitrary values).
 2. A screenshot of the Dev Mode panel showing real class names. Lead with it.
 3. **"For developers"** — install the plugin, open Dev Mode, read classes. Under
-   two minutes.
-4. **"For designers / setting it up"** — run the CLI, paste the file, done.
+   two minutes. Use the one-sentence answer recorded in plan 005 Step 1
+   (`packages/plugin/notes/devmode-discovery.md`) for what a first-time developer
+   actually has to do — do not write this from memory.
+   Cover **both** surfaces: the Code section and the Inspect panel.
+4. **"For designers / setting it up"** — drop in `tailwind.config.js` (v3) or
+   your CSS entry (v4), review what fig-tail could and could not read, save. No
+   CLI, no install.
 5. What the confidence levels mean, and specifically why a near-match is
    reported rather than emitted.
-6. The linter and stamping, **if 005/006 shipped** — with stamping's write
+6. The linter and stamping, **if 006/007 shipped** — with stamping's write
    behaviour stated plainly and early.
 7. Privacy: no network access, nothing leaves Figma, no telemetry.
 8. Limitations, honestly: what it does not do (no component generation, no
@@ -166,23 +173,28 @@ document anything.
 9. Contributing, licence.
 
 **`docs/setup.md`** — the long version: monorepo setups, Tailwind v3 vs v4
-specifics, where to commit `figtail.tokens.json`, keeping it fresh, teams with
-several themes.
+specifics, what the resolver can and cannot read from a config (from plan 001
+Step 9), what to do when it reports unresolved entries, keeping the stored config
+fresh, and — **only if plan 009 shipped, and only in its own section after the
+normal path** — the CLI escape hatch.
 
 **`docs/troubleshooting.md`** — one entry per real failure, each with the exact
 symptom text a user sees:
 
-- "No theme configured" in Dev Mode
-- Validation errors on paste (which file is the right one)
+- "No Tailwind config yet" in Dev Mode
+- The resolver reported unresolved entries — what each `reason` means and how to
+  fix it
+- Validation errors on drop (which file is the right one; v4 needing two files)
 - Classes look wrong / arbitrary values everywhere (usually a stale or wrong
-  theme)
+  config)
 - The plugin does not appear in Dev Mode's language dropdown
-- A second developer cannot see the theme
-- Everything is reported as drift (usually a mismatched theme)
+- The plugin does not appear in the Inspect panel
+- A second developer cannot see the config
+- Everything is reported as drift (usually a mismatched config)
 
 **`CONTRIBUTING.md`** — package layout, `pnpm install`, the check commands,
 how to run the plugin locally (desktop app required), **and the write-safety
-invariant with a pointer to plans 003 and 006.** A contributor must learn that
+invariant with a pointer to plans 003 and 007.** A contributor must learn that
 rule before their first PR, not from a failing lint rule.
 
 **Check**: from a **fresh clone on a clean machine**, follow the README's
@@ -214,13 +226,12 @@ Steps 4 or 5 without both.** If only one is approved, do that one.
 
 ### Step 4: Publish the npm packages *(gated on Step 3)*
 
-Tag and let the release workflow publish `@fig-tail/tokens`,
-`@fig-tail/match`, and `@fig-tail/cli`. Verify by installing into a scratch
-project and running `npx @fig-tail/cli export` against one of the fixtures.
+Tag and let the release workflow publish `@fig-tail/theme` and `@fig-tail/match`,
+plus `@fig-tail/cli` **only if plan 009 shipped**.
 
-**Check**: all three appear on npm at 0.1.0; `npx @fig-tail/cli export` works
-from a clean directory with no local checkout; the published tarballs contain
-no source, fixtures, plans, or spikes.
+**Check**: each published package appears on npm at 0.1.0; the tarballs contain
+no source, fixtures, plans, or spikes. If the CLI shipped, `npx @fig-tail/cli
+export` works from a clean directory with no local checkout.
 
 ### Step 5: Submit to the Figma Community *(gated on Step 3)*
 
@@ -228,13 +239,16 @@ Listing assets and copy:
 
 - **Name**: fig-tail
 - **Tagline**: one line — Tailwind classes from your own config, in Dev Mode.
-- **Description**: what it does, the two-part setup, that it needs a token file
-  from the codebase, that it makes **no network requests**, and its limitations.
-  Set expectations honestly — most Community plugin complaints are unmet
-  expectations, and the paste-a-file setup is unusual enough to state upfront.
+- **Description**: what it does; that one person drops in the team's Tailwind
+  config once and everyone else just installs the plugin; that it makes **no
+  network requests**; which Tailwind versions it reads; and what it does not do
+  (no component generation, no assets, no responsive variants). Set expectations
+  honestly — most Community plugin complaints are unmet expectations, and the
+  drop-in-your-config setup is unusual enough to state upfront.
 - **Icon** and **cover image**.
 - **Screenshots**: the Dev Mode panel with real classes; the drift section; the
-  settings/paste screen; the linter report if 005 shipped.
+  Inspect panel; the setup screen showing a resolved config; the linter report
+  if 006 shipped.
 - Support link → the repo's issues page.
 
 Re-verify the account tier before submitting (see "Context"). Then submit and
@@ -278,7 +292,7 @@ ALL must hold.
 - [ ] README, `docs/setup.md`, `docs/troubleshooting.md`, `CONTRIBUTING.md`,
       `CHANGELOG.md` all exist and describe **only** shipped features
 - [ ] `CONTRIBUTING.md` states the write-safety invariant and points to plans
-      003 and 006
+      003 and 007
 - [ ] Both README paths verified end to end from a fresh clone
 - [ ] CI workflow runs on push and PR and is green
 - [ ] Release workflow references the npm token as a secret and contains no
@@ -317,7 +331,7 @@ Stop and report back — do not improvise — if:
 - **Watch the first week of issues.** For a tool with a two-part setup, early
   issues are almost always documentation gaps, not bugs. Fold the answers back
   into `docs/troubleshooting.md`.
-- **If 005–008 were not built**, real usage is the best input on which to do
+- **If 006–009 were not built**, real usage is the best input on which to do
   next. Ship 0.1.0, then decide.
 - **What a reviewer should scrutinise most**: the clean-machine walkthrough, and
   the claim that the docs describe only shipped features. Ask which features

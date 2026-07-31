@@ -1,4 +1,4 @@
-# Plan 007: Add whole-subtree className export
+# Plan 008: Add whole-subtree className export
 
 > **Executor instructions**: Follow this plan step by step. Confirm each step's
 > **Check** before moving to the next. If anything in "STOP conditions" occurs,
@@ -7,7 +7,9 @@
 >
 > **Drift check (run first)**:
 > `git diff --stat <SHA at which 004 completed>..HEAD -- packages/plugin/src`
-> This plan reuses plan 004's `buildHints` and rendering path per node.
+> This plan reuses `src/pipeline.ts` (extracted in plan 005) and `buildHints`.
+> If plan 005 has landed, route everything through the pipeline — do not call
+> `matchDeclarations` directly; plan 005 Step 2 has a test that fails if you do.
 
 ## Status
 
@@ -16,7 +18,7 @@
 - **Risk**: MED — the risk is scope creep. This plan sits one step away from
   "generate my component for me", which is a different and much larger product.
   The Scope section draws that line deliberately; hold it.
-- **Depends on**: 004
+- **Depends on**: 004 (and, if it has landed, plan 005's `src/pipeline.ts`)
 - **Category**: dx
 - **Grounded at**: the commit at which plan 004 landed.
 
@@ -39,12 +41,14 @@ tree without chasing them.
 
 ## Context the executor needs
 
-### What exists after plan 004
+### What exists after plans 004 and 005
 
 - `src/mode-dev.ts` — the generate handler, single node.
 - `src/hints.ts` — `buildHints(node): Promise<Record<string, VariableHint>>`.
 - `src/render.ts` — `MatchResult[]` → `CodegenResult[]`.
-- `src/storage.ts` — `readTokens()`, cached at module level.
+- `src/storage.ts` — `readConfig()`, cached at module level.
+- `src/pipeline.ts` (plan 005) — `resolveNode(node, options)`, the single path
+  both Dev Mode surfaces use. Route per-node work through it.
 - `@fig-tail/match` — `matchDeclarations`, `toClassName`, `summarise`.
 - Manifest declares `codegenPreferences` including an `output` select.
 
@@ -132,15 +136,16 @@ nested components, and text. Add it to `fixtures/figma/README.md`.
   `<div>`. Translating Figma's absolute coordinates into `absolute top-[13px]
   left-[27px]` produces brittle code that nobody keeps, and it would make the
   output look more finished than it is.
-- **Code Connect component substitution** — plan 008. If 008 lands first, the
-  seam is: 007 emits `<div>`, 008 replaces it with the mapped component. Do not
-  build the substitution here.
+- **Code Connect component substitution.** Deferred by the repo owner; not in
+  this program (see `plans/README.md`, "Considered and set aside"). If it is
+  ever built, the seam is: this plan emits `<div>`, that work replaces the `tag`
+  with the mapped component. Keep `tag` a plain string so it can.
 - **Any document write.** Plan 003's guards must pass unchanged.
 - Responsive variants, dark mode, states — same reasoning as plan 002.
 
 ## Working approach
 
-- Branch as instructed. Commit per step, prefixed `007-N:`.
+- Branch as instructed. Commit per step, prefixed `008-N:`.
 - Keep traversal, matching, and emitting in three separate modules. The emitters
   should take a plain tree of `{ tag, classes, text, children, comment }` and
   know nothing about Figma — that makes them trivially testable and makes a
@@ -195,8 +200,9 @@ runs.
 
 ### Step 5: Wire it into the codegen panel
 
-Add a third section, "Subtree", emitted **only when the selected node has
-children**. A leaf node should not produce a one-line subtree section
+Add a section, "Subtree", to **both** Dev Mode surfaces — the Code section
+(plan 004) and the Inspect panel (plan 005) — emitted **only when the selected
+node has children**. A leaf node should not produce a one-line subtree section
 duplicating the primary output.
 
 Add the preferences: format select (HTML / JSX / Classes only), max depth
@@ -269,7 +275,7 @@ ALL must hold.
 - [ ] Plan 004's single-node section is unchanged and still first
 - [ ] Plan 003's write-safety guards pass with no new allowlist entries
 - [ ] No files outside the in-scope list were changed
-- [ ] `plans/README.md` status row for 007 updated
+- [ ] `plans/README.md` status row for 008 updated
 
 ## STOP conditions
 
@@ -290,9 +296,9 @@ Stop and report back — do not improvise — if:
 
 ## Handoff / after it lands
 
-- **Plan 008** substitutes Code Connect components for `<div>`s in this output.
-  The seam is `src/tree/emit/*` — keep the intermediate tree's `tag` field a
-  plain string that 008 can replace.
+- **A future Code Connect iteration** would substitute mapped components for
+  `<div>`s in this output. The seam is `src/tree/emit/*` — keep the intermediate
+  tree's `tag` field a plain string so that work is additive.
 - **What a reviewer should scrutinise most**: whether the output is actually
   used, or deleted and retyped. This is the one plan in the program whose value
   is genuinely uncertain until people try it — ship it, then ask.

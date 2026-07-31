@@ -1,4 +1,4 @@
-# Plan 005: Add the read-only drift linter (designer dry-run)
+# Plan 006: Add the read-only drift linter (designer dry-run)
 
 > **Executor instructions**: Follow this plan step by step. Confirm each step's
 > **Check** before moving to the next. If anything in "STOP conditions" occurs,
@@ -7,7 +7,7 @@
 >
 > **Drift check (run first)**:
 > `git diff --stat <SHA at which 003 completed>..HEAD -- packages/plugin/src/storage.ts packages/plugin/src/mode-design.ts`
-> This plan adds a second view to the design-mode UI and reuses `readTokens()`.
+> This plan adds another view to the design-mode UI and reuses `readConfig()`.
 > If either has changed, read it before starting.
 
 ## Status
@@ -33,10 +33,10 @@ is 2 ΔE off the palette. This plan lets the **designer** find it first, across 
 whole page, before anyone inspects it. Same engine, different audience, much
 earlier in the workflow.
 
-It is also the honest prerequisite for plan 006. Stamping Tailwind names onto
+It is also the honest prerequisite for plan 007. Stamping Tailwind names onto
 variables means writing to the document, and the owner's constraint is that
 nothing gets written without a human first seeing exactly what would change.
-This plan builds that review surface. Plan 006 then adds an Apply button to a
+This plan builds that review surface. Plan 007 then adds an Apply button to a
 diff the designer has already learned to read — rather than introducing writes
 and a review UI in the same change.
 
@@ -49,9 +49,9 @@ and a review UI in the same change.
 - `@fig-tail/match` exports `matchDeclarations`, `summarise`, and the
   `MatchResult` type with its `confidence` ladder and `nearest` field. See
   plan 004's "Context" for the full type signatures — they are unchanged.
-- `packages/plugin/src/storage.ts` exports `readTokens()`, cached.
+- `packages/plugin/src/storage.ts` exports `readConfig()`, cached.
 - `packages/plugin/src/mode-design.ts` runs when `figma.editorType === 'figma'`
-  and currently shows the settings/paste UI from plan 003 Step 6.
+  and currently shows the setup UI from plan 003 Step 6.
 - If plan 004 landed, `packages/plugin/src/hints.ts` exports `buildHints(node)`.
   **If 004 has not landed, implement `buildHints` here** per plan 004 Step 2 and
   its mapping table, in the same file path — 004 will then find it already
@@ -75,8 +75,8 @@ merged list of "issues" is not actionable.
    to fix in Figma.
 4. **Unmapped variable** — a variable exists in the file but has no
    `codeSyntax.WEB`, and fig-tail can propose one from the theme. This is
-   exactly the input plan 006 acts on, and generating it here is why 006
-   depends on 005.
+   exactly the input plan 007 acts on, and generating it here is why 007
+   depends on 006.
 
 ### Scanning scope and performance
 
@@ -108,7 +108,7 @@ Ordering the report by severity is what makes it get used. Fixed order:
 | Severity | Finding type | Rationale |
 |---|---|---|
 | High | Drift | Nearly-right values are almost certainly mistakes |
-| Medium | Unmapped variable | Blocks plan 006 and degrades every dev's output |
+| Medium | Unmapped variable | Blocks plan 007 and degrades every dev's output |
 | Medium | Off-system | May be deliberate; needs a decision |
 | Low | Unbound | Correct today, fragile tomorrow |
 
@@ -132,7 +132,7 @@ Needed on hand:
 - A **large, messy Figma file** for the performance test in Step 6. A real
   project file is ideal; if none is available, duplicate a Figma Community file
   with several hundred nodes.
-- A theme configured in the test file via the plan 003 settings UI.
+- A Tailwind config loaded into the test file via the plan 003 setup UI.
 
 ## Scope
 
@@ -149,22 +149,23 @@ Needed on hand:
 **Out of scope**:
 
 - **Any document write.** No `setVariableCodeSyntax`, no node mutation, no
-  plugin data other than the existing token storage. Plan 003's write-safety
+  plugin data other than the existing config storage. Plan 003's write-safety
   guards must pass unchanged, with no new allowlist entries. If you need to add
   an ESLint exception, you are out of scope.
 - **Auto-fix of any kind.** Not "bind this variable for me", not "round this to
-  the nearest token". Plan 006 is the only plan that writes, and only to
+  the nearest token". Plan 007 is the only plan that writes, and only to
   `codeSyntax`.
 - **Whole-document scanning.** `loadAllPagesAsync()` must not appear in this
   plan's code.
-- The Dev Mode panel — plan 004 owns it. This is a design-mode surface.
+- The Dev Mode surfaces — plans 004 and 005 own them. This is a design-mode
+  surface.
 - Modifying `@fig-tail/match`. If a finding type needs engine support that does
   not exist, that is a STOP condition.
-- Publishing or listing assets — plan 009.
+- Publishing or listing assets — plan 010.
 
 ## Working approach
 
-- Branch as instructed. Commit per step, prefixed `005-N:`.
+- Branch as instructed. Commit per step, prefixed `006-N:`.
 - Keep the scanner (`src/lint/scan.ts`) free of UI concerns and free of the
   `figma` global where possible — take a node array in, return findings out, so
   it is unit-testable.
@@ -221,7 +222,7 @@ progress callback, cancellation flag. For each node: `getCSSAsync()`,
 - `exact-value` with no hint for that property → **unbound**
 - `exact-variable` / `name-match` → no finding (this is the good case)
 - `none` → no finding (not a design problem; the property simply is not
-  expressible, and plan 004 already reports it per-node)
+  expressible, and plans 004 and 005 already report it per-node)
 
 Deduplicate as described in "Context", collecting `nodeIds`.
 
@@ -251,7 +252,7 @@ absent, propose a Tailwind class from the theme by:
 
 Emit these as `unmapped-variable` findings with the proposal in `suggestion`.
 
-This function is the input plan 006 consumes. Export it cleanly and keep it
+This function is the input plan 007 consumes. Export it cleanly and keep it
 free of UI concerns.
 
 **Check**: unit tests for each confidence outcome, the three name-normalisation
@@ -363,7 +364,7 @@ ALL must hold.
 - [ ] Plan 003's write-safety guards pass with **zero new allowlist entries**
 - [ ] `loadAllPagesAsync` appears nowhere in this plan's code
 - [ ] No files outside the in-scope list were changed
-- [ ] `plans/README.md` status row for 005 updated
+- [ ] `plans/README.md` status row for 006 updated
 
 ## STOP conditions
 
@@ -378,7 +379,7 @@ Stop and report back — do not improvise — if:
   broad exception to make it pass.
 - `getLocalVariablesAsync()` does not return variables from linked libraries and
   the file's variables mostly live in a library. That would substantially limit
-  plan 006 and needs to be known before 006 starts, not during it.
+  plan 007 and needs to be known before 007 starts, not during it.
 - Scanning a page requires `loadAllPagesAsync()` in practice (i.e. the current
   page's nodes are not fully available without it).
 - A finding type needs matching-engine support that plan 002 does not provide.
@@ -387,9 +388,9 @@ Stop and report back — do not improvise — if:
 
 ## Handoff / after it lands
 
-- **Plan 006 builds directly on Step 3.** Its Apply action operates on exactly
+- **Plan 007 builds directly on Step 3.** Its Apply action operates on exactly
   the `unmapped-variable` findings this plan produces, using the same
-  proposals and the same confidence levels. 006 adds a write path and its
+  proposals and the same confidence levels. 007 adds a write path and its
   guardrails; it should not need to re-derive a single proposal.
 - **What a reviewer should scrutinise most**: the read-only claim. Ask to see
   the mutation-throwing test and the before/after comparison of document

@@ -6,8 +6,8 @@
 > plan in `plans/README.md`.
 >
 > **Drift check (run first)**:
-> `git diff --stat <the SHA at which plan 001 completed>..HEAD -- packages/tokens`
-> If the token schema in `packages/tokens` has changed since plan 001 landed,
+> `git diff --stat <the SHA at which plan 001 completed>..HEAD -- packages/theme`
+> If the token schema in `packages/theme` has changed since plan 001 landed,
 > re-read it before starting; the shapes quoted in this plan may be stale.
 
 ## Status
@@ -36,7 +36,7 @@ The second thing it must do is **know when it does not know**. A value that is
 system — it means the design and the code have drifted apart. Reporting
 `bg-brand-500` for `#3B82F1` would hide that. Reporting "no match; nearest is
 `brand-500` (#3B82F6), ΔE 0.4" turns fig-tail from a converter into a
-design-system QA tool, and it is what plan 005's linter is built on.
+design-system QA tool, and it is what plan 006's linter is built on.
 
 Keeping this as a standalone package with no Figma dependency means it can be
 exhaustively tested from the terminal, in milliseconds, without opening Figma.
@@ -47,7 +47,7 @@ That is worth the extra package boundary.
 ### Where this sits
 
 `packages/match` (`@fig-tail/match`) in the existing pnpm workspace created by
-plan 001. It depends on `@fig-tail/tokens` for types and on nothing else at
+plan 001. It depends on `@fig-tail/theme` for types and on nothing else at
 runtime except a colour library (see "Colour distance" below). It must be
 bundleable into a Figma plugin, so: no Node built-ins, no `fs`, no `process`.
 
@@ -111,7 +111,7 @@ exposes the variable ID — e.g.
 `.paddingLeft.id`, `.strokes[0].id`. Plan 004 resolves those IDs to `Variable`
 objects and can read `variable.codeSyntax.WEB`.
 
-If plan 006 has stamped that variable, `codeSyntax.WEB` is literally
+If plan 007 has stamped that variable, `codeSyntax.WEB` is literally
 `"bg-brand-500"` — the exact class the codebase uses, with **zero inference**.
 If it has not been stamped, the variable's *name* (`brand/500`) is still a much
 better matching key than a hex value.
@@ -144,7 +144,7 @@ Every match returns a confidence level. The ladder, highest to lowest:
 
 `nearest` **must never be silently promoted to a class**. The result carries
 both the suggested class *and* the fact that it is not an exact match; it is
-plan 004's and plan 005's job to display that difference. A caller that ignores
+plan 004's, 005's and 006's job to display that difference. A caller that ignores
 confidence gets a correct-looking wrong answer, so make the type force the
 issue — return the class and the confidence together, never a bare string.
 
@@ -194,7 +194,7 @@ counts as `nearest`.
 ### Property coverage
 
 Ship these in Step 3–6. Anything not listed returns `none` with a note, and
-gets counted so plan 005 can report coverage.
+gets counted so plan 006 can report coverage.
 
 | Group | CSS properties | Notes |
 |---|---|---|
@@ -234,8 +234,8 @@ Reference documentation:
 - culori colour difference — https://culorijs.org/api/#difference
 - CIEDE2000 background — https://en.wikipedia.org/wiki/Color_difference#CIEDE2000
 
-The token JSON fixtures produced by plan 001 (`fixtures/tw3-app/figtail.tokens.json`,
-`fixtures/tw4-app/figtail.tokens.json`) are this plan's primary test input.
+The `TokenSet` snapshots produced by plan 001 from `fixtures/configs/` (v3 and
+v4) are this plan's primary test input.
 
 ## Scope
 
@@ -248,13 +248,13 @@ The token JSON fixtures produced by plan 001 (`fixtures/tw3-app/figtail.tokens.j
 
 **Out of scope**:
 
-- `packages/plugin/**` — plan 003/004. This package must not import
+- `packages/plugin/**` — plan 003/004/005. This package must not import
   `@figma/plugin-typings` or reference the `figma` global. If you need a Figma
   type, define the minimal structural type locally (like `VariableHint` above).
-- `packages/cli/**` and `packages/tokens/**` — do not modify them. If the token
-  schema is genuinely missing something this engine needs, that is a STOP
-  condition, not a quiet edit.
-- Generating **HTML/JSX structure** from a node tree — that is plan 007. This
+- `packages/theme/**` — do not modify it at all. If the `TokenSet` schema is
+  genuinely missing something this engine needs, that is a STOP condition, not
+  a quiet edit.
+- Generating **HTML/JSX structure** from a node tree — that is plan 008. This
   package converts one node's CSS to classes; it does not walk trees.
 - Responsive variants, dark mode, hover/focus states. Figma inspect gives you
   one static state; there is nothing to derive variants from. Deferred
@@ -274,7 +274,7 @@ The token JSON fixtures produced by plan 001 (`fixtures/tw3-app/figtail.tokens.j
 ### Step 1: Scaffold the package and define the public API
 
 Create `packages/match` with the workspace conventions from plan 001. Define
-and export the types before writing any matcher — plans 004, 005 and 007 all
+and export the types before writing any matcher — plans 004, 005, 006 and 008 all
 consume these, so they are a contract.
 
 ```ts
@@ -432,8 +432,8 @@ assert the *exact* string, and assert the ordering, not just set membership).
 ### Step 8: Add a coverage report helper
 
 Export `summarise(results: MatchResult[]): MatchSummary` returning counts per
-confidence level and the list of unmatched properties. Plan 005's linter is
-built on this; plan 004 uses it to decide whether to show a warning banner.
+confidence level and the list of unmatched properties. Plan 006's linter is
+built on this; plans 004 and 005 use it to decide whether to show a warning banner.
 
 **Check**: `pnpm --filter @fig-tail/match test -t summarise` → passes, and
 `pnpm --filter @fig-tail/match test -- --coverage` reports ≥90% statement
@@ -472,8 +472,8 @@ ALL must hold.
 - [ ] Statement coverage in `src/matchers` ≥90%
 - [ ] `packages/match/dist/index.js` is under 60 kB minified
 - [ ] The bundle contains no reference to `figma.` or `@figma/`
-- [ ] `packages/tokens` and `packages/cli` are unchanged
-      (`git diff --stat <base> -- packages/tokens packages/cli` → empty)
+- [ ] `packages/theme` is unchanged
+      (`git diff --stat <base> -- packages/theme` → empty)
 - [ ] `plans/README.md` status row for 002 updated
 
 ## STOP conditions
@@ -482,7 +482,7 @@ Stop and report back — do not improvise — if:
 
 - **The token schema from plan 001 is missing something a matcher needs.**
   Changing it is a breaking change for plan 003, which stores and validates it.
-  Report what is missing and what you would add; do not edit `packages/tokens`.
+  Report what is missing and what you would add; do not edit `packages/theme`.
 - The ΔE thresholds produce obviously wrong matches against the real fixture
   theme — e.g. two palette steps in the same family fall within ΔE 0.5 of each
   other, making `exact-value` ambiguous. That means the thresholds need
@@ -500,9 +500,10 @@ Stop and report back — do not improvise — if:
 - **Plan 004** wires this to `getCSSAsync()` and `node.boundVariables`. The
   `hints` parameter is the seam — 004 is responsible for resolving variable IDs
   to `VariableHint` objects.
-- **Plan 005** builds the linter on `summarise()` and on the `nearest` field.
-  Do not remove or rename either without checking 005.
-- **Plan 007** calls `matchDeclarations` per node while walking a tree. It needs
+- **Plan 005** (the Inspect-panel surface) and **plan 006** (the linter) both
+  build on `summarise()` and the `nearest` field. Do not remove or rename
+  either without checking both.
+- **Plan 008** calls `matchDeclarations` per node while walking a tree. It needs
   this to stay fast — see the caching note below.
 - **What a reviewer should scrutinise most**: the boundary between `exact-value`
   and `nearest`. Everything about this system's trustworthiness lives in that
@@ -518,5 +519,5 @@ Stop and report back — do not improvise — if:
   - *Per-layer shadow matching.* See STOP conditions.
   - *Result caching.* Matchers are pure, so memoising on
     `(property, value, tokensHash)` is safe and easy. Do not add it until plan
-    007 shows it is needed — premature caching here would obscure correctness
+    008 shows it is needed — premature caching here would obscure correctness
     bugs during the phase when they are cheapest to find.
