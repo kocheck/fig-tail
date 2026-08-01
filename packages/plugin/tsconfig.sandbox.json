@@ -1,0 +1,25 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["es2020"],
+    "types": ["@figma/plugin-typings"],
+    "noEmit": true,
+    "rootDir": "src",
+    "skipLibCheck": true
+  },
+  "include": [
+    "src/main.ts",
+    "src/mode-dev.ts",
+    "src/mode-design.ts",
+    "src/storage.ts",
+    "src/storage-types.ts",
+    "src/pipeline.ts",
+    "src/shared/**/*.ts",
+    "src/codegen/**/*.ts",
+    "src/inspect/**/*.ts",
+    "src/lint/**/*.ts",
+    "src/stamp/**/*.ts",
+    "src/export/**/*.ts"
+  ],
+  "exclude": ["src/**/*.test.ts", "src/ui/**", "src/setup.ts", "src/negative-ui.ts"]
+}

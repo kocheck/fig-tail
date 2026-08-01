@@ -1,0 +1,26 @@
+{
+  "name": "@fig-tail/cli",
+  "version": "0.0.0",
+  "type": "module",
+  "bin": {
+    "fig-tail": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@fig-tail/theme": "workspace:*"
+  }
+}

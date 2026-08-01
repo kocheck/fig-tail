@@ -1,0 +1,21 @@
+{
+  "name": "@fig-tail/plugin",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.sandbox.json --noEmit && tsc -p tsconfig.ui.json --noEmit",
+    "test": "node build.mjs && vitest run",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@fig-tail/match": "workspace:*",
+    "@fig-tail/theme": "workspace:*",
+    "fflate": "0.8.2"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "1.109.0",
+    "esbuild": "0.27.2"
+  }
+}

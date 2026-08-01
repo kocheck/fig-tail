@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --spacing: 0.25rem;
+  --spacing-gutter: 1.5rem;
+  --radius-lg: 0.5rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+}

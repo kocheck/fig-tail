@@ -1,0 +1,187 @@
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--figma-color-bg, #ffffff);
+  color: var(--figma-color-text, #000000);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+  letter-spacing: 0.005em;
+}
+
+main {
+  padding: 12px;
+  display: grid;
+  gap: 16px;
+}
+
+h1 {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: 0;
+  margin: 0;
+  color: var(--figma-color-text, #000000);
+}
+
+h2 {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--figma-color-text-secondary, #666666);
+}
+
+section {
+  display: grid;
+  gap: 8px;
+}
+
+button,
+label.file {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--figma-color-border, #e5e5e5);
+  border-radius: 2px;
+  background: var(--figma-color-bg, #ffffff);
+  color: var(--figma-color-text, #000000);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+button:hover,
+label.file:hover {
+  background: var(--figma-color-bg-hover, #f5f5f5);
+}
+
+button.primary {
+  background: var(--figma-color-bg-brand, #0d99ff);
+  color: var(--figma-color-text-onbrand, #ffffff);
+  border-color: transparent;
+}
+
+button.primary:hover {
+  background: var(--figma-color-bg-brand-hover, #007be5);
+}
+
+button:focus-visible,
+label.file:focus-within {
+  outline: 2px solid var(--figma-color-border-brand, #0d99ff);
+  outline-offset: 1px;
+}
+
+.banner {
+  padding: 8px;
+  border-radius: 2px;
+  background: var(--figma-color-bg-brand-tertiary, #e5f4ff);
+  color: var(--figma-color-text, #000000);
+  border: 1px solid transparent;
+}
+
+.banner.info {
+  background: var(--figma-color-bg-secondary, #f5f5f5);
+}
+
+.banner.warn {
+  background: var(--figma-color-bg-warning, #fff1c2);
+  color: var(--figma-color-text, #000000);
+}
+
+.banner.danger {
+  background: var(--figma-color-bg-danger, #fdd3d0);
+  color: var(--figma-color-text, #000000);
+}
+
+.banner ul {
+  margin: 4px 0 0;
+  padding-left: 16px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+pre,
+code {
+  font-family: "Roboto Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.class-out {
+  margin: 0;
+  background: var(--figma-color-bg-secondary, #f5f5f5);
+  color: var(--figma-color-text, #000000);
+  border: 1px solid var(--figma-color-border, #e5e5e5);
+  padding: 8px;
+  border-radius: 2px;
+  min-height: 40px;
+  line-height: 16px;
+}
+
+.list {
+  display: grid;
+  gap: 0;
+}
+
+.item {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--figma-color-border, #e5e5e5);
+}
+
+.item:last-child {
+  border-bottom: none;
+}
+
+.muted {
+  color: var(--figma-color-text-secondary, #666666);
+  margin: 0;
+}
+
+input[type="file"] {
+  display: none;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 4px;
+  border-radius: 2px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: var(--figma-color-bg-brand-tertiary, #e5f4ff);
+  color: var(--figma-color-text-brand, #007be5);
+}
+
+.badge-exact {
+  background: var(--figma-color-bg-success-tertiary, #ebffee);
+  color: var(--figma-color-text-success, #009951);
+}
+
+.badge-nearest {
+  background: var(--figma-color-bg-warning-tertiary, #fffbeb);
+  color: var(--figma-color-text-warning, #b86200);
+}
+
+.badge-arbitrary,
+.badge-none {
+  background: var(--figma-color-bg-danger-tertiary, #fee9e7);
+  color: var(--figma-color-text-danger, #f24822);
+}

@@ -1,0 +1,59 @@
+{
+  "name": "fig-tail",
+  "id": "fig-tail-dev",
+  "api": "1.0.0",
+  "main": "dist/main.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma", "dev"],
+  "capabilities": ["codegen", "inspect"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": { "allowedDomains": ["none"] },
+  "codegenLanguages": [
+    { "label": "Tailwind CSS", "value": "tailwind" }
+  ],
+  "codegenPreferences": [
+    {
+      "itemType": "action",
+      "propertyName": "openSetup",
+      "label": "Configure Tailwind…"
+    },
+    {
+      "itemType": "select",
+      "propertyName": "includeLayout",
+      "label": "Include layout utilities",
+      "options": [
+        { "label": "Yes", "value": "yes", "isDefault": true },
+        { "label": "No", "value": "no" }
+      ]
+    },
+    {
+      "itemType": "select",
+      "propertyName": "allowArbitrary",
+      "label": "Allow arbitrary values",
+      "options": [
+        { "label": "Yes", "value": "yes", "isDefault": true },
+        { "label": "No", "value": "no" }
+      ]
+    },
+    {
+      "itemType": "select",
+      "propertyName": "output",
+      "label": "Output",
+      "options": [
+        { "label": "Classes", "value": "classes" },
+        { "label": "Classes + notes", "value": "classes-notes", "isDefault": true }
+      ]
+    },
+    {
+      "itemType": "select",
+      "propertyName": "subtreeFormat",
+      "label": "Subtree export",
+      "options": [
+        { "label": "Off", "value": "off", "isDefault": true },
+        { "label": "HTML", "value": "html" },
+        { "label": "JSX", "value": "jsx" },
+        { "label": "Outline", "value": "outline" }
+      ]
+    }
+  ]
+}

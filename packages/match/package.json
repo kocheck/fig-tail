@@ -1,0 +1,31 @@
+{
+  "name": "@fig-tail/match",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --coverage",
+    "lint": "eslint src",
+    "probe:browser": "node scripts/browser-bundle-probe.mjs"
+  },
+  "dependencies": {
+    "@fig-tail/theme": "workspace:*",
+    "culori": "4.0.2"
+  },
+  "devDependencies": {
+    "@types/culori": "4.0.1"
+  }
+}
