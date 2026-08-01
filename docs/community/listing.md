@@ -17,7 +17,20 @@ and Inspect panel. Near misses are reported, never silently invented.
 Also includes a read-only drift linter, opt-in variable code-syntax stamping,
 and subtree className export.
 
-**Network:** none.
+**Privacy:** no network access (`allowedDomains: none`). Nothing leaves Figma.
+No telemetry. Config source is resolved locally and discarded after the token
+set is saved.
+
+**Support URL:** https://github.com/kocheck/fig-tail/issues
+
+**Category:** Development
+
+**Declared capabilities:** codegen, inspect
+
+**Manifest network:** none
+
+**Assets:** see [`assets/`](assets/) — icon, cover, and product screenshots
+(all pending real captures; no placeholder art).
 
 **Do not publish** until `docs/release/feature-audit.md` records cross-account
-private storage **PASS**.
+private storage **PASS** and the owner explicitly approves Community.

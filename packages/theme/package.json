@@ -1,7 +1,25 @@
 {
   "name": "@fig-tail/theme",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "In-browser Tailwind v3/v4 theme resolver for fig-tail",
+  "license": "MIT",
   "type": "module",
+  "keywords": [
+    "tailwind",
+    "tailwindcss",
+    "theme",
+    "figma",
+    "fig-tail"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kocheck/fig-tail.git",
+    "directory": "packages/theme"
+  },
+  "bugs": {
+    "url": "https://github.com/kocheck/fig-tail/issues"
+  },
+  "homepage": "https://github.com/kocheck/fig-tail#readme",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -12,7 +30,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsdown",
@@ -31,5 +50,8 @@
     "@types/culori": "4.0.1",
     "tailwindcss-v3": "npm:tailwindcss@3.4.19",
     "tailwindcss-v4": "npm:tailwindcss@4.1.11"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

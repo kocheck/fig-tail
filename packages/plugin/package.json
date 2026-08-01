@@ -1,7 +1,9 @@
 {
   "name": "@fig-tail/plugin",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
+  "description": "Figma plugin: real Tailwind classes in Dev Mode (not published to npm)",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",

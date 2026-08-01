@@ -1,6 +1,6 @@
 # Release feature audit
 
-Date: 2026-07-31 · Build: `pnpm --filter @fig-tail/plugin build`
+Date: 2026-07-31 · Build: `pnpm --filter @fig-tail/plugin build` · Version target: **0.1.0**
 
 | Feature | Automated | In-Figma | Verdict |
 |---|---|---|---|
@@ -22,13 +22,28 @@ Date: 2026-07-31 · Build: `pnpm --filter @fig-tail/plugin build`
 | Channel | Decision | Date |
 |---|---|---|
 | Local / team demo install | APPROVED when core matrix checked | pending owner |
-| Figma Community | **BLOCKED** until cross-account PASS | — |
-| npm `@fig-tail/*` | Deferred | — |
+| Figma Community | **BLOCKED** until cross-account PASS + explicit approval | — |
+| npm `@fig-tail/theme` + `@fig-tail/match` @ 0.1.0 | Prepared (dry-run clean); **awaiting explicit approval** | — |
 
 ## Second-account checklist (Community)
 
-1. Publish or share development plugin ID mapping.
+Full procedure: [`packages/plugin/notes/storage-matrix.md`](../../packages/plugin/notes/storage-matrix.md).
+
+1. Publish or share development plugin ID mapping (same ID on both accounts).
 2. Account A saves document config.
 3. Account B installs same plugin ID, opens file — must read shared config.
 4. Record PASS/FAIL in `packages/plugin/notes/storage-matrix.md`.
 5. Only on PASS: submit Community listing from `docs/community/`.
+
+**Current:** UNVERIFIED — Community remains blocked.
+
+## npm dry-run (prep)
+
+| Package | Version | Tarball contents | Verdict |
+|---|---|---|---|
+| `@fig-tail/theme` | 0.1.0 | LICENSE, README, dist/*, package.json | CLEAN |
+| `@fig-tail/match` | 0.1.0 | LICENSE, README, dist/*, package.json | CLEAN |
+| `@fig-tail/cli` | 0.1.0 | private — not published | N/A |
+| `@fig-tail/plugin` | 0.1.0 | private — not published | N/A |
+
+Secret history check (plan 010 pattern): exit **1** (no match) on 2026-07-31 prep pass.

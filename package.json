@@ -1,14 +1,21 @@
 {
   "name": "fig-tail",
   "private": true,
+  "description": "Tailwind class names in Figma Dev Mode, resolved against your real Tailwind config",
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.33.2",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kocheck/fig-tail.git"
+  },
   "scripts": {
     "check": "pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "build": "pnpm -r build",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "probe:browser": "pnpm --filter @fig-tail/theme probe:browser && pnpm --filter @fig-tail/match probe:browser"
   },
   "devDependencies": {
     "@eslint/js": "9.39.2",
