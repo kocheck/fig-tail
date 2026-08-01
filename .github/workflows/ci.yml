@@ -10,12 +10,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+
       - name: Enable Corepack
-        run: corepack enable
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+
       - name: Install
         run: pnpm install --frozen-lockfile
+
       - name: Check
         run: pnpm check
+
+      - name: Fresh browser bundle probes
+        run: pnpm probe:browser

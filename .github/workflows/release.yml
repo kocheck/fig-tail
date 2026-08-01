@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Least privilege. Provenance uses OIDC — configure each package's npm
+# trusted publisher to this repository and workflow filename. Do not add a
+# long-lived NPM_TOKEN for the normal path.
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Enable Corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.2 --activate
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build publishable packages
+        run: |
+          pnpm --filter @fig-tail/theme build
+          pnpm --filter @fig-tail/match build
+
+      - name: Fresh browser bundle probes
+        run: pnpm probe:browser
+
+      - name: Publish @fig-tail/theme
+        run: pnpm --filter @fig-tail/theme publish --access public --provenance --no-git-checks
+
+      - name: Publish @fig-tail/match
+        run: pnpm --filter @fig-tail/match publish --access public --provenance --no-git-checks

@@ -1,6 +1,9 @@
 {
   "name": "@fig-tail/cli",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optional CLI escape hatch (out of ship scope — not published)",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "fig-tail": "./dist/cli.js"

@@ -1,7 +1,25 @@
 {
   "name": "@fig-tail/match",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "CSS to Tailwind class matching with a confidence ladder",
+  "license": "MIT",
   "type": "module",
+  "keywords": [
+    "tailwind",
+    "tailwindcss",
+    "css",
+    "figma",
+    "fig-tail"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kocheck/fig-tail.git",
+    "directory": "packages/match"
+  },
+  "bugs": {
+    "url": "https://github.com/kocheck/fig-tail/issues"
+  },
+  "homepage": "https://github.com/kocheck/fig-tail#readme",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -12,7 +30,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsdown",
@@ -27,5 +46,8 @@
   },
   "devDependencies": {
     "@types/culori": "4.0.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

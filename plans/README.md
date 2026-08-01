@@ -358,7 +358,7 @@ guidance; the numbered plan wins if the two conflict.
 | 007 | Add opt-in variable Code-syntax stamping | P2 | M | 000, 006 | DONE (in-Figma apply matrix UNVERIFIED) |
 | 008 | Add whole-subtree className export | P3 | L | 005 | DONE (large-tree UNVERIFIED) |
 | 009 | Add the optional CLI escape hatch for complex configs | P3 | M | 001, 003 | REJECTED for this ship (plugin-only; CLI out of scope) |
-| 010 | Package, document, and publish | P2 | S | 005 | DONE (Community blocked on cross-account UNVERIFIED) |
+| 010 | Package, document, and publish | P2 | S | 005 | DONE (0.1.0 prep complete; Community blocked on cross-account UNVERIFIED; npm/Community await owner approval) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale)
 
