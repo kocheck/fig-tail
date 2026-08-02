@@ -359,6 +359,7 @@ guidance; the numbered plan wins if the two conflict.
 | 008 | Add whole-subtree className export | P3 | L | 005 | DONE (large-tree UNVERIFIED) |
 | 009 | Add the optional CLI escape hatch for complex configs | P3 | M | 001, 003 | REJECTED for this ship (plugin-only; CLI out of scope) |
 | 010 | Package, document, and publish | P2 | S | 005 | DONE (0.1.0 prep complete; Community blocked on cross-account UNVERIFIED; npm/Community await owner approval) |
+| 011 | Verify fig-tail in Figma and clear 0.1.0 for release without the team-sharing claim | P1 | L | 000, 003–008, 010 | TODO (human-only; requires Figma desktop) |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale)
 
