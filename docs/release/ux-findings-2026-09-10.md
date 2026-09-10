@@ -148,6 +148,31 @@ and can never match it. "Present" and "usable" are different properties and
 nothing in the output distinguishes them. Colours that are not absolute values
 vanish entirely, with no diagnostic at all.
 
+### V14. The build had never run in CI either — Node 20 cannot load the tsdown configs
+
+Fixing V11 (build before typecheck) exposed a second failure that the first one
+had been hiding: `pnpm -r build` had **never executed in CI**, because typecheck
+always failed first. Once it ran, it died:
+
+```
+packages/theme build: ERROR Error: Failed to import module "unrun".
+```
+
+`unrun` is an **optional peer dependency** of tsdown, installed nowhere. tsdown
+needs it to load a TypeScript config file (`packages/*/tsdown.config.ts`) on a
+runtime that cannot strip types natively. `ci.yml` pinned `node-version: '20'`,
+which cannot; local development is on Node 22, which can — so the build worked
+everywhere except the one place nobody could see it.
+
+**Fixed** by moving CI to Node 22 (also deprecated-runner cleanup: GitHub warns
+that Node 20 actions are being forced onto Node 24) and declaring
+`engines: { node: '>=22' }` so the requirement is explicit rather than a property
+of whatever a contributor happens to have installed.
+
+Two layers of green-looking evidence sat on top of this: `approval-packet.md:22`
+recorded `pnpm check | PASS`, and the 0.1.0 release was prepared against a CI run
+that had never once succeeded.
+
 ### V12. Arbitrary values containing spaces corrupted the whole class string — RESOLVED
 
 There was no space escaping anywhere in `@fig-tail/match`. `toClassName` joins
