@@ -19,26 +19,27 @@
 - **Priority**: P0
 - **Effort**: L
 - **Risk**: MED
-- **Depends on**: plans/000 through plans/010 (all DONE in code)
+- **Depends on**: plans/000–008 and 010 (DONE in code). Plan 009 is REJECTED
+  for this ship and is not a dependency.
 - **Category**: process
 - **Grounded at**: `abb2c1b` — 2026-09-10
 
 ## Why this matters
 
 fig-tail 0.1.0 is fully built and unit-tested, and has never once been run
-inside Figma. Ten of eleven plans are marked DONE with an `UNVERIFIED` caveat,
-and roughly twenty individual claims across `packages/plugin/notes/` and
-`docs/release/` rest on documentation reading plus code-path inspection rather
-than observation. One of them — cross-account document read — is the single
-named blocker on the Figma Community publish.
+inside Figma. Eight of the eleven plans (000, 003, 004, 005, 006, 007, 008, 010)
+are marked DONE with an `UNVERIFIED` caveat, and 37 `UNVERIFIED` markers sit
+across `packages/plugin/notes/`, `docs/release/` and `plans/README.md` — all of
+them resting on documentation reading plus code-path inspection rather than
+observation. One — cross-account document read — is the named blocker on the
+Figma Community publish.
 
 The cost is not theoretical. This repo's own demo checklist says a plugin that
 emits a wrong class name in front of developers does more damage than one that
 does not exist. Right now nobody can say whether the plugin loads, whether the
 config a designer saves is readable by the developer sitting next to them, or
 whether the CSS shapes the matching engine was built against resemble what
-Figma actually returns. This plan converts that pile of assumptions into
-recorded evidence, so the publish decision is made on facts.
+Figma actually returns.
 
 This plan converts that pile of assumptions into recorded evidence for a 0.1.0
 that ships as a **local/team manifest install**. The Figma Community publish is
@@ -56,11 +57,21 @@ plan. Manufacturing a PASS is the only real failure mode.
 - `packages/plugin/manifest.json` declares `"id": "fig-tail-dev"`,
   `editorType: ["figma","dev"]`, `capabilities: ["codegen","inspect"]`,
   `documentAccess: "dynamic-page"`, `networkAccess.allowedDomains: ["none"]`.
-- Config storage has three tiers, resolved **document → personal → none**. The
-  exact UI labels, which the checks below match against verbatim:
+- Config storage has three tiers, resolved **document → personal → none**, but
+  there are **four** labels, because the personal tier has two. All four, quoted
+  verbatim from `packages/plugin/src/storage.ts:355-368` — the checks below match
+  against these exact strings, so none is abbreviated:
   - Document: `Using the config saved on this file`
-  - Personal: `Using your personal config — this file has no shared one`
-  - None: `No Tailwind config — generic Tailwind syntax; … Add your config for confirmed names.`
+  - Personal, no document config present:
+    `Using your personal config — this file has no shared one`
+  - Personal, overriding a document config (**this is what substep 5 produces**):
+    `Using your personal config — overriding this file's shared config`
+  - None: `No Tailwind config — generic Tailwind syntax; project prefix/settings may require changes. Add your config for confirmed names.`
+- **Config can be cleared from inside the plugin.** `packages/plugin/src/ui/main.tsx:227-228`
+  render `Remove file config` and `Remove personal config`, wired at
+  `main.tsx:336-340` to `clearConfig` (`storage.ts:548`). This is the reset
+  mechanism Step 3 needs. It is not written down in `docs/`, which is why Step 3
+  asks you to document it.
 - A working capture spike exists at `spikes/figma-platform/` (its own plugin id
   `fig-tail-platform-spike`) with a `capture-css` route that calls
   `node.getCSSAsync()` and posts the result to its UI. A second spike,
@@ -100,12 +111,22 @@ them, because a summary is not a spec and the API may have moved.
    summarise.test.ts` and `integration.test.ts`). It is byte-identical to the
    root copy today and is not mentioned anywhere in the preflight note.
    Re-capturing only the root copy would therefore produce **zero** test signal.
-3. **Codegen has no latency instrumentation.** `grep` for
-   `durationMs|performance|elapsed` across `packages/plugin/src/codegen/` and
-   `mode-dev.ts` returns nothing. The linter does surface duration
-   (`packages/plugin/src/ui/main.tsx:400` renders `${state.lint.durationMs}ms`),
-   so Step 7 has a real instrument and Step 6 does not. Step 6 says how to
-   handle that.
+3. **Codegen has no latency instrumentation, and the plugin emits no console
+   output at all.** `grep` for `durationMs|performance|elapsed` across
+   `packages/plugin/src/codegen/` and `mode-dev.ts` returns nothing, and
+   `grep -rn "console\." packages/plugin/src/` returns nothing either. The
+   linter does surface duration (`packages/plugin/src/ui/main.tsx:400` renders
+   `${state.lint.durationMs}ms`), so Step 7 has a real instrument and Step 6 has
+   none. Step 6 says how to handle that.
+4. **The cross-plugin isolation spike reads the wrong keys, and would pass
+   vacuously.** `spikes/figma-platform-isolation/main.js:3` reads
+   `['ft.spike.meta', 'ft.spike.chunk.0', 'ft.spike.chunk.1']` — the *capture
+   spike's* keys. fig-tail writes under `figtail.*`
+   (`packages/plugin/src/storage.ts:25-30`: `figtail.meta`, `figtail.payload.*`,
+   `figtail.document-id`). Run as-is against a fig-tail config it prints
+   `ISOLATION PASS` regardless of whether plugin-data namespacing works, because
+   it looks for keys that exist under no plugin ID at all. Step 5 fixes this
+   before measuring anything.
 
 ## Inputs & resources
 
@@ -116,13 +137,14 @@ blocks, so a missing input costs that step rather than the run.
 |---|---|---|
 | Figma **desktop** app | Record exact version in the env stamp | all |
 | Account **A** | Edit access on the test file | 2–9 |
-| Account **B** | Separate account, view-only or Dev seat, on the same file | 3.2, 4 |
+| Account **B** | Separate account, **view-only** (no edit access) on the test file | 3b, 8 (no-edit row), 4 |
 | A shared plugin ID both accounts can install | See Step 1. Under route B this is expected to be unobtainable | 4 only |
 | A real `tailwind.config.js`/`.ts` (v3) or CSS entry with `@theme` (v4) | The team's real config, not a fixture | 3–9 |
 | Matching `package.json` with an exact `x.y.z` `tailwindcss` version | Ranges are rejected by design | 3 |
 | A **throwaway** Figma file with local variables | Step 8 writes to it | 8 |
 | A large Figma file, ≥1,000 nodes on one page | Record its source URL so the measurement is reproducible | 7 |
-| Test file with the nine stable node names | Names listed in `fixtures/figma/css/design/` | 2, 9 |
+| Test file with the nine stable node names | **Does not exist yet — build it.** The names and expected classes are the table at `fixtures/figma/README.md:20-30` (`Card / exact`, `Text / exact`, `Size / fixed`, `Colour / near`, `Spacing / near`, `Variable / bound`, `Gradient / unsupported`, `Layout / nested`, `Text / mixed`). These are layer names, *not* the slug filenames in `fixtures/figma/css/design/`. Paste the file's share URL into `fixtures/figma/README.md:7`. | 2, 9 |
+| Someone who has not seen the plugin | For the Step 2 discoverability question only. Optional — Step 2 says what to do without one | 2 (one question) |
 
 Build commands:
 
@@ -159,6 +181,12 @@ never `PASS`.
 - `docs/release/evidence/2026-09-10/` — new screenshots.
 - `fixtures/figma/css/{design,dev}/*.json` and
   `packages/match/fixtures/css/*.json` — Step 9 re-capture only.
+- `fixtures/figma/README.md` — the file URL at line 7, and the "seeded from
+  documented shapes" wording at lines 9–11, which Step 9 makes false.
+- `spikes/figma-platform-isolation/main.js` — **Step 5 only**, to correct the
+  keys it reads. This is test instrumentation, not shipped code; a broken
+  instrument produces false evidence, which is the one thing this plan exists to
+  prevent.
 - `plans/README.md` — status row for this plan, and the `UNVERIFIED` caveats in
   rows 000–010 that this plan resolves.
 
@@ -166,10 +194,11 @@ never `PASS`.
 
 - **Any `packages/*/src/**` file.** This plan measures the 0.1.0 build; changing
   the thing being measured invalidates the measurement. Bugs found become
-  written findings, not fixes. The one permitted exception is Step 6's
-  instrumentation, and only under the conditions stated there.
-- **Submitting to Figma Community, or tagging/publishing to npm.** This plan
-  produces the evidence that lets the owner decide. It does not decide.
+  written findings, not fixes. There is no exception: Step 6 does **not**
+  add instrumentation (see that step), and `spikes/` is not `packages/*/src/`.
+- **Submitting to Figma Community, or tagging/publishing to npm — including an
+  unlisted or link-only publish.** An unlisted publish is still a publish and
+  still needs an owner decision. This plan produces evidence; it does not decide.
 - **`manifest.json`'s `id` field**, except as Step 1 explicitly directs.
 - **The owner-decision rows in `docs/release/approval-packet.md`.** Fill the
   prepared-status rows; leave APPROVED/DEFER/REJECT to the owner.
@@ -177,13 +206,29 @@ never `PASS`.
 
 ## Working approach
 
-Branch `verify/in-figma-0.1.0`. One commit per step, message
-`verify(NNN): <step> — <PASS|FAIL|BLOCKED summary>`. Commit evidence
+Branch `verify/in-figma-0.1.0`, cut from the commit this plan is grounded at
+(`abb2c1b`) or the current default branch head, whichever the owner names — record
+which. One commit per step, message `011-<step number>: <summary>` (matching the
+`<plan>-<task>` convention in `plans/EXECUTOR-GUIDE.md:252-259`). Commit evidence
 screenshots alongside the note edit they support. Do not open a PR unless asked.
 
-Steps 2–9 are independent *except* Step 1 gates Step 4, and Step 3's substeps
-are strictly ordered. If a step is BLOCKED, record it and continue to the next
-— a partial run with honest rows is the expected outcome, not a failure.
+Screenshots go to `docs/release/evidence/2026-09-10/<step>-<slug>.png`, where
+`<slug>` is a short kebab-case name for what is pictured — e.g.
+`03-document-tier-label.png`, `05-isolation-empty-read.png`. Create the directory.
+
+**`EXECUTOR-GUIDE.md:198-204` requires `pnpm check` to pass before every commit.
+This plan overrides that for Step 9 only**, whose whole purpose may be to record a
+failing `pnpm check`. Every other commit follows the guide.
+
+**Dependencies between steps**: Step 1 gates Step 4. Step 3's substeps are strictly
+ordered. **Step 5 depends on Step 3**, because it needs a document-tier config
+already saved on the file. Steps 2, 6, 7, 8 and 9 are independent. If a step is
+BLOCKED, record it and continue — a partial run with honest rows is the expected
+outcome, not a failure.
+
+**Before anything**: run `pnpm --filter @fig-tail/plugin build`, then import
+`packages/plugin/manifest.json` into Figma desktop. Record the build's commit SHA
+in the env stamp, so every row below is attributable to a known build.
 
 ## Breaking the circularity — OWNER DECISION: **route B**, decided 2026-09-10
 
@@ -243,9 +288,11 @@ Two escape hatches were *not* resolved when this plan was written, because
 - Whether a plugin **collaborator/publisher invite** lets a second account run an
   unpublished plugin.
 - Whether Community publishing offers an **unlisted / link-only** visibility that
-  is not a full public listing.
+  is not a full public listing. **Research only.** An unlisted publish is still a
+  publish, which Scope forbids and route B defers — so a positive finding here is
+  recorded for the 0.2.0 decision and does **not** unblock Step 4 in this pass.
 
-If either works it breaks the circularity cleanly and beats every option below.
+Only the collaborator-invite hatch, if it exists, can unblock Step 4 under route B.
 Record what you find either way — the next person should not re-derive it.
 
 Then decide, and write down, **which ID the evidence is recorded against**. If
@@ -278,53 +325,81 @@ While in Dev Mode, also confirm the five `codegenPreferences` from
 `manifest.json` appear in the preferences menu: `Configure Tailwind…`,
 `Include layout utilities`, `Allow arbitrary values`, `Output`, `Subtree export`.
 
-For `devmode-discovery.md`, record the two open questions it names: the literal
-wording/position Figma renders for the plugin in the language dropdown, and
-whether the Inspect entry point is findable without being told where it is.
-Answer the second by watching one person who has not seen the plugin try to
-find it, and write what they did.
+For `devmode-discovery.md`, record **all three** open questions it names
+(lines 20, 34 and 48):
+
+1. The literal wording and position Figma renders for the plugin in the language
+   dropdown.
+2. Whether the Inspect panel entry point is findable without being told where it
+   is. Answer by watching one person who has not seen the plugin try to find it,
+   and write down what they actually did. **If no such person is available**,
+   record `BLOCKED — no naive subject available` rather than answering from your
+   own experience; you already know where it is, so your own attempt measures
+   nothing.
+3. Whether the language selection persists across reloads and restarts — select
+   Tailwind CSS, reload, reopen, and record whether it is still selected.
 
 **Check**: the route table in `packages/plugin/notes/platform-preflight.md`
 (lines 22–24) has all three rows replaced with observed results plus screenshots,
-and the two `devmode-discovery.md` questions have recorded answers.
+the five preference labels are confirmed present, and all three
+`devmode-discovery.md` questions carry an answer or an explicit BLOCKED.
 
 ### Step 3: Walk the tier ladder in this exact order
 
-**Order is load-bearing.** Tiers resolve document → personal → none, so a
-higher tier masks the ones below it. Testing document first makes the personal
-and none labels unobservable without a reset. Run these in order on one file:
+**Order is load-bearing.** Tiers resolve document → personal → none, so a higher
+tier masks the ones below it. Testing document first makes the personal and none
+labels unobservable without a reset.
 
-1. **None** — on a file with no config at either tier, select a layer. Expect
-   the none label and generic arbitrary suggestions.
-2. **Personal** — run setup, Resolve, **Save personal**. Reload. Expect the
-   personal label.
+**Button names**: the UI reads **Resolve**, **Apply to file**, **Save personally**,
+**Remove file config**, **Remove personal config** (`packages/plugin/src/ui/main.tsx:224-228`).
+`README.md` and `docs/setup.md` call the first two "Save on file" and "Save
+personal" — that mismatch is a real finding; record it, and click what the UI says.
 
-   Substep **3.2** doubles as the "personal write without edit access" row, but
-   only if performed by an account that genuinely lacks edit access — account A
-   in Dev Mode still holds edit rights and does not prove it. Use account B on a
-   view-only seat. **This does not need a shared plugin ID**: personal config
-   lives in `clientStorage`, which is per-user per-plugin, so account B running
-   its own manifest import is a valid test of "can a no-edit-access user save a
-   personal config". Only the cross-account *document read* in Step 4 needs the
-   IDs to match. Run substeps 1 and 2 on account B, then continue from substep 3
-   on account A.
-3. **Document** — **Save on file** (needs edit access). Reload. Expect the
-   document label, and confirm it now takes precedence over the personal config
-   saved in substep 2.
-4. **Restart persistence** — quit Figma entirely, reopen the file, select a
-   layer. Expect the document label still.
+**Reset**: `Remove file config` / `Remove personal config` return a file to the
+none tier. Personal config is `clientStorage`, so it is **per-account** — removing
+it on account A does not touch account B's.
+
+#### 3a — the ladder, entirely on account A
+
+Account A holds edit access, so it can produce all four labels. Run on the nine-node
+test file, in order:
+
+1. **None** — remove both configs, reload, select a layer. Expect the none label.
+2. **Personal** — Resolve, **Save personally**. Reload. Expect
+   `Using your personal config — this file has no shared one`.
+3. **Document** — **Apply to file**. Reload. Expect
+   `Using the config saved on this file`, taking precedence over the personal
+   config from substep 2 (which is still there, on this same account).
+4. **Restart persistence** — quit Figma entirely, reopen, select a layer. Expect
+   the document label still.
 5. **Preference switch** — with both tiers present, toggle the document↔user
-   preference, reload, confirm the switch persisted.
+   preference and reload. Expect the **fourth** label,
+   `Using your personal config — overriding this file's shared config`. It is
+   listed in "Current state"; seeing it is the expected result, not a surprise.
 
-Write down the reset procedure you used to return the file to "no config" — the
-next person needs it, and it is not currently documented anywhere.
+#### 3b — personal write without edit access, on account B
 
-**Check**: the "Document write + same-user reload", "Document write + Figma
-restart", "Personal write without edit access" and "Preference switch
-document↔user persists" rows of `packages/plugin/notes/storage-matrix.md` carry
-observed labels matching the verbatim strings in "Current state" above, each with
-a screenshot. The personal-without-edit-access row names the account and seat
-used. The reset procedure is written into that file.
+This is a separate check, not a rung of the ladder. It needs an account that
+genuinely lacks edit access — account A in Dev Mode still holds edit rights and
+proves nothing. On account B, view-only on the same file: run setup, Resolve,
+**Save personally**, reload, confirm the personal label.
+
+**This does not need a shared plugin ID.** Personal config lives in
+`clientStorage`, which is per-user per-plugin, so account B running its own
+manifest import is a valid test of "can a no-edit-access user save a personal
+config". Only Step 4's cross-account *document read* needs the IDs to match.
+
+Also record what **Apply to file** does on account B, since `canWriteDocument`
+is computed but the button is rendered unconditionally — expected is a failure
+message, not a silent no-op. Whatever happens, write it down.
+
+**Check**: `packages/plugin/notes/storage-matrix.md` rows "Document write +
+same-user reload", "Document write + Figma restart", "Personal write without edit
+access" and "Preference switch document↔user persists" each carry an observed
+label matching the verbatim strings in "Current state", with a screenshot. Add two
+new rows the table lacks: **"None tier label"** (substep 1) and **"Personal
+overriding document label"** (substep 5). The 3b row names the account and seat.
+The reset procedure and the button-name mismatch are written into that file.
 
 ### Step 4: Cross-account document read — run only if an escape hatch worked
 
@@ -352,15 +427,34 @@ stamps and a screenshot of account B's Dev Mode showing the document label, or
 `storage-matrix.md`: keep the personal path labelled, do not claim team setup in
 Community copy.
 
-### Step 5: Confirm cross-plugin isolation
+### Step 5: Confirm cross-plugin isolation — fix the instrument first
 
-With a config saved on the file by fig-tail, run
-`spikes/figma-platform-isolation/` (a different plugin ID) against the same
-file and confirm its read comes back **empty**.
+Depends on Step 3 having saved a document-tier config on the file.
 
-**Check**: the "Cross-plugin isolation" rows in `platform-preflight.md` (line 49)
-and `storage-matrix.md` show the observed empty read with a screenshot,
-replacing "PASS (by documented semantics)".
+**The spike as committed cannot detect a failure.** `spikes/figma-platform-isolation/main.js:3`
+reads `['ft.spike.meta', 'ft.spike.chunk.0', 'ft.spike.chunk.1']`, which are the
+*capture spike's* keys. fig-tail writes `figtail.meta`, `figtail.payload.*` and
+`figtail.document-id` (`packages/plugin/src/storage.ts:25-30`). Run unchanged, it
+prints `ISOLATION PASS` whether namespacing works or not, because it reads keys no
+plugin ever wrote. A screenshot of that toast would satisfy every letter of the
+evidence rule and mean nothing.
+
+So:
+
+1. **Fix the keys.** Change `KEYS` to fig-tail's actual keys. Scope permits editing
+   this file, and only this file, for this reason.
+2. **Add a positive control.** Before reading fig-tail's keys, have the spike write
+   and read back one key of its own. If that read comes back empty, the reader
+   itself is broken and a subsequent "empty" result proves nothing — **STOP**.
+3. **Then measure.** With the positive control passing, read fig-tail's keys from
+   the second plugin ID. Expect empty.
+
+Only step 3's empty read, sitting behind a passing positive control, is evidence.
+
+**Check**: the "Cross-plugin isolation" rows in `platform-preflight.md:49` and
+`storage-matrix.md` record both the positive-control result and the empty read of
+`figtail.*`, with a screenshot, replacing "PASS (by documented semantics)". The
+spike diff is committed with the row.
 
 ### Step 6: Measure codegen latency against the 3 s budget
 
@@ -368,20 +462,25 @@ Per fact 4, 3 s is the hard limit and the code's internal deadline is 2 s. As
 noted above, **codegen carries no timing instrumentation**, so there is nothing
 in-product to read.
 
-Do the cheapest thing that yields a defensible number:
+**There is no in-product instrument, and the plugin console is not one either** —
+`grep -rn "console\." packages/plugin/src/` returns nothing, so the plugin emits
+no output for a console to show. Do not go looking for it.
 
-- Open Figma desktop's plugin console and time the `generate` callback there, if
-  the console exposes it; otherwise
-- Time by stopwatch across ten selection changes on the heaviest node available
-  and record the range, labelling it explicitly as a coarse external measurement.
+The only method available without changing the build is external timing: run ten
+selection changes on the heaviest node in the test file, time them with a
+stopwatch, and record the range. Label it in the note as a **coarse external
+measurement**, because that is what it is — it includes Figma's own selection and
+render time, so it is an upper bound on the callback, not a measurement of it.
 
-Record which method was used. Do **not** add timing code to
-`packages/plugin/src/` under this plan unless both methods above fail; if they
-do, STOP and report rather than editing the build mid-measurement.
+That is sufficient for the only question being asked here: *is there any sign of
+approaching the 3 s hard limit?* If the observed range is anywhere near 3 s, that
+is a finding worth a real instrument — record it and STOP rather than adding
+timing code to a build you are in the middle of measuring.
 
 **Check**: `packages/plugin/notes/platform-preflight.md` gains a "Codegen
-latency" section with the method named, the observed numbers, the node used,
-and a verdict against the 3 s hard limit and 2 s internal deadline.
+latency" section recording: the method (coarse external timing), the ten observed
+values and their range, the node used, and a verdict against the 3 s hard limit —
+stated as an upper bound, not as a callback measurement.
 
 ### Step 7: Measure linter and subtree export at scale
 
@@ -395,7 +494,10 @@ The linter reports its own duration in the UI status line
 - **Subtree export**: select a subtree of ≥100 nodes and run each of the HTML,
   JSX and Outline formats. Note `mode-dev.ts:81` caps this at
   `maxNodes: 150, deadlineMs: 2000` — a truncated or deadline-exceeded result on
-  a large tree is **expected behaviour**, not a failure. Record which occurred.
+  a large tree is **expected behaviour**, not a failure. Record which of the three
+  outcomes occurred: truncated, deadline-exceeded, or completed within both caps
+  (possible, since 100 nodes is under the 150 cap — to exercise truncation
+  deliberately, select more than 150).
 
 **Check**: `linter-performance.md` and `subtree-performance.md` each carry the
 observed number, the file used, and a screenshot of the status line.
@@ -406,19 +508,34 @@ observed number, the file used, and a screenshot of the status line.
 run Apply against the demo file, a shared team file, or any file with variables
 someone else depends on.
 
-Confirm the three-row matrix in `platform-preflight.md` (lines 57–59):
+Confirm the three-row matrix in `platform-preflight.md` (lines 57–59). **Two of
+its three expectations are worded wrongly for the shipped build** — record what
+actually happens, not what the row predicts:
 
-- Design editor + edit access → Apply allowed.
-- Dev Mode → Apply not offered (dry-run only, per plan 007's design).
-- No edit access → Apply denied.
+- **Design editor + edit access** → Apply allowed. (Expected correct.)
+- **Dev Mode** → the row says "denied or unsafe" and this plan previously said
+  "not offered". Both are wrong: `main.tsx:242` renders the `Apply stamp` button
+  **unconditionally**, and `main.ts:11` registers the handler globally, so the
+  button is present and clickable in Dev Mode Inspect. Clicking it should surface
+  `Stamping can only apply in the design editor` (`mode-design.ts:194`) and a
+  `design-editor-only` failure (`mode-design.ts:197`). Expected behaviour is
+  **offered and refused**. Record the exact notification text.
+- **No edit access** (account B, view-only) → there is no edit-access gate in the
+  code: `stamp/apply.ts:59` gates only on `figma.editorType`, and per-variable
+  write failures collect into a `failed` array (`apply.ts:65-70`). Any refusal
+  comes from Figma's own permission enforcement, not from fig-tail. There is no
+  predicted string — record verbatim whatever the user sees, including "nothing
+  happened" if that is the truth.
 
 Then confirm the open question in `stamping-verification.md`: does the Inspect
 panel actually display `codeSyntax.WEB` on a variable after stamping? Undo via
 Figma afterwards and confirm the undo restored the previous state.
 
-**Check**: all three matrix rows and the `stamping-verification.md` question
-carry observed results with screenshots; the throwaway file's name is recorded;
-undo is confirmed.
+**Check**: all three matrix rows carry observed results with screenshots, and any
+row whose stated expectation the build contradicts is **rewritten to match the
+build**, with a note saying it was wrong. The `stamping-verification.md` question
+carries an observed answer. The throwaway file's name is recorded. Undo is
+confirmed.
 
 ### Step 9: Re-capture CSS fixtures and reconcile the tests
 
@@ -432,8 +549,11 @@ signal.
    replacing the seeded files.
 3. **Also update `packages/match/fixtures/css/`** — this is the copy the tests
    import. Which of the design/dev pair to use is a decision to record, not
-   guess: use the Dev Mode capture if the two differ, since that is the surface
-   the plugin ships on, and write down that the divergence existed.
+   guess: **if they differ**, use the Dev Mode capture (that is the surface the
+   plugin ships on) and write down that the divergence existed; **if they are
+   identical**, use either and record that they matched — which is itself the
+   answer to the design/dev parity question `platform-preflight.md:28-32` calls
+   provisional.
 4. Diff the real captures against the seeded ones and record whether design and
    dev output actually match (the preflight note calls this a provisional PASS).
 5. Run `pnpm check`.
@@ -455,14 +575,25 @@ line 73's claim corrected.
 
 Propagate every result into the summary surfaces:
 
-- `docs/release/feature-audit.md` — the seven CONDITIONAL rows and the blocker row.
-- `docs/release/approval-packet.md` — prepared-status rows only.
+- `docs/release/feature-audit.md` — the **six** CONDITIONAL rows (lines 9–14) and
+  the blocker row (line 17). Line 38's summary verdict too.
+- `docs/release/approval-packet.md` — prepared-status rows only (line 22 included).
 - `docs/community/publish-runbook.md` — the cross-account prerequisite checkbox.
 - `plans/README.md` — this plan's status row, plus the `UNVERIFIED` caveats in
-  rows 000–010 that are now resolved. Rows still unverified keep their caveat.
+  rows 000, 003–008 and 010 that are now resolved. Rows still unverified keep
+  their caveat, with the reason.
+- `fixtures/figma/README.md` — line 7's file URL, and lines 9–11's "seeded from
+  documented shapes" wording, which Step 9 makes false.
 
-**Check**: `grep -rn "UNVERIFIED" packages/plugin/notes/ docs/ plans/README.md`
-returns only rows genuinely still unverified, each with a written reason.
+**Residual markers.** `platform-preflight.md:65-68` is a decision table whose rows
+read "PASS WITH FALLBACK (code paths ready; in-product UNVERIFIED)". Those are
+summaries of the rows above them, not independent claims: update each to match
+whatever its underlying rows now say.
+
+**Check**: `grep -rn "UNVERIFIED" packages/plugin/notes/ docs/ fixtures/figma/ plans/README.md`
+returns only markers this plan did not have a step for, and each surviving one has
+a written reason on the same line. Record the before and after counts — it was 37
+across those paths at `abb2c1b`.
 
 ## Validation plan
 
@@ -480,18 +611,28 @@ returns only rows genuinely still unverified, each with a written reason.
 
 ALL must hold:
 
-- [ ] Every row in `storage-matrix.md`, `platform-preflight.md`,
-      `stamping-verification.md`, `linter-performance.md`,
-      `subtree-performance.md` and `devmode-discovery.md` reads PASS, FAIL, or
-      BLOCKED-with-reason — no `UNVERIFIED`, no bare `PASS`.
+- [ ] Every row **that a step in this plan targets** reads PASS, FAIL, or
+      BLOCKED-with-reason — no `UNVERIFIED`, no bare `PASS`. Specifically: the
+      route table and storage/stamping matrices in `platform-preflight.md`, the
+      eight rows of `storage-matrix.md` plus the two new ones from Step 3, the
+      in-product question in `stamping-verification.md`, the 1,000-node row in
+      `linter-performance.md`, the 100+ node row in `subtree-performance.md`, and
+      all three questions in `devmode-discovery.md` (which is prose, not a table —
+      answer them in place). Rows in those files describing code-level facts no
+      step measures are left alone.
 - [ ] Every PASS row names an observed value, a committed screenshot, and an env stamp.
+- [ ] Every expectation this plan found to be **wrong about the build** — the Dev
+      Mode and no-edit-access stamp rows, the isolation spike's keys, the
+      "Save on file"/"Save personal" button names in `README.md` and
+      `docs/setup.md` — is corrected or recorded as a finding.
 - [ ] The cross-account document read row is PASS, FAIL, or BLOCKED with Step 1's
       written reason and route B recorded.
 - [ ] Nothing was published to Figma Community or npm under this plan.
 - [ ] Both fixture directories hold real captures, and `pnpm check` is either
       exit 0 or its failures are recorded verbatim in `fixture-recapture.md`.
 - [ ] `platform-preflight.md` line 73's false claim about fixture consumption is corrected.
-- [ ] No file under `packages/*/src/**` was modified.
+- [ ] No file under `packages/*/src/**` was modified. (`spikes/figma-platform-isolation/main.js`
+      is expected to change, per Step 5.)
 - [ ] `docs/release/feature-audit.md` and `approval-packet.md` reflect every result.
 - [ ] `plans/README.md` status row updated.
 
@@ -509,21 +650,24 @@ Stop and report back — do not improvise — if:
   A "none" tier on account B then proves nothing except the method was wrong.
 - **The evidence recorded would be against a plugin ID that is not the shipping
   one**, and nobody has decided whether that is acceptable.
-- **Any step would require editing `packages/*/src/**`** to proceed (Step 6's
-  narrow exception aside).
+- **Any step would require editing `packages/*/src/**`** to proceed. Step 5's
+  spike fix is the only permitted code change, and `spikes/` is not `src/`.
 - **Stamping Apply is about to run on anything other than the throwaway file.**
 - **The plugin does not load at all in Step 2** — everything downstream is moot;
   report immediately rather than working around it.
-- **A check's result is ambiguous** (an unfamiliar label, a tier you cannot
-  explain). Record what you saw and ask. Do not round it to the nearest
-  expected outcome.
+- **Step 5's positive control fails** — the isolation reader cannot see its own
+  data. An empty read then proves nothing.
+- **A check's result is ambiguous** — a tier you cannot explain, or a label that
+  is not one of the **four** quoted in "Current state". Record what you saw and
+  ask. Do not round it to the nearest expected outcome.
 
 ## Handoff / after it lands
 
 - **Community publish is deferred to 0.2.0 by decision, not by oversight.** The
   reopening condition is concrete: an Organization/Enterprise workspace to
-  publish privately into, or a confirmed collaborator-invite / unlisted-publish
-  route. When one appears, Step 4 is the only step that needs re-running.
+  publish privately into, or a confirmed collaborator-invite route. (An unlisted
+  publish would also do it, but is itself a publish and needs its own decision.)
+  When one appears, Step 4 is the only step that needs re-running.
 - **npm is unaffected.** `@fig-tail/theme` and `@fig-tail/match` were never
   gated on cross-account read; that decision stays in the approval packet.
 - **The demo checklist** in `plans/README.md` ("Before you show it to
