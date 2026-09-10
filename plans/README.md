@@ -360,8 +360,18 @@ guidance; the numbered plan wins if the two conflict.
 | 009 | Add the optional CLI escape hatch for complex configs | P3 | M | 001, 003 | REJECTED for this ship (plugin-only; CLI out of scope) |
 | 010 | Package, document, and publish | P2 | S | 005 | DONE (0.1.0 prep complete; Community blocked on cross-account UNVERIFIED; npm/Community await owner approval) |
 | 011 | Verify fig-tail inside Figma and replace every UNVERIFIED marker with evidence | P0 | L | 000–010 | TODO (human-only; route B — local/team install, Community deferred to 0.2.0) |
+| 012 | Make the class string safe to paste unchecked | P0 | M | 011 | TODO |
+| 013 | Decide and build the install path two developers will complete | P0 | M | 011 | TODO (blocked on a distribution decision — see GOAL) |
+| 014 | Make first-run setup completable without the author present | P1 | M | 011 | TODO |
+| 015 | Make everyday output legible on every selection | P1 | M | 011 | TODO |
+| 016 | Run the two-week developer pilot and decide | P0 | M | 012, 013 | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale)
+
+**Plans 011–016 serve one goal**, stated in [GOAL-developer-adoption.md](GOAL-developer-adoption.md):
+two developers install fig-tail themselves, use it for two weeks on real work,
+paste its output without hand-checking, and would notice if it vanished. Minimum
+slice for that goal: **011 → 012 → 013 → 016**.
 
 **Minimum shippable slice: 000 → 001 → 002 → 003 → 004 → 005 → 010.** That is a
 public, installable plugin that fully delivers the core promise. 006–009 are
