@@ -190,10 +190,30 @@ stops. Per fact 7, `setPluginData` is namespaced to the plugin ID. Two separate
 cross-account read that way proves nothing — each account would read its own
 empty namespace and the FAIL would be an artifact of the method.
 
-Determine, from Figma's current plugin documentation and the account plan
-available, which distribution route gives accounts A and B the *same* plugin ID
-(for example org-private publishing, or a Community-published draft the owner
-controls). Record the route chosen and the resulting plugin ID.
+**Known constraint, checked 2026-09-10.** Publishing a plugin privately to an
+organization requires an **Organization or Enterprise** plan ([Create private
+plugins for an organization](https://help.figma.com/hc/en-us/articles/4404228629655-Create-private-organization-plugins)).
+This project is on **Professional**, so that route is unavailable, and the
+documented way to put a plugin on a second account is publishing it to Community.
+
+**That makes the gate as written circular**: the Community publish is blocked on
+cross-account read, and cross-account read needs a shared plugin ID, which on
+Professional needs a Community publish. Break the circularity by owner decision,
+not by executor improvisation — see "Breaking the circularity" below. If that
+section still reads UNDECIDED, **STOP and get the decision before starting this
+step**.
+
+Two escape hatches were *not* resolved when this plan was written, because
+`help.figma.com` was unreachable from the authoring environment. Time-box each to
+30 minutes before falling back to the decided route:
+
+- Whether a plugin **collaborator/publisher invite** lets a second account run an
+  unpublished plugin.
+- Whether Community publishing offers an **unlisted / link-only** visibility that
+  is not a full public listing.
+
+If either works it breaks the circularity cleanly and beats every option below.
+Record what you find either way — the next person should not re-derive it.
 
 Then decide, and write down, **which ID the evidence is recorded against**. If
 verification runs under `fig-tail-dev` but the plugin ships under a
@@ -203,10 +223,32 @@ published plugin, and the cross-account row would describe an artifact that is
 not the one shipping. Prefer verifying on the ID that will ship.
 
 **Check**: `packages/plugin/notes/storage-matrix.md` has a new "Plugin identity"
-section naming the distribution route, the exact plugin ID, whether it is the
-shipping ID, and a screenshot showing the same plugin ID installed on both
-accounts. If no route yields a shared ID → record Step 4 as `BLOCKED — no
-shared plugin ID available`, and go to Step 2.
+section naming the decided route (A, B, C, or an escape hatch), the exact plugin
+ID, whether it is the shipping ID, the outcome of both time-boxed escape-hatch
+checks, and — if a shared ID was obtained — a screenshot showing it installed on
+both accounts. Under route B, or if no route yields a shared ID, record Step 4 as
+`BLOCKED — Professional plan has no private-share route; see plan 011 Step 1`
+and continue to Step 2.
+
+### Breaking the circularity — OWNER DECISION: UNDECIDED
+
+Pick one before Step 1 runs. Each has a different blast radius.
+
+| Route | What happens | Cost |
+|---|---|---|
+| **A. Publish, then verify** | Publish to Community — that ID is the shipping ID — then immediately run Step 4 on account B. On FAIL, unpublish or patch. | A public listing exists before the blocker clears. Requires listing copy that does **not** claim team sharing until Step 4 is PASS. |
+| **B. Re-scope 0.1.0 to local/team install** | Do not publish. Verify Steps 2–3 and 5–9 fully; record cross-account as BLOCKED with the plan-tier reason. Ship via manifest import for the team demo. | Community publish slips to 0.2.0. Matches the existing CHANGELOG note that the plugin ships via Community *or* local manifest install. |
+| **C. Borrow an org** | Run the cross-account test inside an Organization/Enterprise workspace you have access to, via org-private publishing. | Needs an org you can publish into. The plugin ID there is not the shipping ID, so mechanism evidence transfers but stored config does not. |
+
+**Recommended: B**, unless the Community listing is time-critical. It is the only
+route where every published claim stays backed by evidence, and it costs nothing
+that a 0.2.0 publish cannot recover once an org or an escape hatch exists. Under
+B, Step 4 is *expected* to end BLOCKED — a correct outcome of this plan, not a
+failure of it.
+
+If **A** is chosen, add a Step 4a: before submitting, strip every team-sharing
+claim from `docs/community/listing.md` and `README.md`, and restore it only on a
+Step 4 PASS.
 
 ### Step 2: Confirm all three routes load
 
@@ -411,8 +453,8 @@ ALL must hold:
       `subtree-performance.md` and `devmode-discovery.md` reads PASS, FAIL, or
       BLOCKED-with-reason — no `UNVERIFIED`, no bare `PASS`.
 - [ ] Every PASS row names an observed value, a committed screenshot, and an env stamp.
-- [ ] The cross-account document read row is PASS or FAIL — not BLOCKED — **or**
-      Step 1 recorded in writing why no shared plugin ID was obtainable.
+- [ ] The cross-account document read row is PASS or FAIL — **or** BLOCKED with
+      Step 1's written reason and the chosen circularity route recorded.
 - [ ] Both fixture directories hold real captures, and `pnpm check` is either
       exit 0 or its failures are recorded verbatim in `fixture-recapture.md`.
 - [ ] `platform-preflight.md` line 73's false claim about fixture consumption is corrected.
@@ -426,8 +468,12 @@ Stop and report back — do not improvise — if:
 
 - **Step 9's `pnpm check` fails after re-capture.** Report the failures; never
   edit a captured fixture to go green.
+- **The "Breaking the circularity" decision still reads UNDECIDED.** Step 1 does
+  not start until the owner has picked A, B or C.
 - **Step 1 finds no route to a shared plugin ID.** Do not substitute two
   manifest imports and record the result as a real cross-account test.
+- **Route A was chosen and Step 4 comes back FAIL.** Unpublishing a live listing
+  is an owner decision, not an executor one.
 - **The evidence recorded would be against a plugin ID that is not the shipping
   one**, and nobody has decided whether that is acceptable.
 - **Any step would require editing `packages/*/src/**`** to proceed (Step 6's
