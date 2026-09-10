@@ -175,7 +175,7 @@ The fallback ladders this program commits to:
 | No config at all | **Generic arbitrary-value suggestions** (`bg-[#3b82f6]`, `p-[24px]`), not project-confirmed | "No Tailwind config — generic Tailwind syntax; project prefix/settings may require changes. Add your config for confirmed names." |
 | Variable bound but unresolvable (e.g. from an unavailable library) | Value matching against the theme | confidence drops from `exact-variable` to `exact-value` |
 | No token matches a value | Arbitrary value | `arbitrary` confidence badge |
-| Value is *near* a token | **Nothing is emitted for it** — the near-miss is reported instead | "no exact token; nearest is `brand-500`, ΔE 0.4" |
+| Value is *near* a token | **The design's own raw value** (`bg-[#3b82f1]`) — never the near token's name | "no exact token; nearest is `brand-500`, ΔE 0.4" |
 | Subtree too large or too slow | A truncated tree | an explicit truncation marker saying why |
 | Config resolution fails entirely | Generic raw suggestions; if and only if plan 009 shipped, also offer its optional CLI escape hatch | the plugin labels the generic output; core copy never assumes the CLI exists |
 
@@ -211,7 +211,9 @@ plan that owns it:
   so same-major guessing is forbidden (plan 001).
 - An unresolvable `prefix` or a disabled core plugin suppresses the affected
   utilities rather than emitting them unprefixed or non-existent (plan 002).
-- A near-miss value is reported, not emitted (plan 002).
+- A near-miss emits the design's raw value; the near *token name* is reported,
+  never emitted (plan 002, amended by plan 012 — see the F01 amendment in
+  `REVIEW-DISPOSITIONS-2026-07-31.md`).
 
 **Two things are refusals, not degradations**, and correctly block: writing to
 the document outside the sanctioned path (invariant 3), and executing user

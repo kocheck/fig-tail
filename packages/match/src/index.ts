@@ -181,10 +181,11 @@ export const matchDeclarations = (
 }
 
 /**
- * Join copyable classes. A `nearest` result carries the design's raw value (not
- * the near token's name), so it belongs in the string like any other class —
- * what a user prefers to copy is a preference concern, applied in the plugin's
- * `applyCodegenFilters`, not a matcher one.
+ * Join copyable classes. A `nearest` result carries the design's raw value, so
+ * it belongs in the string like any other class — what a user prefers to copy is
+ * a preference concern, applied in the plugin's `applyCodegenFilters`, not a
+ * matcher one. `result.nearest` is report-only and is never emitted here: no
+ * guessed token name reaches a copyable string, from any matcher.
  */
 export const toClassName = (results: MatchResult[]): string => {
   const classes = results

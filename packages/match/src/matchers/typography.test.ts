@@ -63,7 +63,9 @@ describe('typography', () => {
   it('uses arbitrary for unknown font families', () => {
     const result = matchTypography('font-family', 'Comic Sans', baseTokenSet(), undefined)
     expect(result.confidence).toBe('arbitrary')
-    expect(result.className).toBe("font-['Comic Sans']")
+    // Underscore, not a space: an unescaped space here splits the class in two
+    // and corrupts every other class in the joined string.
+    expect(result.className).toBe("font-['Comic_Sans']")
   })
 
   it('uses arbitrary font weight without a named fallback token', () => {

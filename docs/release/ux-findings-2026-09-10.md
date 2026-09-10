@@ -130,7 +130,25 @@ Configs this breaks include `colors: { ...colors, brand: '#f00' }` (spreading
 
 **Severity: P0.** It converts a supported config into a hard failure with a
 misleading message, and the reported line number refers to the *post-strip* text,
-so it points at nothing in the user's file. It has no owner plan yet.
+so it points at nothing in the user's file.
+
+**FIXED** in this branch, in two independent moves:
+
+1. `v3/evaluate.ts` now parses the source as plain JavaScript **first** and
+   reaches for the pre-pass only if that throws. Every construct that needs the
+   pre-pass (`: Config`, `as const`, `satisfies`, `import type`) fails a plain-JS
+   parse, so nothing that needs it misses it — and no `.js` config is exposed to
+   it at all. Regression test: `v3/index.test.ts` "parses a plain-JS spread
+   config the TypeScript pre-pass would corrupt", fixture `spread-colors.js`.
+2. The regex itself was tightened so it cannot span `,` `{` `}` a bare `[` or
+   whitespace between two identifiers, which fixes the same class of corruption
+   for **TypeScript** configs, where step 1 cannot help. A second bug surfaced
+   while doing it: the `satisfies` rule had the same unbounded character class
+   and ate everything after `satisfies Config` — including the file's
+   `export default`. Regression test: "resolves a TypeScript config using
+   spread, satisfies and a default export", fixture `typed-spread.ts`.
+
+Both tests were confirmed to fail against the pre-fix code.
 
 ### V8. `unknownNamespaces` is a hardcoded empty array on the v4 path
 

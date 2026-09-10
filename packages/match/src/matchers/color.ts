@@ -253,8 +253,7 @@ export const matchColor = (
   }
 
   // A near miss falls through to the raw-value return below rather than
-  // returning nothing: the design's own value is what invariant 2 prescribes,
-  // and `nearest` stays report-only so no guessed token name is ever emitted.
+  // returning nothing: the design's own value is what invariant 2 prescribes.
   const near = best
     ? {
         nearest: {

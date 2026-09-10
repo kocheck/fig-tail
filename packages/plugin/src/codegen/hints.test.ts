@@ -138,14 +138,24 @@ describe('collectHints', () => {
     await expect(collectHints(node)).resolves.toEqual({})
   })
 
-  it('skips an alias whose lookup throws (unavailable library)', async () => {
-    vi.stubGlobal('figma', {
-      variables: {
-        getVariableByIdAsync: async () => {
-          throw new Error('library unavailable')
-        },
+  // Both failure shapes must degrade to value matching. A rejection is caught by
+  // a bare `.catch()`; a synchronous throw is not, and would fail the whole node
+  // with `could not generate output` instead of dropping one hint.
+  it.each([
+    [
+      'rejects',
+      async () => {
+        throw new Error('library unavailable')
       },
-    })
+    ],
+    [
+      'throws synchronously',
+      () => {
+        throw new Error('figma.variables unavailable')
+      },
+    ],
+  ])('skips an alias whose lookup %s', async (_label, getVariableByIdAsync) => {
+    vi.stubGlobal('figma', { variables: { getVariableByIdAsync } })
     const node = {
       type: 'FRAME',
       boundVariables: { strokes: [alias('v3')] },

@@ -64,29 +64,44 @@ export const evaluateConfigModule = (
   known: KnownModules,
 ): EvalSuccess | EvalFailure => {
   const unresolvedList: Unresolved[] = []
-  const prepared = stripTypeScript(sourceText)
-  let program: Program
-  try {
-    program = acorn.parse(prepared, {
+  const parse = (text: string): Program =>
+    acorn.parse(text, {
       ecmaVersion: 'latest',
       sourceType: 'module',
       allowReturnOutsideFunction: true,
       locations: true,
     }) as Program
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    return {
-      ok: false,
-      value: null,
-      unresolved: [
-        unresolved(
-          '(root)',
-          'parse-error',
-          prepared.slice(0, 120),
-          sourceName,
-          `Could not parse ${sourceName}: ${message}. Replace dynamic TypeScript/JS constructs with plain values.`,
-        ),
-      ],
+
+  // Parse the source as-is first, and reach for the TypeScript prepass only if
+  // that fails. The prepass is regex-based and cannot tell a type annotation
+  // from an object-literal `key:` — on a plain JS config it eats the value of
+  // `colors: { ...colors, brand: '#f00' }` and the file no longer parses. Any
+  // file carrying real TypeScript syntax (`: Config`, `as const`, `satisfies`,
+  // `import type`) fails the first parse, so nothing that needs the prepass
+  // misses it, and nothing that doesn't is put at risk by it.
+  let program: Program
+  let prepared = sourceText
+  try {
+    program = parse(sourceText)
+  } catch {
+    prepared = stripTypeScript(sourceText)
+    try {
+      program = parse(prepared)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return {
+        ok: false,
+        value: null,
+        unresolved: [
+          unresolved(
+            '(root)',
+            'parse-error',
+            prepared.slice(0, 120),
+            sourceName,
+            `Could not parse ${sourceName}: ${message}. Replace dynamic TypeScript/JS constructs with plain values.`,
+          ),
+        ],
+      }
     }
   }
 

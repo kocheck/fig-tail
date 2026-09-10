@@ -17,20 +17,14 @@ const sections = [
 ]
 
 describe('optionsFromPreferences', () => {
-  it('defaults subtree export off when the preference is absent', () => {
-    // subtreeFormat is no longer declared in the manifest, so `customSettings`
-    // never carries it. The branch must stay inert rather than defaulting on.
-    expect(optionsFromPreferences({}).subtreeFormat).toBe('off')
-    expect(optionsFromPreferences(undefined).subtreeFormat).toBe('off')
-  })
-
-  it('does not declare a subtree-export preference in the manifest', () => {
-    // There is no off switch for a manifest preference — a curious developer
-    // will flip the dropdown into a feature nobody has run at scale. Not
-    // declaring it is the only off.
+  it('maps exactly the preferences the manifest declares', () => {
     const names = manifest.codegenPreferences.map((p: { propertyName: string }) => p.propertyName)
-    expect(names).not.toContain('subtreeFormat')
     expect(names).toEqual(['openSetup', 'includeLayout', 'allowArbitrary', 'output'])
+    expect(optionsFromPreferences(undefined)).toEqual({
+      includeLayout: true,
+      allowArbitrary: true,
+      outputNotes: true,
+    })
   })
 })
 
@@ -64,11 +58,6 @@ describe('sectionsForOutput', () => {
   })
 
   it('shows only the class string when nothing was filtered away', () => {
-    const matched = [result({})]
-    expect(sectionsForOutput(sections, matched, matched, classesOnly)).toHaveLength(1)
-  })
-
-  it('does not retain the notes section for routine unsupported properties', () => {
     // `none` results are every property Figma volunteers that no matcher covers.
     // Retaining on those would make the Classes preference a no-op.
     const matched = [result({ className: null, confidence: 'none', property: 'position' })]

@@ -170,9 +170,7 @@ input[type="file"] {
   color: var(--figma-color-text-brand, #007be5);
 }
 
-/* One rule per Confidence value. The three exact/name-match variants previously
-   matched nothing and fell back to the neutral base, so the highest-confidence
-   results were the least distinguished. */
+/* One rule per Confidence value. */
 .badge-exact-variable,
 .badge-exact-value,
 .badge-name-match {

@@ -37,7 +37,12 @@ const SCALAR_FIELD_TO_PROPERTY: Record<keyof ScalarBoundVariables, string> = {
   strokeWeight: 'border-width',
 }
 
-const SCALAR_FIELDS = Object.keys(SCALAR_FIELD_TO_PROPERTY) as Array<keyof ScalarBoundVariables>
+/** Array-alias fields mapped to a CSS property. `fills` becomes `color` on TEXT nodes. */
+const ARRAY_FIELD_TO_PROPERTY: Record<keyof ArrayBoundVariables, string> = {
+  fills: 'background-color',
+  strokes: 'border-color',
+  fontSize: 'font-size',
+}
 
 /**
  * Resolve a variable by id, using and populating `cache` when provided.
@@ -47,7 +52,10 @@ const SCALAR_FIELDS = Object.keys(SCALAR_FIELD_TO_PROPERTY) as Array<keyof Scala
  * every variable hint. The cache holds the *promise*, so concurrent workers
  * sharing one context (`pipeline.ts`) collapse to a single lookup per id. The
  * `.catch` is attached before caching, both to keep a failed lookup cached as
- * `null` rather than retried and so a rejection can never escape to a caller.
+ * `null` rather than retried and so a failure can never escape to a caller.
+ * The call is wrapped in `Promise.resolve().then` so a *synchronous* throw
+ * (a malformed id, or `figma.variables` missing) becomes a rejection too and
+ * still degrades to value matching, rather than failing the whole node.
  */
 const resolveVariable = (
   id: string,
@@ -55,9 +63,9 @@ const resolveVariable = (
 ): Promise<Variable | null> => {
   const cached = cache?.get(id)
   if (cached) return cached
-  // A variable from an unavailable library resolves to null and falls through
-  // to value matching, exactly as before.
-  const pending = figma.variables.getVariableByIdAsync(id).catch(() => null)
+  const pending = Promise.resolve()
+    .then(() => figma.variables.getVariableByIdAsync(id))
+    .catch(() => null)
   cache?.set(id, pending)
   return pending
 }
@@ -87,45 +95,30 @@ export const collectHints = async (
   }
   const bound = node.boundVariables as NodeBoundVariables
 
-  const fillAlias = bound.fills?.[0]
-  if (fillAlias?.id) {
-    const variable = await resolveVariable(fillAlias.id, varCache)
-    if (variable) {
-      const hint = hintFromVariable(variable)
-      if (node.type === 'TEXT') {
-        hints.color = hint
-      } else {
-        hints['background-color'] = hint
-      }
-    }
-  }
-
-  const strokeAlias = bound.strokes?.[0]
-  if (strokeAlias?.id) {
-    const variable = await resolveVariable(strokeAlias.id, varCache)
-    if (variable) {
-      hints['border-color'] = hintFromVariable(variable)
-    }
-  }
-
-  const fontSizeAlias = bound.fontSize?.[0]
-  if (fontSizeAlias?.id) {
-    const variable = await resolveVariable(fontSizeAlias.id, varCache)
-    if (variable) {
-      hints['font-size'] = hintFromVariable(variable)
-    }
-  }
-
-  for (const field of SCALAR_FIELDS) {
-    const alias = bound[field]
-    if (!alias?.id) continue
-    const variable = await resolveVariable(alias.id, varCache)
-    if (!variable) continue
-    const property = SCALAR_FIELD_TO_PROPERTY[field]
-    if (property) {
-      hints[property] = hintFromVariable(variable)
-    }
-  }
+  // Every binding is looked up concurrently: a node with a dozen bound
+  // variables would otherwise cost a dozen serial round-trips against the 3s
+  // codegen budget. The promise cache keeps duplicate ids to one lookup.
+  await Promise.all([
+    ...(Object.entries(ARRAY_FIELD_TO_PROPERTY) as Array<[keyof ArrayBoundVariables, string]>).map(
+      async ([field, property]) => {
+        const alias = bound[field]?.[0]
+        if (!alias?.id) return
+        const variable = await resolveVariable(alias.id, varCache)
+        if (!variable) return
+        hints[field === 'fills' && node.type === 'TEXT' ? 'color' : property] =
+          hintFromVariable(variable)
+      },
+    ),
+    ...(Object.entries(SCALAR_FIELD_TO_PROPERTY) as Array<[keyof ScalarBoundVariables, string]>).map(
+      async ([field, property]) => {
+        const alias = bound[field]
+        if (!alias?.id) return
+        const variable = await resolveVariable(alias.id, varCache)
+        if (!variable) return
+        hints[property] = hintFromVariable(variable)
+      },
+    ),
+  ])
 
   return hints
 }

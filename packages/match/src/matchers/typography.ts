@@ -69,7 +69,7 @@ export const matchTypography = (
     }
     return {
       property,
-      className: applyPrefix(tokens, `font-['${primary}']`),
+      className: arbitrary(tokens, 'font', `'${primary}'`),
       confidence: 'arbitrary',
       provenance,
     }

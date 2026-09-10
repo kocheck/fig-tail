@@ -6,31 +6,23 @@ import { createResolutionContext, resolveNodes, runPipeline } from './pipeline'
 import { readConfig } from './storage'
 import { meaningfulStorageFailures } from './shared/errors'
 import type { InspectPayload } from './shared/messages'
-import { exportSubtree } from './tree/export'
 
 /** Options derived from `figma.codegen.preferences.customSettings`. Defaults match the manifest. */
 export type CodegenOptions = {
   includeLayout: boolean
   allowArbitrary: boolean
   outputNotes: boolean
-  subtreeFormat: 'off' | 'html' | 'jsx' | 'outline'
 }
 
 /** Map manifest `codegenPreferences` custom settings onto `CodegenOptions`. */
 export const optionsFromPreferences = (customSettings: Record<string, string> | undefined): CodegenOptions => {
   const custom = customSettings ?? {}
-  const subtree = custom.subtreeFormat
   return {
     includeLayout: custom.includeLayout !== 'no',
     allowArbitrary: custom.allowArbitrary !== 'no',
     outputNotes: custom.output !== 'classes',
-    subtreeFormat:
-      subtree === 'html' || subtree === 'jsx' || subtree === 'outline' ? subtree : 'off',
   }
 }
-
-/** Confidences whose class is a bracketed raw value rather than a token name. */
-const ARBITRARY_VALUE_CONFIDENCE = new Set(['arbitrary', 'nearest'])
 
 const LAYOUT_PROPERTIES_TO_STRIP = new Set([
   'display',
@@ -55,7 +47,7 @@ export const applyCodegenFilters = (results: MatchResult[], options: CodegenOpti
     }
     // A near miss emits the design's raw value, so it is an arbitrary value in
     // everything but confidence — a user who turned those off does not want it.
-    if (!options.allowArbitrary && ARBITRARY_VALUE_CONFIDENCE.has(result.confidence)) {
+    if (!options.allowArbitrary && (result.confidence === 'arbitrary' || result.confidence === 'nearest')) {
       return { ...result, className: null }
     }
     return result
@@ -103,17 +95,7 @@ export const runDevMode = () => {
         const filteredResults = applyCodegenFilters(output.results, options)
         const className = toClassName(filteredResults)
         const sections = renderCodegenSections(filteredResults, className, output.warnings, output.tierLabel)
-        const result = sectionsForOutput(sections, output.results, filteredResults, options)
-        const hasChildren = 'children' in event.node && event.node.children.length > 0
-        if (options.subtreeFormat !== 'off' && hasChildren) {
-          const tree = await exportSubtree({ format: options.subtreeFormat, deadlineMs: 2000, maxNodes: 150 })
-          result.push({
-            title: 'Subtree',
-            language: 'PLAINTEXT',
-            code: tree,
-          })
-        }
-        return result
+        return sectionsForOutput(sections, output.results, filteredResults, options)
       } catch (error) {
         return errorSections(error instanceof Error ? error.message : String(error))
       }

@@ -4,46 +4,26 @@
   "api": "1.0.0",
   "main": "dist/main.js",
   "ui": "dist/ui.html",
-  "editorType": [
-    "figma",
-    "dev"
-  ],
-  "capabilities": [
-    "codegen",
-    "inspect"
-  ],
+  "editorType": ["figma", "dev"],
+  "capabilities": ["codegen", "inspect"],
   "documentAccess": "dynamic-page",
-  "networkAccess": {
-    "allowedDomains": [
-      "none"
-    ]
-  },
+  "networkAccess": { "allowedDomains": ["none"] },
   "codegenLanguages": [
-    {
-      "label": "Tailwind CSS",
-      "value": "tailwind"
-    }
+    { "label": "Tailwind CSS", "value": "tailwind" }
   ],
   "codegenPreferences": [
     {
       "itemType": "action",
       "propertyName": "openSetup",
-      "label": "Configure Tailwind\u2026"
+      "label": "Configure Tailwind…"
     },
     {
       "itemType": "select",
       "propertyName": "includeLayout",
       "label": "Include layout utilities",
       "options": [
-        {
-          "label": "Yes",
-          "value": "yes",
-          "isDefault": true
-        },
-        {
-          "label": "No",
-          "value": "no"
-        }
+        { "label": "Yes", "value": "yes", "isDefault": true },
+        { "label": "No", "value": "no" }
       ]
     },
     {
@@ -51,15 +31,8 @@
       "propertyName": "allowArbitrary",
       "label": "Allow arbitrary values",
       "options": [
-        {
-          "label": "Yes",
-          "value": "yes",
-          "isDefault": true
-        },
-        {
-          "label": "No",
-          "value": "no"
-        }
+        { "label": "Yes", "value": "yes", "isDefault": true },
+        { "label": "No", "value": "no" }
       ]
     },
     {
@@ -67,15 +40,8 @@
       "propertyName": "output",
       "label": "Output",
       "options": [
-        {
-          "label": "Classes",
-          "value": "classes"
-        },
-        {
-          "label": "Classes + notes",
-          "value": "classes-notes",
-          "isDefault": true
-        }
+        { "label": "Classes", "value": "classes" },
+        { "label": "Classes + notes", "value": "classes-notes", "isDefault": true }
       ]
     }
   ]

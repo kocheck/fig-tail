@@ -143,10 +143,13 @@ const renderInspectBody = (inspect: InspectPayload | null): string => {
 
   const resultsList = inspect.results.length
     ? `<div class="list">${inspect.results
-        .map(
-          (r) =>
-            `<div class="item"><span class="badge badge-${escapeHtml(r.confidence)}">${escapeHtml(CONFIDENCE_LABEL[r.confidence] ?? r.confidence)}</span> <strong>${escapeHtml(r.property)}</strong>: ${escapeHtml(r.className ?? r.note ?? '—')}</div>`,
-        )
+        .map((r) => {
+          // Both, not either: a near miss now emits a raw-value class AND a note
+          // naming the token it just missed. Showing only the class would drop
+          // the near token from the row that explains it.
+          const detail = [r.className, r.note].filter(Boolean).join(' · ') || '—'
+          return `<div class="item"><span class="badge badge-${escapeHtml(r.confidence)}">${escapeHtml(CONFIDENCE_LABEL[r.confidence] ?? r.confidence)}</span> <strong>${escapeHtml(r.property)}</strong>: ${escapeHtml(detail)}</div>`
+        })
         .join('')}</div>`
     : ''
 
@@ -157,19 +160,14 @@ const renderInspectBody = (inspect: InspectPayload | null): string => {
   return `${tierBanner}${storageBanner}${namespaceNotes}${selectionNote}${classOut}${resultsList}${warnings}`
 }
 
-/**
- * Render the findings the lint payload already carries. Previously only the
- * count reached the panel and everything else — node names, severities, nearest
- * tokens — was computed and thrown away, while the README advertised a Markdown
- * export that `toolOutContent` could never reach.
- */
-const formatLintFindings = (lint: LintPayload, summary: string): string => {
-  if (lint.findings.length === 0) return `${summary}\n\nNo drift found.`
+/** Findings as narrow-panel rows, with the review Markdown underneath. */
+const formatLintFindings = (lint: LintPayload): string => {
+  if (lint.findings.length === 0) return 'No drift found.'
   const rows = lint.findings.map((f) => {
     const near = f.nearest ? ` → nearest ${f.nearest}${f.distance !== undefined ? ` (Δ${f.distance})` : ''}` : ''
     return `${f.severity.toUpperCase().padEnd(6)} ${f.nodeName} · ${f.property}: ${f.note}${near}`
   })
-  return [summary, '', ...rows, '', '--- Markdown (for reviews) ---', '', lint.markdown].join('\n')
+  return [...rows, '', '--- Markdown (for reviews) ---', '', lint.markdown].join('\n')
 }
 
 /** Human words in the panel; the enum values are internal identifiers. */
@@ -428,7 +426,7 @@ onmessage = (event: MessageEvent) => {
     const summary = `${state.lint.findings.length} findings · ${state.lint.visited} nodes · ${state.lint.durationMs}ms${state.lint.truncated ? ' (truncated)' : ''}${skipNote}`
     state.status = summary
     state.statusKind = state.lint.resolutionFailures > 0 || state.lint.truncated ? 'warn' : 'info'
-    state.exportCode = formatLintFindings(state.lint, summary)
+    state.exportCode = formatLintFindings(state.lint)
     state.stampResult = null
     render()
     return
@@ -444,6 +442,10 @@ onmessage = (event: MessageEvent) => {
   if (msg.type === 'stamp-diff') {
     state.stamp = (msg as Extract<PluginMessage, { type: 'stamp-diff' }>).payload
     state.stampResult = null
+    // Without this the dry-run diff stays hidden behind the previous lint or
+    // export output, and Copy output copies that instead — so the user could
+    // apply a stamp having reviewed another feature's result.
+    state.exportCode = ''
     state.status = `${state.stamp.changes.length} stamp changes`
     state.statusKind = 'info'
     render()
@@ -461,6 +463,8 @@ onmessage = (event: MessageEvent) => {
     const err = msg as Extract<PluginMessage, { type: 'operation-error' }>
     state.status = `${err.operation} failed: ${err.message}`
     state.statusKind = 'danger'
+    // A failure must not leave the last successful output on screen contradicting it.
+    state.exportCode = ''
     render()
     return
   }

@@ -67,7 +67,7 @@ emit a raw hex for every brand-coloured layer this team has, because
 hsl(var(--x)) is not an absolute colour and was dropped with ZERO diagnostics.`)
 
 // ---------------------------------------------------------------------------
-rule('FINDING 2 (V7, P0) — the TypeScript pre-pass corrupts plain JavaScript')
+rule('FINDING 2 (V7, was P0) — TypeScript pre-pass vs plain JavaScript — NOW FIXED')
 
 // The exact regex at packages/theme/src/v3/ts-prepass.ts:8.
 const TS_STRIP = /:\s*[A-Za-z0-9_$.|<>,\s[\]{}]+(?=\s*[=,)])/g
@@ -81,9 +81,14 @@ console.log(sample.split('\n').map((l) => '  ' + l).join('\n'))
 console.log('\nAfter stripTypeScript:\n')
 console.log(sample.replace(TS_STRIP, '').split('\n').map((l) => '  ' + l).join('\n'))
 console.log(`
-A closing brace is gone. acorn then fails to parse and v3/evaluate.ts:87 throws
-"Replace dynamic TypeScript/JS constructs with plain values" — blaming the user
-for JavaScript fig-tail mangled itself.`)
+A closing brace is gone: the regex reads \`colors: s.colors\` as a type
+annotation, because nothing in it can tell \`key:\` from \`: Type\`.
+
+The regex is unchanged — a smarter one is not reachable with a regex. What
+changed is when it runs: evaluate.ts now parses the source as plain JS FIRST
+and only reaches for the pre-pass if that throws. Any file carrying real
+TypeScript syntax still fails the first parse and still gets the pre-pass, so
+nothing that needs it misses it — and nothing that doesn't is put at risk.`)
 
 // End to end through the real resolver.
 const spread = `const colors = require('tailwindcss/colors')
@@ -95,7 +100,7 @@ module.exports = {
 const broken = resolveTheme({ sources: [{ name: 'tailwind.config.js', text: spread }] })
 console.log(`
 End to end, on \`colors: { ...colors, brand: '#f00' }\` — one of the most common
-Tailwind idioms there is:
+Tailwind idioms there is. This resolved to a parse error before the fix:
 
   ok ........... ${broken.ok}
   tokens ....... ${broken.tokens ? 'present' : 'null'}
