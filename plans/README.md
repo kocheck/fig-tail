@@ -454,7 +454,9 @@ Recorded so these are not re-raised without new information.
   Rejected by the repo owner in favour of paste/drop: avoids `networkAccess`
   review friction, CORS, private-repo auth, and the hidden-iframe dance codegen
   plugins need for `fetch`. Cost accepted: the stored config goes stale
-  silently. Plan 003 mitigates with a stored timestamp and a staleness warning.
+  silently. Plan 003 stores a timestamp (`storage.ts:226`) but **nothing surfaces
+  it** — there is no staleness warning in the UI, and the read cache does not
+  invalidate on another session's write. Recorded as U5; unowned.
 
 - **Evaluating the Tailwind config with `eval` or `new Function`.** Would handle
   every config perfectly. Rejected: it is a plugin-review red flag, the sandbox

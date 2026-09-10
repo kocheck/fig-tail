@@ -51,7 +51,7 @@ raw-value return that already existed below them, rather than early-returning
 high-severity finding. Disposition F01's second clause is superseded; see the
 amendment in `plans/REVIEW-DISPOSITIONS-2026-07-31.md`.
 
-### V2. The lint Markdown table the README advertises is unreachable
+### V2. The lint Markdown table the README advertises is unreachable — RESOLVED
 
 `README.md:64` promises "Export a Markdown table from Tools for reviews."
 
@@ -66,7 +66,7 @@ Lint sets both `state.status` and `state.exportCode` (`main.tsx:394-405`), and
 status is always non-empty afterwards — so `#tool-out` shows
 `"7 findings · 214 nodes · 380ms"` and the Markdown never renders.
 
-### V3. The three highest-confidence badges have no styling
+### V3. The three highest-confidence badges have no styling — RESOLVED
 
 `main.tsx:148` emits `badge-${confidence}`. The `Confidence` union
 (`packages/match/src/types.ts:4-10`) is `exact-variable | exact-value |
@@ -78,7 +78,7 @@ Green is defined and never rendered; `arbitrary` — the documented honest fallb
 — gets `--figma-color-bg-danger-tertiary`, i.e. red. The signal is inverted:
 red for what is fine, neutral for what is perfect.
 
-### V4. Button names in the docs do not exist in the UI
+### V4. Button names in the docs do not exist in the UI — RESOLVED
 
 `main.tsx:225-226` renders **`Apply to file`** and **`Save personally`**.
 `README.md:34` and `docs/setup.md:22` call them "Save on file" and "Save
@@ -266,6 +266,15 @@ Confirmed from an empty `packages/*/dist`: `pnpm -r build` succeeds (pnpm walks
 the workspace in topological order), and `pnpm -r typecheck` then passes.
 
 ---
+
+**V2, V3, V4 resolved (plan 015).** `toolOutContent` no longer consults
+`state.status` — that is the banner, not the `<pre>`, and it always won — and the
+lint handler now renders the findings it already computes, with the Markdown
+underneath and a copy button. Every `Confidence` value has its own badge rule;
+`arbitrary` moved off danger-red, which is now reserved for `none`. Badge text is
+human words rather than enum identifiers. Docs name the buttons that exist.
+`subtreeFormat` is gone from the manifest — there is no off switch for a manifest
+preference, so not declaring it is the only off.
 
 ## Reported but UNVERIFIED
 

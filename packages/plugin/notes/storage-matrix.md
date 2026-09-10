@@ -6,7 +6,7 @@ Manual verification checklist for private config storage. Fill results in-produc
 |---|---|---|
 | Document write + same-user reload | UNVERIFIED | Owner: save on file, reload plugin, confirm tier document |
 | Document write + Figma restart | UNVERIFIED | Owner: quit Figma, reopen file |
-| Personal write without edit access | UNVERIFIED | Owner: Dev Mode / view-only seat → Save personal |
+| Personal write without edit access | UNVERIFIED | Owner: Dev Mode / view-only seat → Save personally |
 | Preference switch document↔user persists | UNVERIFIED | Owner: both tiers present, toggle preference, reload |
 | Stale chunks cleared on shrinking rewrite | PASS (unit) | `storage.test.ts` shrinking rewrite |
 | Raw canary absent from storage/messages | PASS (unit) | `assertNoForbiddenFields` + setup canary |
@@ -26,7 +26,7 @@ publishing a development version / ID mapping both accounts can install — not 
 separate `Import plugin from manifest` copies (those get distinct IDs).
 
 1. **Account A** (edit access): import/build plugin, open shared file, run setup,
-   Resolve, **Save on file**. Confirm UI label: document tier.
+   Resolve, **Apply to file**. Confirm UI label: document tier.
 2. Share the file with **Account B** (view-only or Dev seat is enough to prove read).
 3. **Account B**: install the **same** plugin ID, open the file in Dev Mode, select
    a layer. Confirm document-tier label and that classes resolve from A's config

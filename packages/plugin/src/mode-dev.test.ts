@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { MatchResult } from '@fig-tail/match'
 import { applyCodegenFilters, optionsFromPreferences, sectionsForOutput } from './mode-dev'
+import manifest from '../manifest.json'
 
 const result = (over: Partial<MatchResult>): MatchResult => ({
   property: 'background-color',
@@ -17,8 +18,19 @@ const sections = [
 
 describe('optionsFromPreferences', () => {
   it('defaults subtree export off when the preference is absent', () => {
+    // subtreeFormat is no longer declared in the manifest, so `customSettings`
+    // never carries it. The branch must stay inert rather than defaulting on.
     expect(optionsFromPreferences({}).subtreeFormat).toBe('off')
     expect(optionsFromPreferences(undefined).subtreeFormat).toBe('off')
+  })
+
+  it('does not declare a subtree-export preference in the manifest', () => {
+    // There is no off switch for a manifest preference — a curious developer
+    // will flip the dropdown into a feature nobody has run at scale. Not
+    // declaring it is the only off.
+    const names = manifest.codegenPreferences.map((p: { propertyName: string }) => p.propertyName)
+    expect(names).not.toContain('subtreeFormat')
+    expect(names).toEqual(['openSetup', 'includeLayout', 'allowArbitrary', 'output'])
   })
 })
 

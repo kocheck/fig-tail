@@ -3,7 +3,7 @@
 ## "No Tailwind config yet" in Dev Mode
 
 No document or personal config is loaded (tier **none**). Run **Configure Tailwind…**
-(or fig-tail in the design editor), drop a config, Resolve, then Save on file or
+(or fig-tail in the design editor), drop a config, Resolve, then Apply to file or
 Save personal. Until then you get generic arbitrary suggestions only.
 
 ## The resolver reported unresolved entries
@@ -59,7 +59,7 @@ manifest or reinstall from Community.
 
 Document save must succeed on an account with edit access. Collaborators need the
 **same plugin ID** (Community or shared development mapping). If private document
-plugin data does not cross accounts for your plan, use **Save personal** as the
+plugin data does not cross accounts for your plan, use **Save personally** as the
 labelled fallback. Community publish requires a documented PASS — see
 `docs/release/feature-audit.md`.
 

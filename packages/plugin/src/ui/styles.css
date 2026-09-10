@@ -170,7 +170,12 @@ input[type="file"] {
   color: var(--figma-color-text-brand, #007be5);
 }
 
-.badge-exact {
+/* One rule per Confidence value. The three exact/name-match variants previously
+   matched nothing and fell back to the neutral base, so the highest-confidence
+   results were the least distinguished. */
+.badge-exact-variable,
+.badge-exact-value,
+.badge-name-match {
   background: var(--figma-color-bg-success-tertiary, #ebffee);
   color: var(--figma-color-text-success, #009951);
 }
@@ -180,7 +185,13 @@ input[type="file"] {
   color: var(--figma-color-text-warning, #b86200);
 }
 
-.badge-arbitrary,
+/* An arbitrary value is the documented honest fallback, not an error — danger
+   red is reserved for `none`, where fig-tail has nothing to offer at all. */
+.badge-arbitrary {
+  background: var(--figma-color-bg-tertiary, #f0f0f0);
+  color: var(--figma-color-text-secondary, #666);
+}
+
 .badge-none {
   background: var(--figma-color-bg-danger-tertiary, #fee9e7);
   color: var(--figma-color-text-danger, #f24822);
