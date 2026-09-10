@@ -185,57 +185,7 @@ Steps 2–9 are independent *except* Step 1 gates Step 4, and Step 3's substeps
 are strictly ordered. If a step is BLOCKED, record it and continue to the next
 — a partial run with honest rows is the expected outcome, not a failure.
 
-## Steps
-
-### Step 1: Establish one plugin ID installable by both accounts
-
-This is the gate for the Community blocker, and the most likely place this plan
-stops. Per fact 7, `setPluginData` is namespaced to the plugin ID. Two separate
-**Import plugin from manifest** copies receive **distinct IDs**, so testing
-cross-account read that way proves nothing — each account would read its own
-empty namespace and the FAIL would be an artifact of the method.
-
-**Known constraint, checked 2026-09-10.** Publishing a plugin privately to an
-organization requires an **Organization or Enterprise** plan ([Create private
-plugins for an organization](https://help.figma.com/hc/en-us/articles/4404228629655-Create-private-organization-plugins)).
-This project is on **Professional**, so that route is unavailable, and the
-documented way to put a plugin on a second account is publishing it to Community.
-
-**That makes the gate as written circular**: the Community publish is blocked on
-cross-account read, and cross-account read needs a shared plugin ID, which on
-Professional needs a Community publish. Break the circularity by owner decision,
-not by executor improvisation — see "Breaking the circularity" below. If that
-section still reads UNDECIDED, **STOP and get the decision before starting this
-step**.
-
-Two escape hatches were *not* resolved when this plan was written, because
-`help.figma.com` was unreachable from the authoring environment. Time-box each to
-30 minutes before falling back to the decided route:
-
-- Whether a plugin **collaborator/publisher invite** lets a second account run an
-  unpublished plugin.
-- Whether Community publishing offers an **unlisted / link-only** visibility that
-  is not a full public listing.
-
-If either works it breaks the circularity cleanly and beats every option below.
-Record what you find either way — the next person should not re-derive it.
-
-Then decide, and write down, **which ID the evidence is recorded against**. If
-verification runs under `fig-tail-dev` but the plugin ships under a
-Figma-assigned production ID, the *mechanism* evidence carries over but **no
-stored config does** — any config saved during testing is unreadable to the
-published plugin, and the cross-account row would describe an artifact that is
-not the one shipping. Prefer verifying on the ID that will ship.
-
-**Check**: `packages/plugin/notes/storage-matrix.md` has a new "Plugin identity"
-section naming the decided route (A, B, C, or an escape hatch), the exact plugin
-ID, whether it is the shipping ID, the outcome of both time-boxed escape-hatch
-checks, and — if a shared ID was obtained — a screenshot showing it installed on
-both accounts. Under route B, or if no route yields a shared ID, record Step 4 as
-`BLOCKED — Professional plan has no private-share route; see plan 011 Step 1`
-and continue to Step 2.
-
-### Breaking the circularity — OWNER DECISION: **route B**, decided 2026-09-10
+## Breaking the circularity — OWNER DECISION: **route B**, decided 2026-09-10
 
 **0.1.0 ships as a local/team manifest install. It is not published to Community
 in this pass, and the cross-account row is expected to end BLOCKED.** The
@@ -263,6 +213,55 @@ success** of this plan.
 README already hedges Community install as "when published", so no claim needs
 retracting. Do not add "local install only" language to shipped docs under this
 plan — that is a release decision, and it belongs to the owner.
+
+## Steps
+
+### Step 1: Establish one plugin ID installable by both accounts
+
+This is the gate for the Community blocker, and the most likely place this plan
+stops. Per fact 7, `setPluginData` is namespaced to the plugin ID. Two separate
+**Import plugin from manifest** copies receive **distinct IDs**, so testing
+cross-account read that way proves nothing — each account would read its own
+empty namespace and the FAIL would be an artifact of the method.
+
+**Known constraint, checked 2026-09-10.** Publishing a plugin privately to an
+organization requires an **Organization or Enterprise** plan ([Create private
+plugins for an organization](https://help.figma.com/hc/en-us/articles/4404228629655-Create-private-organization-plugins)).
+This project is on **Professional**, so that route is unavailable, and the
+documented way to put a plugin on a second account is publishing it to Community.
+
+**That makes the gate as written circular**: the Community publish is blocked on
+cross-account read, and cross-account read needs a shared plugin ID, which on
+Professional needs a Community publish. Break the circularity by owner decision,
+not by executor improvisation. **That decision is already made: route B** — see
+"Breaking the circularity" above, and read it before starting this step.
+
+Two escape hatches were *not* resolved when this plan was written, because
+`help.figma.com` was unreachable from the authoring environment. Time-box each to
+30 minutes before falling back to the decided route:
+
+- Whether a plugin **collaborator/publisher invite** lets a second account run an
+  unpublished plugin.
+- Whether Community publishing offers an **unlisted / link-only** visibility that
+  is not a full public listing.
+
+If either works it breaks the circularity cleanly and beats every option below.
+Record what you find either way — the next person should not re-derive it.
+
+Then decide, and write down, **which ID the evidence is recorded against**. If
+verification runs under `fig-tail-dev` but the plugin ships under a
+Figma-assigned production ID, the *mechanism* evidence carries over but **no
+stored config does** — any config saved during testing is unreadable to the
+published plugin, and the cross-account row would describe an artifact that is
+not the one shipping. Prefer verifying on the ID that will ship.
+
+**Check**: `packages/plugin/notes/storage-matrix.md` has a new "Plugin identity"
+section naming the decided route (A, B, C, or an escape hatch), the exact plugin
+ID, whether it is the shipping ID, the outcome of both time-boxed escape-hatch
+checks, and — if a shared ID was obtained — a screenshot showing it installed on
+both accounts. Under route B, or if no route yields a shared ID, record Step 4 as
+`BLOCKED — Professional plan has no private-share route; see plan 011 Step 1`
+and continue to Step 2.
 
 ### Step 2: Confirm all three routes load
 
