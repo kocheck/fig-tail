@@ -36,6 +36,22 @@ describe('engine', () => {
     expect(results.every((r) => r.nearest !== undefined)).toBe(true)
   })
 
+  it('does not let a spaced arbitrary value shred the class string', () => {
+    // Figma emits spaced values: `rgba(59, 130, 246, 0.5)`, `Helvetica Neue`.
+    // toClassName joins with a space, so an unescaped value fragments into
+    // several tokens and corrupts every OTHER class in the string too.
+    const results = matchDeclarations(
+      { 'box-shadow': '0px 7px 13px 2px rgba(11, 22, 33, 0.37)', display: 'flex' },
+      { tokens: baseTokenSet() },
+    )
+    const className = toClassName(results)
+    expect(className).toContain('shadow-[0px_7px_13px_2px_rgba(11,_22,_33,_0.37)]')
+    expect(className).not.toMatch(/\s22,/)
+    // The real invariant: one token per emitted class, whatever the values are.
+    const emitted = results.filter((r) => r.className).length
+    expect(className.split(' ')).toHaveLength(emitted)
+  })
+
   it('does not collapse mismatched corner radii', () => {
     const tokens = baseTokenSet({
       radius: {

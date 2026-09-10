@@ -10,6 +10,8 @@
   shape**: results with `confidence: 'nearest'` now carry a `className`.
 - Variable hints resolve via `getVariableByIdAsync`; the synchronous getter
   throws under `documentAccess: "dynamic-page"` and its failure was swallowed.
+- Arbitrary values containing spaces (`box-shadow`, quoted font families) no
+  longer fragment and corrupt the whole class string; spaces are escaped as `_`.
 - `pnpm check` builds before typechecking, so it works from a clean checkout.
 
 ## 0.1.0

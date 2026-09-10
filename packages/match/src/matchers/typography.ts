@@ -1,6 +1,6 @@
 import type { TokenSet } from '@fig-tail/theme'
 import type { MatchResult, VariableHint } from '../types'
-import { applyPrefix } from '../availability'
+import { applyPrefix, arbitrary } from '../availability'
 
 const FONT_WEIGHT_NAMES: Record<string, string> = {
   '100': 'thin',
@@ -47,7 +47,7 @@ export const matchTypography = (
     }
     return {
       property,
-      className: applyPrefix(tokens, `font-[${value}]`),
+      className: arbitrary(tokens, 'font', value),
       confidence: 'arbitrary',
       provenance,
     }
@@ -104,7 +104,7 @@ export const matchTypography = (
     }
     return {
       property,
-      className: applyPrefix(tokens, `text-[${value}]`),
+      className: arbitrary(tokens, 'text', value),
       confidence: 'arbitrary',
       provenance,
     }
@@ -125,7 +125,7 @@ export const matchTypography = (
     }
     return {
       property,
-      className: applyPrefix(tokens, `leading-[${value}]`),
+      className: arbitrary(tokens, 'leading', value),
       confidence: 'arbitrary',
       provenance,
     }
@@ -146,7 +146,7 @@ export const matchTypography = (
     }
     return {
       property,
-      className: applyPrefix(tokens, `tracking-[${value}]`),
+      className: arbitrary(tokens, 'tracking', value),
       confidence: 'arbitrary',
       provenance,
     }

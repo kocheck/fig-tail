@@ -1,7 +1,7 @@
 import { differenceCiede2000, parse } from 'culori'
 import type { ColorToken, TokenSet } from '@fig-tail/theme'
 import type { MatchResult, VariableHint } from '../types'
-import { applyPrefix, utilityAvailable, withKnownPrefix } from '../availability'
+import { arbitrary, utilityAvailable, withKnownPrefix } from '../availability'
 
 const deltaE = differenceCiede2000()
 
@@ -168,11 +168,11 @@ export const matchColor = (
   }
 
   if (tokens?.unknownNamespaces.includes('colors')) {
-    const arbitrary = applyPrefix(tokens, `${utility}-[${value}]`)
+    const className = arbitrary(tokens, utility, value)
     return {
       property,
-      className: arbitrary,
-      confidence: arbitrary ? 'arbitrary' : 'none',
+      className,
+      confidence: className ? 'arbitrary' : 'none',
       note: 'fig-tail could not read your colours; showing raw values for them',
       provenance: provenanceBase,
     }
@@ -204,7 +204,7 @@ export const matchColor = (
   if (!tokens) {
     return {
       property,
-      className: `${utility}-[${value}]`,
+      className: arbitrary(null, utility, value),
       confidence: 'arbitrary',
       note: 'No Tailwind config — generic Tailwind syntax; project prefix/settings may require changes.',
       provenance: provenanceBase,
@@ -271,7 +271,7 @@ export const matchColor = (
     ? 'Bundled default colours were withheld; showing raw values for unmatched colours'
     : undefined
 
-  const className = applyPrefix(tokens, `${utility}-[${value}]`)
+  const className = arbitrary(tokens, utility, value)
   return {
     property,
     className,

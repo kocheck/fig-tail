@@ -1,6 +1,6 @@
 import type { TokenSet } from '@fig-tail/theme'
 import type { MatchResult, VariableHint } from '../types'
-import { applyPrefix, utilityAvailable } from '../availability'
+import { applyPrefix, arbitrary, utilityAvailable } from '../availability'
 
 const PROP_TO_UTIL: Record<string, { util: string; core: string; ns: 'spacing' | 'radius' | 'borderWidth' | 'size' }> = {
   'padding-top': { util: 'pt', core: 'padding', ns: 'spacing' },
@@ -119,7 +119,7 @@ export const matchLength = (
       tokens.partialNamespaces.includes(mapping.ns === 'size' ? 'spacing' : mapping.ns)
         ? `Bundled default ${mapping.ns} tokens were withheld; showing raw values for unmatched lengths`
         : undefined
-    const className = applyPrefix(tokens, `${mapping.util}-[${value}]`)
+    const className = arbitrary(tokens, mapping.util, value)
     return {
       property,
       className,
@@ -143,7 +143,7 @@ export const matchLength = (
 
   const px = toPx(value)
   if (px === null) {
-    const className = applyPrefix(tokens, `${mapping.util}-[${value}]`)
+    const className = arbitrary(tokens, mapping.util, value)
     return {
       property,
       className,
@@ -168,7 +168,7 @@ export const matchLength = (
   if (!tokens) {
     return {
       property,
-      className: `${mapping.util}-[${value}]`,
+      className: arbitrary(null, mapping.util, value),
       confidence: 'arbitrary',
       note: 'No Tailwind config — generic Tailwind syntax; project prefix/settings may require changes.',
       provenance,
@@ -176,7 +176,7 @@ export const matchLength = (
   }
 
   if (tokens.unknownNamespaces.includes(mapping.ns === 'size' ? 'spacing' : mapping.ns)) {
-    const className = applyPrefix(tokens, `${mapping.util}-[${value}]`)
+    const className = arbitrary(tokens, mapping.util, value)
     return {
       property,
       className,

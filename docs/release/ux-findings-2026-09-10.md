@@ -148,6 +148,46 @@ and can never match it. "Present" and "usable" are different properties and
 nothing in the output distinguishes them. Colours that are not absolute values
 vanish entirely, with no diagnostic at all.
 
+### V12. Arbitrary values containing spaces corrupted the whole class string — RESOLVED
+
+There was no space escaping anywhere in `@fig-tail/match`. `toClassName` joins
+with a single space, so any arbitrary value containing one fragmented:
+
+```
+shadow-[0px 7px 13px 2px rgba(11, 22, 33, 0.37)]
+└── nine tokens in the class attribute, corrupting every OTHER class too
+```
+
+Figma emits spaced values routinely — every non-token `box-shadow`, and
+`font-['Helvetica Neue']`. This was higher-impact than the near-miss defect
+(V1), because it corrupted the entire string rather than dropping one property.
+
+**Resolved (plan 018).** One `arbitrary(tokens, utility, value)` helper in
+`availability.ts` escapes spaces as `_` (Tailwind's own escape inside brackets)
+and applies the prefix. All **13** construction sites across five matchers now
+call it, so the escaping — and the null-prefix handling — exist in exactly one
+place. A test asserts the joined string's token count equals the emitted class
+count; verified to fail without the escape.
+
+### V13. `confidence: 'none'` under `Output → Classes` — narrow gap, accepted
+
+A property no matcher can express (a gradient fill, a disabled core plugin) has
+no class and no raw value to fall back on. `none` **is** in `ATTENTION_CONFIDENCE`
+(`codegen/render.ts:6`) so it always produces a drift line — it is invisible only
+under `Output → Classes`, where the user asked for classes without notes.
+
+Retaining the notes section for every `none` would fire on nearly every node
+(real `getCSSAsync()` output carries `position`, `box-sizing`, `overflow` — all
+`none`) and make the preference a no-op. Distinguishing "we handle this property
+but not this value" from "no matcher covers this property" has no structural
+signal today: `provenance.utility` is set only on successful matches, and both
+kinds carry only a note. Telling them apart would need either string-sniffing the
+note or a new field on a published type.
+
+**Accepted as-is**, documented rather than fixed. `sectionsForOutput` retains the
+notes section when the *preference filters* strip a class the matcher produced —
+which is the case where the string is incomplete and the user cannot tell.
+
 ### V10. The documented install path fails from a clean clone
 
 `docs/setup.md:5-10` gives the only install instructions:
