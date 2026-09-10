@@ -389,9 +389,16 @@ confidence ladder and the product's main differentiator — becomes unreachable,
 nothing warns anyone. There is no console output to notice it in.
 
 Select the **`Variable / bound`** node with a config loaded, in Dev Mode. Record
-the emitted class **and its confidence**: `fixtures/figma/README.md:26` expects
-`exact-variable` when the WEB syntax and value agree. If you instead see
-`exact-value`, `nearest` or an arbitrary value, the hint path is dead.
+the emitted class, its confidence, **and whether the bound variable actually has
+`codeSyntax.WEB` set**.
+
+That last part is not optional. `exact-variable` requires `hint.codeSyntax`, which
+requires `variable.codeSyntax.WEB` (`packages/plugin/src/codegen/hints.ts:58-63`,
+consumed at `packages/match/src/matchers/color.ts:181`). If the fixture's variable
+has no WEB syntax, `exact-variable` is unreachable **by design** and a result of
+`exact-value` says nothing about whether the hint path works. Check the variable
+first; if it has no WEB syntax, set one (or pick a variable that has one) before
+drawing any conclusion.
 
 **Check**: `packages/plugin/notes/platform-preflight.md` gains a "Variable hints"
 row recording the observed confidence for `Variable / bound`, with a screenshot.
