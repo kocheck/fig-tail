@@ -10,7 +10,7 @@
     "url": "git+https://github.com/kocheck/fig-tail.git"
   },
   "scripts": {
-    "check": "pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test",
+    "check": "pnpm -r build && pnpm -r typecheck && pnpm -r lint && pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "build": "pnpm -r build",
