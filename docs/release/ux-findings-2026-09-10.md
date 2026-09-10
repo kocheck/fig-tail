@@ -93,6 +93,54 @@ storage matrix both describe three tiers only.
 timing strategy that assumes a plugin console will show something is dead on
 arrival. (Recorded in plan 011 Step 6.)
 
+### V7. The TypeScript-stripping regex corrupts plain JavaScript configs
+
+`packages/theme/src/v3/ts-prepass.ts:8` runs on **every** v3 config, `.js`
+included:
+
+```ts
+text = text.replace(/:\s*[A-Za-z0-9_$.|<>,\s[\]{}]+(?=\s*[=,)])/g, '')
+```
+
+The character class contains `,` `{` `}` `[` `]` and whitespace, so on ordinary
+JavaScript it eats object-literal values and closing braces. Reproduced directly:
+
+```
+INPUT                       AFTER stripTypeScript
+theme: {                    theme: {
+  colors: s.colors,           colors,
+},                          }
+```
+
+A brace is gone, `acorn.parse` then fails, and `v3/evaluate.ts:87` throws
+*"Could not parse … Replace dynamic TypeScript/JS constructs with plain values"* —
+blaming the user for valid JavaScript that fig-tail mangled itself.
+
+Configs this breaks include `colors: { ...colors, brand: '#f00' }` (spreading
+`tailwindcss/colors` — one of the most common idioms in Tailwind), any
+`screens: defaultTheme.screens,` inside `extend`, and the cross-package
+`theme: { colors: shared.colors }` shape used by monorepos.
+
+**Severity: P0.** It converts a supported config into a hard failure with a
+misleading message, and the reported line number refers to the *post-strip* text,
+so it points at nothing in the user's file. It has no owner plan yet.
+
+### V8. `unknownNamespaces` is a hardcoded empty array on the v4 path
+
+`packages/theme/src/v4/index.ts:334` — `unknownNamespaces: []`, a literal. Any
+consumer treating it as a signal gets nothing for v4 configs. It was also empty
+across all eight v3 fixtures, including the known-failing ones, so it is not a
+usable indicator on either path.
+
+### V9. A resolved token can be permanently unmatchable
+
+A shadcn-style radius resolves as `{"raw": "var(--radius)", "px": null}` — present
+in the token set, so it reads as resolved, while
+`packages/match/src/matchers/length.ts:43` does `if (token.px === null) continue`
+and can never match it. "Present" and "usable" are different properties and
+nothing in the output distinguishes them. Colours that are not absolute values
+vanish entirely, with no diagnostic at all.
+
 ---
 
 ## Reported but UNVERIFIED

@@ -1,187 +1,255 @@
 # Plan 013: Find out whether fig-tail can read the pilot team's config
 
-> **Executor instructions**: This plan is a **gate**. It has one job: answer a
-> yes/no question before anyone spends more effort. If the answer is no, STOP and
-> report — do not proceed to any other plan.
+> **Executor instructions**: This plan is a **gate**. It answers one yes/no
+> question before anyone spends more effort. Read "How this gate lies to you"
+> before running anything — an earlier version of this plan returned GO on a
+> config where **none** of the team's own colours resolved.
 
 ## Status
 
 - **Priority**: P0 — **runs before every other plan in the series**
-- **Effort**: S (half a day, most of it waiting for someone to send you a file)
-- **Risk**: LOW to run, HIGH to skip
+- **Effort**: S
+- **Risk**: LOW to run, HIGH to skip, **HIGH to run naively**
 - **Depends on**: none
 - **Category**: research
-- **Grounded at**: `abb2c1b` — 2026-09-10
+- **Grounded at**: `b0c8310` — 2026-09-10
 - **Serves**: [GOAL-developer-adoption.md](GOAL-developer-adoption.md) — all four
   conditions are void if this fails
 
 ## Why this matters
 
 fig-tail's entire value is emitting `bg-brand-500` where every competing plugin
-emits `bg-[#3b82f6]`. If it cannot read the pilot team's Tailwind config, it
-emits `bg-[#3b82f6]` — correctly, honestly, and worthlessly. The plugin would
-work exactly as designed and deliver nothing anyone would miss.
+emits `bg-[#3b82f6]`. If it cannot read the pilot team's config it emits
+`bg-[#3b82f6]` — correctly, honestly, and worthlessly.
 
-This is not hypothetical. `plans/README.md:352` records plan 001 landing at
-**4/8** wild fixtures fully resolved, against its own 6/8 bar.
-`packages/theme/spike/FINDINGS.md:25-31` names what the failing half have in
-common:
+`plans/README.md:352` records plan 001 landing at **4/8** wild fixtures fully
+resolved. `packages/theme/spike/FINDINGS.md:29-31` names the failing half:
 
-> - External `presets` / cross-package `require` (with-preset, monorepo-extend)
+> - External `presets` / cross-package `require`
 > - Plugin packages (`@tailwindcss/forms`, `@tailwindcss/typography`)
 > - CSS-variable colour strings that are not absolute colours (shadcn-like)
 
 Those are not exotic. A monorepo with `@acme/tailwind-config`, a shadcn project,
 or anything importing `@tailwindcss/typography` sits in the failing half.
 
-The failure direction is the harsh one. Per `plans/README.md:207-209`, a
-*replacing* `theme.colors` that cannot be evaluated marks the namespace
-**unknown**, not default — so every colour falls to a raw value.
+## How this gate lies to you
 
-A council of five advisors reviewed this program and all five independently put
-this check first. It costs half a day. Running it after the pilot costs the pilot.
+**Read this section before Step 1. Every trap below was demonstrated by actually
+running the resolver, not reasoned about.**
 
-## Context the executor needs
+### Trap 1 — bundled defaults masquerade as project tokens
 
-**The instrument already exists and needs no new code.** `packages/cli` is
-present, buildable, and marked `"private": true` — plan 009 was REJECTED for
-*shipping* a CLI, not for having one.
+Once an exact `tailwindcss` version is supplied, ~300 stock Tailwind colours fill
+`tokens.colors`. Counting keys, or eyeballing "are colours resolved", tells you
+nothing about whether **the team's own** tokens survived.
 
-Critically, **the CLI and the plugin resolve through the same function**. Both
-call `resolveTheme` from `@fig-tail/theme` with the same `sources: [{ name, text }]`
-shape — the CLI at `packages/cli/src/index.ts:35-38`, the plugin at
-`packages/plugin/src/setup.ts:1`. The CLI adds Node file reading around it and
-nothing else. `resolveTheme` takes **text**, not a filesystem, so it has no
-Node-only escape hatch the plugin lacks. A CLI result is therefore a faithful
-proxy for what the plugin will do in the browser.
+Demonstrated on `fixtures/configs/v3/shadcn-like.js` with `tailwindcss: "3.4.19"`:
 
-Two behaviours to know before reading output:
+```
+colors: 300 keys · unknownNamespaces: [] · partialNamespaces: []
+defaults: {"status":"confirmed","version":"3.4.19"} · unresolvedCount: 0
+```
 
-- `packages/cli/src/index.ts:20-22` refuses to read project files without
-  `--trust-project`.
-- `packages/cli/src/index.ts:29-33` only accepts an **exact** `x.y.z`
-  `tailwindcss` version from `package.json`. A range (`^3.4.0`) is ignored and
-  bundled defaults stay unconfirmed — which is by design (disposition F02) and
-  will show up in the report.
-- `packages/cli/src/index.ts:39` **throws** when nothing resolved at all. A crash
-  here is a result, not a bug — record it.
+Every surface signal says clean. But **not one** of `border`, `input`, `ring`,
+`background`, `foreground`, `primary` resolved — `hsl(var(--border))` is not an
+absolute colour, so each vanished **with zero diagnostics**. The 300 that remain
+are `slate-50`, `red-500` and friends, which that team does not use.
+
+### Trap 2 — `unknownNamespaces` never fires
+
+`packages/theme/src/v4/index.ts:334` is a literal `unknownNamespaces: []`. **For
+any v4 team this signal is structurally incapable of firing.** On v3 it is
+computed but was empty on all eight fixtures, including the known-failing ones.
+Do not build the verdict on it.
+
+### Trap 3 — "present" does not mean "usable"
+
+A shadcn radius resolves as `"lg": {"raw": "var(--radius)", "px": null}`. It is a
+key in the token set, so it looks resolved. But `packages/match/src/matchers/length.ts:43`
+does `if (token.px === null) continue` — it can never match anything. A token with
+`px: null` (or a colour that is not an absolute colour) is **present and
+permanently unmatchable**.
+
+### Trap 4 — the CLI throws away the evidence
+
+`packages/cli/src/index.ts:70-82` writes only `schemaVersion`, `tokens`,
+`provenance` and `unresolvedCount` — **an integer**. The unresolved *list* is
+never written. You cannot answer "is every unresolved entry explainable" from
+that file. Step 2 uses a read-only script instead.
+
+### Trap 5 — a NO-GO that is not about the config at all
+
+Three ways to get a crash that says nothing about coverage:
+
+1. **Unbuilt dependency.** `pnpm --filter @fig-tail/cli build` does **not** build
+   `@fig-tail/theme`; there is no turbo/nx `dependsOn`. Running the CLI then dies
+   with `ERR_MODULE_NOT_FOUND`. Build both.
+2. **A live resolver bug.** `packages/theme/src/v3/ts-prepass.ts:8` runs its
+   TypeScript-stripping regex on **every** v3 config including plain `.js`, and
+   its character class contains `,` `{` `}` `[` `]`. It eats object-literal values
+   and closing braces. Verified:
+
+   ```
+   INPUT                       AFTER stripTypeScript
+   theme: {                    theme: {
+     colors: s.colors,           colors,
+   },                          }
+   ```
+
+   A brace is gone, `acorn.parse` fails, and `v3/evaluate.ts:87` throws
+   *"Could not parse … Replace dynamic TypeScript/JS constructs with plain
+   values"* — blaming the user for valid JavaScript fig-tail mangled itself. This
+   hits `colors: { ...colors, brand: '#f00' }`, one of the most common idioms
+   there is. **This is a live P0 defect recorded in
+   `docs/release/ux-findings-2026-09-10.md`; it is not this plan's to fix, but it
+   is this plan's to not misattribute.**
+3. **A v4 entry that `@import`s its `@theme` from a second file.** Both the CLI
+   and the plugin read one file, so `resolve.ts` reports `missing-import` for a
+   project that would work once the files are combined.
+
+**None of these three is a config-coverage NO-GO.** Distinguish them.
 
 ## Inputs & resources
 
-| Input | Detail | Notes |
-|---|---|---|
-| The pilot team's real `tailwind.config.js`/`.ts` or v4 CSS entry | Not a fixture. Not your own. | Ask for it today — this is the long pole |
-| Their `package.json` | For the exact `tailwindcss` version | Optional but changes the verdict |
-| Node + pnpm | `corepack enable && pnpm install` | |
+| Input | Detail |
+|---|---|
+| The pilot team's real `tailwind.config.js`/`.ts` or v4 CSS entry | Not a fixture. Not yours. Ask today — this is the long pole. |
+| Their `package.json` | Only an exact `x.y.z` `tailwindcss` counts (`cli/src/index.ts:31-32`, disposition F02) |
+| **A list of the token names they actually use** | Ask for it, or read it out of the config yourself. Without this, Trap 1 is unavoidable. |
 
-| Purpose | Command | Expected |
-|---|---|---|
-| Build the CLI | `pnpm --filter @fig-tail/cli build` | `packages/cli/dist/cli.js` exists |
-| Resolve | `node packages/cli/dist/cli.js export --entry <their-config> --out /tmp/tokens.json --trust-project --package-json <their-package.json>` | prints `Wrote /tmp/tokens.json (N unresolved)` |
+The CLI and the plugin resolve through the same function — both call
+`resolveTheme` from `@fig-tail/theme` with one source and an optional version
+(`packages/cli/src/index.ts:34-37`, `packages/plugin/src/setup.ts:50-53`), and
+`resolveTheme` takes text rather than a filesystem, so there is no Node-only
+escape hatch. **Inputs are equivalent; outputs are not** — see Trap 4.
 
 ## Scope
 
-**In scope**: running the resolver, reading the output, writing the verdict into
-`docs/release/config-go-no-go.md` (new file), and updating this plan's status row.
+**In scope**: building the packages, running the resolver, writing
+`docs/release/config-go-no-go.md`, and a throwaway inspection script under `/tmp`.
 
 **Out of scope**:
-- **Fixing anything.** If the config does not resolve, that is the finding. Do
-  not improve the resolver here; that becomes its own plan with a real reason to
-  exist.
-- **Figma.** This step needs no Figma at all.
-- **Any other plan.** Nothing else starts until this reports.
+- **Fixing anything**, including the `ts-prepass` bug. Record and move on.
+- **Modifying `packages/cli`** to print more. Use the script instead.
+- **Figma.** This needs none.
 
 ## Steps
 
-### Step 1: Get the real config
+### Step 1: Get the real config, and the list of names that matter
 
-Ask the pilot team for `tailwind.config.js`/`.ts` (or the v4 CSS entry with
-`@theme`) and `package.json`. Do not substitute a fixture, your own config, or a
-reconstruction. A sample of one is the point here — it is the *right* one.
+Ask the team for the config, `package.json`, and — the part everyone skips —
+**which token names they actually use in their code**: their brand colours, their
+spacing scale, their radii. Ten names is plenty. If they cannot tell you, read the
+config's own `theme`/`extend` keys and use those.
 
-**Check**: both files are on disk and came from the team, not from this repo.
+Without this list, Trap 1 is unavoidable and the gate is decorative.
 
-### Step 2: Resolve it
+**Check**: all three are recorded, and the name list came from the team or from
+their config's own declarations — not from Tailwind's defaults.
 
-Build the CLI and run the export command above. If it throws, capture the error
-verbatim.
+### Step 2: Build both packages, then resolve with a script that shows everything
 
-**Check**: either `/tmp/tokens.json` exists with a printed unresolved count, or a
-verbatim error is recorded.
+```
+pnpm install
+pnpm --filter @fig-tail/theme build
+pnpm --filter @fig-tail/cli build
+```
 
-### Step 3: Read the report, not the exit code
+Then write a throwaway script in `/tmp` that imports the built theme package,
+calls `resolveTheme` with the team's config text (plus the exact version if
+`package.json` supplies one), and prints:
 
-Open `/tmp/tokens.json`. A zero exit is not a pass. Answer each of these in
-writing:
+- the **full** `unresolved` array — every entry, not a count
+- `warnings`
+- `tokens.source.defaults`
+- `unknownNamespaces` and `partialNamespaces` (for the record; see Trap 2)
+- **for each name from Step 1**: present or absent, and if present whether it is
+  usable — `px !== null` for lengths, an absolute colour for colours
 
-1. **Are colours resolved to names?** Look for the team's brand colours as named
-   token keys. If `unknownNamespaces` includes `colors`, every colour will emit a
-   raw value in the plugin — the single most important line in the file.
-2. **What is in the unresolved list?** For each entry, say whether you understand
-   it. Per the demo checklist at `plans/README.md:288-290`, "it couldn't read part
-   of our config and I don't know why" is the one answer that costs trust.
-3. **Are bundled defaults confirmed?** If the version was a range rather than
-   exact `x.y.z`, default-derived namespaces are unconfirmed and spacing/radius
-   may be unknown too.
-4. **Which namespaces are usable?** Colours, spacing, radius, typography — name
-   the ones that resolved and the ones that did not.
+The CLI is fine for a smoke run, but its output cannot answer Step 3 (Trap 4).
 
-**Check**: `docs/release/config-go-no-go.md` answers all four with quoted values
-from the output.
+**Check**: the script ran and printed all of the above, or a verbatim error is
+recorded **together with which of Trap 5's three causes it is**.
+
+### Step 3: Answer the only question that matters
+
+**Of the names from Step 1, how many are present AND usable?**
+
+That is the gate. Everything else is context. Also record:
+
+1. **Each unresolved entry** — and whether you can explain it. Per
+   `plans/README.md:291-292`, "it couldn't read part of our config and I don't
+   know why" is the one answer that costs trust.
+2. **Silent losses.** A colour that is not absolute vanishes with *no* diagnostic
+   (Trap 1). So a name from Step 1 that is simply absent, with nothing in
+   `unresolved` about it, is the **worst** result available — invisible failure.
+3. **Defaults status** — `confirmed` or `unconfirmed` with its reason.
+4. **Usable-but-stock ratio.** Roughly how much of `tokens.colors` is Tailwind's
+   default palette versus the team's. High stock + low project is Trap 1 exactly.
+
+**Check**: `docs/release/config-go-no-go.md` states the present-and-usable count
+out of the Step 1 list, by name, with the unresolved list quoted in full.
 
 ### Step 4: Call it
 
-Write one of three verdicts, with the reasoning:
+- **GO** — most of the Step 1 names are present and usable, and every unresolved
+  entry is explainable. A developer selecting a brand-coloured layer will see the
+  team's token name.
+- **PARTIAL** — some namespaces usable, others not. **Not automatically a go.**
+  State what a developer sees for the failing namespaces. Owner's call, not the
+  executor's.
+- **NO-GO (coverage)** — the team's names are largely absent or unusable. Stop the
+  programme. The follow-up is a resolver-coverage plan aimed at what actually
+  broke.
+- **NO-GO (harness)** — one of Trap 5's causes. **This is not a verdict about the
+  config.** Fix the harness or record the resolver bug, then re-run. Do not stop
+  the programme on this.
 
-- **GO** — colours and spacing resolve to names, and every unresolved entry is
-  understood and explainable. Proceed to plan 014.
-- **PARTIAL** — some namespaces resolve, others do not. **Not automatically a
-  go.** State plainly what a developer would see for the namespaces that failed,
-  and whether the plugin still beats reading Figma's CSS panel. That is a
-  judgment call and it belongs to the owner, not the executor.
-- **NO-GO** — colours are unknown, or the resolve threw. Stop the program and
-  report. The follow-up is a resolver-coverage plan aimed at what actually broke,
-  which is a far better-grounded plan than one written speculatively today.
-
-**Check**: the verdict is written, and if it is PARTIAL or NO-GO, no downstream
-plan has been started.
+**Check**: the verdict names which of the four it is. A crash is never recorded as
+a coverage NO-GO without ruling out all three Trap 5 causes.
 
 ## Validation plan
 
-- The report quotes actual values from `/tmp/tokens.json` rather than describing
-  them.
-- A second person can read the verdict and say what a developer would see on a
-  brand-coloured layer without re-running anything.
-- Sanity check: run the same command against
-  `fixtures/configs/v3/monorepo-extend.js` (a known-partial fixture) and confirm
-  the report format distinguishes it from the team's result. If both look
-  identical, the report is not saying enough.
+- **Positive control**: run the same script against
+  `fixtures/configs/v3/minimal.js` — a fixture known to resolve. The Step 1-style
+  name check should come back present-and-usable.
+- **Negative control**: run it against `fixtures/configs/v3/shadcn-like.js` with
+  an exact version, using that fixture's *own* declared names (`border`, `ring`,
+  `primary`, …). It must report them **absent**. If your method reports that
+  fixture as clean, your method has Trap 1 and the real run cannot be trusted.
+- Write both control results into the report next to the team's, using a
+  **different `--out` path** than the team's run.
 
 ## Done criteria
 
-- [ ] The team's real config and `package.json` were used.
-- [ ] `docs/release/config-go-no-go.md` exists with all four Step 3 answers,
-      quoting real output.
-- [ ] A GO / PARTIAL / NO-GO verdict is recorded with reasoning.
-- [ ] On PARTIAL or NO-GO, no downstream plan has been started.
+- [ ] The team's real config, `package.json`, and token-name list were used.
+- [ ] Both packages were built before running anything.
+- [ ] The full unresolved list is quoted, not counted.
+- [ ] Every Step 1 name is marked present-and-usable / present-but-unusable / absent.
+- [ ] Both controls ran, and the shadcn control correctly reported absent.
+- [ ] A verdict names which of the four outcomes it is.
 - [ ] `plans/README.md` status row updated.
 
 ## STOP conditions
 
-- **The team cannot or will not share their config.** That is itself a finding
-  about the pilot's viability — report it rather than substituting a fixture.
-- **The resolve throws.** Record the error; do not debug the resolver here.
-- **The verdict is PARTIAL.** Do not decide it yourself. Put it to the owner with
-  the evidence.
-- **You are tempted to try a different config to get a better result.** The
-  question is whether it works for *this* team.
+- **The team cannot or will not share their config.** A finding about the pilot's
+  viability — report it rather than substituting a fixture.
+- **The shadcn negative control comes back clean.** Your instrument has Trap 1;
+  fix the method before trusting anything.
+- **The verdict is PARTIAL.** Owner's call.
+- **You are tempted to try a different config to get a better result.**
+- **You are about to record a crash as a coverage NO-GO** without ruling out an
+  unbuilt dependency, the `ts-prepass` regex, and a multi-file v4 entry.
 
 ## Handoff / after it lands
 
-- On **GO**, plan 014 is next (restore variable matching), then 012.
-- On **NO-GO**, the whole series pauses and the next plan is resolver coverage
-  scoped to the specific construct that failed — which is a much stronger plan
-  than one written in advance against eight generic fixtures.
-- Either way, keep the resolved `tokens.json`. Plan 011's in-Figma run should use
-  the same config so its results are comparable, and plan 017's pilot depends on
-  the same file being installed.
+- On **GO**, plan 014 is next, then 012.
+- On **NO-GO (coverage)**, the series pauses; the next plan is resolver coverage
+  scoped to what actually failed — a far better-grounded plan than one written
+  speculatively.
+- On **NO-GO (harness)**, fix and re-run; the `ts-prepass` regex in particular is
+  a P0 defect that will hit real users regardless of this pilot.
+- Keep the config file **and pin its version** — plan 016 Step 3 needs it, and
+  plan 017 Step 1 must record which version the pilot ran against. Note the
+  plugin has **no import path for a token JSON** (`grep schemaVersion packages/plugin/src`
+  returns nothing), so 011 and 017 re-resolve the raw config in the plugin UI.
