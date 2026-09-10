@@ -13,6 +13,31 @@
 | Account / seat | UNVERIFIED |
 | Docs consulted | [Plugin manifest](https://developers.figma.com/docs/plugins/manifest), [Codegen plugins](https://developers.figma.com/docs/plugins/codegen-plugins), [Working in Dev Mode](https://developers.figma.com/docs/plugins/working-in-dev-mode), [setPluginData](https://developers.figma.com/docs/plugins/api/properties/nodes-setplugindata/), [Variable.setVariableCodeSyntax](https://developers.figma.com/docs/plugins/api/properties/Variable-setvariablecodesyntax/), [getCSSAsync / Update 68](https://developers.figma.com/docs/plugins/updates/2023/06/21/version-1-update-68) |
 
+## Variable hints — sync getter replaced (2026-09-10)
+
+`codegen/hints.ts` called the **synchronous** `figma.variables.getVariableById`
+inside a catch that swallowed everything, while the manifest declares
+`documentAccess: "dynamic-page"`. Figma's documentation says the sync getter
+throws under that setting; every other by-id lookup in the plugin already used
+the async form (`pipeline.ts`, `stamp/apply.ts`, `lint/variables.ts`).
+
+If it did throw in product, every variable hint became `null` silently and
+`exact-variable` was unreachable — on a file whose variables carry WEB code
+syntax, that is the plugin's main differentiator gone with no warning.
+
+**Replaced with `getVariableByIdAsync`.** The cache now holds the promise, so the
+8 concurrent workers in `resolveNodes` collapse to one lookup per id;
+`pipeline.test.ts` guards this (8 lookups with a value cache, 1 with a promise
+cache). Four test mocks defined the sync API and are now platform-shaped: the
+sync getter throws, the async one resolves. Test files are excluded from ESLint
+and both tsconfigs, so nothing mechanical would ever have caught this.
+
+**Status: inferred from documentation, never observed.** Nobody has watched the
+sync getter throw in Figma. The async form is correct under `dynamic-page`
+either way. Plan 011 Step 5c confirms the fix in product — and must record the
+bound variable's `codeSyntax.WEB`, since without it `exact-variable` is
+unreachable by design and the step reports a false negative.
+
 ## Route contract
 
 Manifest declares `editorType: ["figma","dev"]` and `capabilities: ["codegen","inspect"]`.

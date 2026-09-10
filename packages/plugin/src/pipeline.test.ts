@@ -9,7 +9,7 @@ const storageMocks = {
     getAsync: async () => undefined,
     setAsync: async () => {},
   },
-  variables: { getVariableById: () => null },
+  variables: { getVariableByIdAsync: async () => null },
 }
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -52,6 +52,37 @@ describe('resolveNodes', () => {
     const results = await resolveNodes(nodeIds, ctx)
     expect(results.map((r) => r.nodeId)).toEqual(['slow', 'fast'])
     expect(results.every((r) => r.output !== null)).toBe(true)
+  })
+
+  it('resolves a shared variable once across concurrently-resolved siblings', async () => {
+    // Regression guard for the promise cache. Eight sibling nodes bound to the
+    // same variable are resolved by up to 8 concurrent workers against one
+    // shared ctx.varCache. Caching the resolved *value* would leave all eight
+    // missing the cache in the same tick and firing eight round-trips; caching
+    // the promise collapses them to one.
+    let lookups = 0
+    const nodeIds = Array.from({ length: 8 }, (_, i) => `n${i}`)
+    vi.stubGlobal('figma', {
+      ...storageMocks,
+      variables: {
+        getVariableByIdAsync: async (id: string) => {
+          lookups += 1
+          await delay(5)
+          return { id, name: 'brand/500', codeSyntax: { WEB: 'brand-500' } }
+        },
+      },
+      getNodeByIdAsync: async (id: string) => ({
+        id,
+        type: 'FRAME',
+        boundVariables: { fills: [{ type: 'VARIABLE_ALIAS', id: 'shared' }] },
+        getCSSAsync: async () => CSS,
+      }),
+    })
+    const ctx = await createResolutionContext()
+    const results = await resolveNodes(nodeIds, ctx)
+    expect(results).toHaveLength(8)
+    expect(results.every((r) => r.output !== null)).toBe(true)
+    expect(lookups).toBe(1)
   })
 
   it('never exceeds ctx.maxInFlight concurrent CSS reads', async () => {

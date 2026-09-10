@@ -8,7 +8,13 @@ const makeFigma = (variables: Record<string, FakeVariable | undefined>) => {
   return {
     figma: {
       variables: {
-        getVariableById: (id: string) => {
+        // Under `documentAccess: "dynamic-page"` the synchronous getter throws.
+        // Modelling that is the point: a mock that quietly returns a value lets
+        // production code call the wrong API and still go green.
+        getVariableById: () => {
+          throw new Error('dynamic-page: use getVariableByIdAsync')
+        },
+        getVariableByIdAsync: async (id: string) => {
           calls.push(id)
           return variables[id] ?? null
         },
@@ -21,13 +27,13 @@ const makeFigma = (variables: Record<string, FakeVariable | undefined>) => {
 const alias = (id: string) => ({ type: 'VARIABLE_ALIAS' as const, id })
 
 describe('collectHints', () => {
-  it('returns no hints when the node has no boundVariables', () => {
+  it('returns no hints when the node has no boundVariables', async () => {
     vi.stubGlobal('figma', makeFigma({}).figma)
     const node = { type: 'FRAME' } as unknown as SceneNode
-    expect(collectHints(node)).toEqual({})
+    expect(await collectHints(node)).toEqual({})
   })
 
-  it('maps a fills binding to background-color on non-text nodes', () => {
+  it('maps a fills binding to background-color on non-text nodes', async () => {
     const { figma: mockFigma } = makeFigma({
       v1: { id: 'v1', name: 'brand/500', codeSyntax: { WEB: 'brand-500' } },
     })
@@ -36,12 +42,12 @@ describe('collectHints', () => {
       type: 'FRAME',
       boundVariables: { fills: [alias('v1')] },
     } as unknown as SceneNode
-    expect(collectHints(node)).toEqual({
+    expect(await collectHints(node)).toEqual({
       'background-color': { variableId: 'v1', name: 'brand/500', codeSyntax: 'brand-500' },
     })
   })
 
-  it('maps a fills binding to color on TEXT nodes', () => {
+  it('maps a fills binding to color on TEXT nodes', async () => {
     const { figma: mockFigma } = makeFigma({
       v1: { id: 'v1', name: 'ink/900', codeSyntax: {} },
     })
@@ -50,12 +56,12 @@ describe('collectHints', () => {
       type: 'TEXT',
       boundVariables: { fills: [alias('v1')] },
     } as unknown as SceneNode
-    expect(collectHints(node)).toEqual({
+    expect(await collectHints(node)).toEqual({
       color: { variableId: 'v1', name: 'ink/900' },
     })
   })
 
-  it('maps strokes to border-color', () => {
+  it('maps strokes to border-color', async () => {
     const { figma: mockFigma } = makeFigma({
       v2: { id: 'v2', name: 'border/default', codeSyntax: {} },
     })
@@ -64,12 +70,12 @@ describe('collectHints', () => {
       type: 'FRAME',
       boundVariables: { strokes: [alias('v2')] },
     } as unknown as SceneNode
-    expect(collectHints(node)).toEqual({
+    expect(await collectHints(node)).toEqual({
       'border-color': { variableId: 'v2', name: 'border/default' },
     })
   })
 
-  it('maps every scalar field to its CSS property', () => {
+  it('maps every scalar field to its CSS property', async () => {
     const { figma: mockFigma } = makeFigma({
       gap: { id: 'gap', name: 'space/4', codeSyntax: {} },
       radius: { id: 'radius', name: 'radius/lg', codeSyntax: {} },
@@ -89,7 +95,7 @@ describe('collectHints', () => {
         fontSize: [alias('size')],
       },
     } as unknown as SceneNode
-    const hints = collectHints(node)
+    const hints = await collectHints(node)
     expect(hints.gap?.name).toBe('space/4')
     expect(hints['border-top-left-radius']?.name).toBe('radius/lg')
     expect(hints['border-top-right-radius']?.name).toBe('radius/lg')
@@ -99,7 +105,7 @@ describe('collectHints', () => {
     expect(hints['font-size']?.name).toBe('text/base')
   })
 
-  it('dedupes four sides bound to the same variable into one lookup via varCache', () => {
+  it('dedupes four sides bound to the same variable into one lookup via varCache', async () => {
     const { figma: mockFigma, calls } = makeFigma({
       pad: { id: 'pad', name: 'space/6', codeSyntax: {} },
     })
@@ -114,7 +120,7 @@ describe('collectHints', () => {
       },
     } as unknown as SceneNode
     const cache = new Map<string, Variable | null>()
-    const hints = collectHints(node, cache)
+    const hints = await collectHints(node, cache)
     expect(hints['padding-left']?.name).toBe('space/6')
     expect(hints['padding-right']?.name).toBe('space/6')
     expect(hints['padding-top']?.name).toBe('space/6')
@@ -122,21 +128,20 @@ describe('collectHints', () => {
     expect(calls).toEqual(['pad'])
   })
 
-  it('skips an unresolvable alias without throwing', () => {
+  it('skips an unresolvable alias without throwing', async () => {
     const { figma: mockFigma } = makeFigma({})
     vi.stubGlobal('figma', mockFigma)
     const node = {
       type: 'FRAME',
       boundVariables: { fills: [alias('missing')] },
     } as unknown as SceneNode
-    expect(() => collectHints(node)).not.toThrow()
-    expect(collectHints(node)).toEqual({})
+    await expect(collectHints(node)).resolves.toEqual({})
   })
 
-  it('skips an alias whose lookup throws (unavailable library)', () => {
+  it('skips an alias whose lookup throws (unavailable library)', async () => {
     vi.stubGlobal('figma', {
       variables: {
-        getVariableById: () => {
+        getVariableByIdAsync: async () => {
           throw new Error('library unavailable')
         },
       },
@@ -145,7 +150,6 @@ describe('collectHints', () => {
       type: 'FRAME',
       boundVariables: { strokes: [alias('v3')] },
     } as unknown as SceneNode
-    expect(() => collectHints(node)).not.toThrow()
-    expect(collectHints(node)).toEqual({})
+    await expect(collectHints(node)).resolves.toEqual({})
   })
 })

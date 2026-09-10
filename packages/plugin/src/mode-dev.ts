@@ -70,7 +70,9 @@ export const runDevMode = () => {
         const options = optionsFromPreferences(figma.codegen.preferences.customSettings)
         const config = await readConfig()
         const css = await event.node.getCSSAsync()
-        const hints = collectHints(event.node)
+        // A per-generate cache: without one every binding on the node is an
+        // independent awaited round-trip, on the path with the 3 s budget.
+        const hints = await collectHints(event.node, new Map())
         const output = runPipeline({ css, hints, config })
         const filteredResults = applyCodegenFilters(output.results, options)
         const className = toClassName(filteredResults)

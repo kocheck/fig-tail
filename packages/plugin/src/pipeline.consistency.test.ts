@@ -32,7 +32,7 @@ const CSS = {
 const storageMocks = {
   root: { getPluginData: () => '', setPluginData: () => {} },
   clientStorage: { getAsync: async () => undefined, setAsync: async () => {} },
-  variables: { getVariableById: () => null },
+  variables: { getVariableByIdAsync: async () => null },
 }
 
 describe('pipeline consistency', () => {
