@@ -193,13 +193,30 @@ packages/cli typecheck: src/index.ts(4,68): error TS2307:
   Cannot find module '@fig-tail/theme' or its corresponding type declarations.
 ```
 
-Confirmed on `main`, so it is pre-existing and not introduced by any plan branch.
-`README.md:96-100` and `CONTRIBUTING.md` both present `pnpm check` as the thing a
-contributor runs. It passes only once `dist` happens to exist from an earlier
-build — which is why CI, which builds in its own order, does not catch it.
+**CI has never passed on `main`.** Both recorded runs of `ci.yml` on `main` —
+including `abb2c1b`, the "prepare 0.1.0 README and publish readiness" commit —
+have `conclusion: failure`, with this exact error. `ci.yml` runs
+`pnpm install --frozen-lockfile` then `pnpm check` on a fresh checkout, which is
+precisely the failing case.
 
-Fix is either ordering `build` before `typecheck` in the script, or adding a
-prepare/build step for workspace dependencies.
+Meanwhile `docs/release/approval-packet.md:22` records `| pnpm check | PASS |`
+and `:14` records `CI hardened + probe:browser | Ready`. Both are false, and they
+sit in the document that gates the release.
+
+`README.md:99` presents `pnpm check` as the command a contributor runs. It passes
+only when `dist` already exists from an earlier build, which is why it looks fine
+locally and has never worked from clean.
+
+**Verified fix** — build before typecheck, since packages resolve each other
+through `dist`:
+
+```diff
+-"check": "pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test"
++"check": "pnpm -r build && pnpm -r typecheck && pnpm -r lint && pnpm -r test"
+```
+
+Confirmed from an empty `packages/*/dist`: `pnpm -r build` succeeds (pnpm walks
+the workspace in topological order), and `pnpm -r typecheck` then passes.
 
 ---
 
