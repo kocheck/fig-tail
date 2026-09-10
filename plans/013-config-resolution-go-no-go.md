@@ -81,9 +81,11 @@ that file. Step 2 uses a read-only script instead.
 
 Three ways to get a crash that says nothing about coverage:
 
-1. **Unbuilt dependency.** `pnpm --filter @fig-tail/cli build` does **not** build
-   `@fig-tail/theme`; there is no turbo/nx `dependsOn`. Running the CLI then dies
-   with `ERR_MODULE_NOT_FOUND`. Build both.
+1. **Unbuilt dependency.** `pnpm --filter` does **not** build workspace
+   dependencies and there is no turbo/nx `dependsOn`, so the CLI dies with
+   `ERR_MODULE_NOT_FOUND`. Build both. This is general, not a CLI quirk: the
+   documented plugin install has the same defect (finding V10) and `pnpm check`
+   itself fails on a clean checkout (V11).
 2. **A live resolver bug.** `packages/theme/src/v3/ts-prepass.ts:8` runs its
    TypeScript-stripping regex on **every** v3 config including plain `.js`, and
    its character class contains `,` `{` `}` `[` `]`. It eats object-literal values

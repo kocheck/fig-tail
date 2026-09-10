@@ -202,18 +202,32 @@ per-developer, how config drift between the two is prevented or accepted.
 
 ### Step 4: Make the install something a busy person completes
 
+**Start from a known defect.** `docs/setup.md:5-10`'s step 2
+(`pnpm --filter @fig-tail/plugin build`) **fails on a clean clone** — finding V10
+in `docs/release/ux-findings-2026-09-10.md`, reproduced from empty `dist/`:
+`Could not resolve "@fig-tail/match"`, and `packages/plugin/dist/` is left empty
+so there is nothing to import into Figma. The verified working order is theme →
+match → plugin, or `pnpm -r build`.
+
+That single wrong line is the most likely cause of a condition-1 failure in the
+whole programme, and it says nothing about whether the product is good.
+
 Write `docs/install.md` for a developer who has not seen this repo: prerequisites,
-the exact commands, the Figma desktop path, what "success" looks like on first
-run, and what to do when it does not.
+the exact commands **in an order that works from a fresh clone**, the Figma
+desktop path, what "success" looks like on first run, and what to do when it does
+not. Correct `docs/setup.md` too, or delete it in favour of the new file.
 
 Then decide the artifact question. `dist` is gitignored, so today every developer
 builds. Options, with the cost stated rather than assumed: commit a built `dist`
 on a release branch or tag; attach a zip to a GitHub release; or keep
 build-from-source and accept the friction. Pick one and say why.
 
-**Check**: someone who has not seen the repo follows `docs/install.md` end to end
-without asking a question, and says where they got stuck if they did. That person
-is the check — not a re-read by the author.
+**Check**: on a machine (or container) with **no `dist/` present**, the commands
+in `docs/install.md` run clean and produce `packages/plugin/dist/main.js` and
+`ui.html`. Then someone who has not seen the repo follows it end to end without
+asking a question, and says where they got stuck if they did. That person is the
+check — not a re-read by the author — and **must not be one of the two pilot
+developers**, or plan 017 measures condition 1 on a rehearsed install.
 
 ### Step 5: Make a bug report nameable
 

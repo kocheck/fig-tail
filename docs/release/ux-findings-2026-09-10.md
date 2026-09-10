@@ -141,6 +141,66 @@ and can never match it. "Present" and "usable" are different properties and
 nothing in the output distinguishes them. Colours that are not absolute values
 vanish entirely, with no diagnostic at all.
 
+### V10. The documented install path fails from a clean clone
+
+`docs/setup.md:5-10` gives the only install instructions:
+
+```
+1. corepack enable && pnpm install
+2. pnpm --filter @fig-tail/plugin build
+3. Figma → Plugins → Development → Import plugin from manifest…
+4. Choose packages/plugin/manifest.json
+```
+
+Step 2 **fails** on a fresh checkout. Reproduced from clean (`rm -rf packages/*/dist`):
+
+```
+✘ [ERROR] Could not resolve "@fig-tail/match"
+    src/mode-dev.ts:1:46
+  The module "./dist/index.js" was not found on the file system
+```
+
+`packages/plugin/dist/` is then empty, so step 4 has nothing to import and the
+Figma install cannot complete. `pnpm --filter` does not build workspace
+dependencies and there is no turbo/nx `dependsOn`.
+
+**Working order**, verified:
+
+```
+pnpm --filter @fig-tail/theme build
+pnpm --filter @fig-tail/match build
+pnpm --filter @fig-tail/plugin build   # → dist/main.js (267.9kb) + ui.html
+```
+
+`pnpm -r build` also works.
+
+**Severity: P0 for the developer-adoption goal.** Condition 1 is "two developers
+install fig-tail themselves". Every developer who follows the documented steps
+hits this, and the error names an internal package rather than a missing step — a
+front-end developer has no reason to guess that the fix is building two other
+packages first. This is the most likely single cause of a condition-1 failure,
+and it says nothing about whether the product is good.
+
+### V11. `pnpm check` cannot pass on a clean checkout
+
+`package.json:13` defines the repo's documented single command as
+`pnpm -r typecheck && pnpm -r lint && pnpm -r build && pnpm -r test`. Typecheck
+runs **before** build, and packages resolve each other through `dist`, so on a
+fresh clone the first stage fails:
+
+```
+packages/cli typecheck: src/index.ts(4,68): error TS2307:
+  Cannot find module '@fig-tail/theme' or its corresponding type declarations.
+```
+
+Confirmed on `main`, so it is pre-existing and not introduced by any plan branch.
+`README.md:96-100` and `CONTRIBUTING.md` both present `pnpm check` as the thing a
+contributor runs. It passes only once `dist` happens to exist from an earlier
+build — which is why CI, which builds in its own order, does not catch it.
+
+Fix is either ordering `build` before `typecheck` in the script, or adding a
+prepare/build step for workspace dependencies.
+
 ---
 
 ## Reported but UNVERIFIED
