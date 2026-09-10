@@ -166,8 +166,16 @@ result in Figma, and writes all three of:
 1. **What was observed** — the literal string, number, or behaviour.
 2. **An artifact** — screenshot committed to
    `docs/release/evidence/2026-09-10/<step>-<name>.png`, referenced by filename.
-3. **An env stamp** — Figma desktop version, account label (A/B), seat type,
-   plugin ID used, date, **and the build's commit SHA**.
+3. **The build's commit SHA**, on every row.
+4. **An env stamp** — Figma desktop version, account label, seat type, plugin ID —
+   recorded **once per session**, not per row.
+
+**Screenshots are required only on the rows that gate the pilot**: config tier
+resolution (Step 3), variable-bound emission (Step 5c), near-miss class output
+(Step 9), and anything Step 0 flags as surprising. Everywhere else, the observed
+value plus the SHA is the evidence. This repo's pathology is *unobserved* rows,
+not unphotographed ones — a pasted string you actually read defeats it just as
+well, and at a fraction of the cost for an audience of two colleagues.
 
 The SHA is not optional bookkeeping. Plan 012 changes the class string this
 runbook measures, and without a SHA on each row there is no way to tell a current
@@ -194,10 +202,8 @@ never `PASS`.
   `packages/match/fixtures/css/*.json` — Step 9 re-capture only.
 - `fixtures/figma/README.md` — the file URL at line 7, and the "seeded from
   documented shapes" wording at lines 9–11, which Step 9 makes false.
-- `spikes/figma-platform-isolation/main.js` — **Step 5 only**, to correct the
-  keys it reads. This is test instrumentation, not shipped code; a broken
-  instrument produces false evidence, which is the one thing this plan exists to
-  prevent.
+- `packages/plugin/notes/first-hour.md` — new, from Step 0.
+- This plan itself — Step 0 is expected to change the steps below it.
 - `plans/README.md` — status row for this plan, and the `UNVERIFIED` caveats in
   rows 000–010 that this plan resolves.
 
@@ -231,95 +237,46 @@ Screenshots go to `docs/release/evidence/2026-09-10/<step>-<slug>.png`, where
 This plan overrides that for Step 9 only**, whose whole purpose may be to record a
 failing `pnpm check`. Every other commit follows the guide.
 
-**Dependencies between steps**: Step 1 gates Step 4. Step 3's substeps are strictly
-ordered. **Step 5 depends on Step 3**, because it needs a document-tier config
-already saved on the file. Steps 2, 6, 7, 8 and 9 are independent. If a step is
-BLOCKED, record it and continue — a partial run with honest rows is the expected
-outcome, not a failure.
+**Dependencies between steps**: Step 0 precedes everything and may rewrite what
+follows. Step 3's substeps are strictly ordered. Steps 2, 5c, 6 and 9 are
+independent. If a step is BLOCKED, record it and continue — a partial run with
+honest rows is the expected outcome, not a failure.
+
+**What moved out of this plan.** Plugin identity, cross-account document read and
+cross-plugin isolation are now **plan 016**: they are distribution questions, not
+verification of what a developer sees. The 1,000-node linter and subtree
+performance runs, and the stamping apply matrix, were **cut** — no developer
+pasting a class string touches those features, and `subtreeFormat` is being
+removed from the manifest in plan 015. They return if and when Community publish
+does.
 
 **Before anything**: run `pnpm --filter @fig-tail/plugin build`, then import
 `packages/plugin/manifest.json` into Figma desktop. Record the build's commit SHA
 in the env stamp, so every row below is attributable to a known build.
 
-## Breaking the circularity — OWNER DECISION: **route B**, decided 2026-09-10
-
-**0.1.0 ships as a local/team manifest install. It is not published to Community
-in this pass, and the cross-account row is expected to end BLOCKED.** The
-alternatives are kept below so the reasoning survives; do not switch routes
-mid-run without a new owner decision.
-
-| Route | What happens | Cost |
-|---|---|---|
-| A. Publish, then verify | Publish to Community — that ID is the shipping ID — then immediately run Step 4 on account B. On FAIL, unpublish or patch. | A public listing exists before the blocker clears. Requires listing copy that does **not** claim team sharing until Step 4 is PASS. |
-| **B. Re-scope 0.1.0 to local/team install — CHOSEN** | Do not publish. Verify Steps 2–3 and 5–9 fully; record cross-account as BLOCKED with the plan-tier reason. Ship via manifest import for the team demo. | Community publish slips to 0.2.0. Matches the existing CHANGELOG note that the plugin ships via Community *or* local manifest install. |
-| C. Borrow an org | Run the cross-account test inside an Organization/Enterprise workspace you have access to, via org-private publishing. | Needs an org you can publish into. The plugin ID there is not the shipping ID, so mechanism evidence transfers but stored config does not. |
-
-**Why B.** It is the only route where every published claim stays backed by
-evidence, and it costs nothing a 0.2.0 publish cannot recover once an org or an
-escape hatch exists. It also matches what `CHANGELOG.md` already says — the
-plugin ships via Community *or* local manifest install.
-
-**What B means for this plan**: Steps 2, 3, 5, 6, 7, 8 and 9 run in full and are
-expected to produce real PASS/FAIL rows. Step 4 runs **only** if one of Step 1's
-escape hatches works; otherwise it is recorded BLOCKED with the plan-tier reason.
-A run that ends with Step 4 BLOCKED and everything else evidenced is a **complete
-success** of this plan.
-
-**What B does not change**: nothing about the plugin's behaviour or copy. The
-README already hedges Community install as "when published", so no claim needs
-retracting. Do not add "local install only" language to shipped docs under this
-plan — that is a release decision, and it belongs to the owner.
-
 ## Steps
 
-### Step 1: Establish one plugin ID installable by both accounts
+### Step 0: Use it for an hour before running any of this
 
-This is the gate for the Community blocker, and the most likely place this plan
-stops. Per fact 7, `setPluginData` is namespaced to the plugin ID. Two separate
-**Import plugin from manifest** copies receive **distinct IDs**, so testing
-cross-account read that way proves nothing — each account would read its own
-empty namespace and the FAIL would be an artifact of the method.
+**Do this first, and do not skip it because the rest of the plan looks thorough.**
 
-**Known constraint, checked 2026-09-10.** Publishing a plugin privately to an
-organization requires an **Organization or Enterprise** plan ([Create private
-plugins for an organization](https://help.figma.com/hc/en-us/articles/4404228629655-Create-private-organization-plugins)).
-This project is on **Professional**, so that route is unavailable, and the
-documented way to put a plugin on a second account is publishing it to Community.
+Nobody has opened fig-tail in Figma. A ten-step runbook written for software its
+author has never watched run is a guess with a table of contents. So: build the
+plugin, import it, load the pilot team's config from plan 013, and **use it for
+about an hour** on a real file. No script, no rows to fill, no screenshots.
 
-**That makes the gate as written circular**: the Community publish is blocked on
-cross-account read, and cross-account read needs a shared plugin ID, which on
-Professional needs a Community publish. Break the circularity by owner decision,
-not by executor improvisation. **That decision is already made: route B** — see
-"Breaking the circularity" above, and read it before starting this step.
+Then come back and revise this plan from what you saw. Steps 2, 3, 5c, 6 and 9
+below are the best guess available today; an hour of contact will tell you which
+of them matter, which are trivially fine, and what nobody thought to check.
+Rewriting a step because reality differed is the intended outcome, not a failure
+of planning.
 
-Two escape hatches were *not* resolved when this plan was written, because
-`help.figma.com` was unreachable from the authoring environment. Time-box each to
-30 minutes before falling back to the decided route:
+Write down, roughly: what surprised you, what you had to work out for yourself,
+anything that looked wrong, and anything that made you stop trusting the output.
 
-- Whether a plugin **collaborator/publisher invite** lets a second account run an
-  unpublished plugin.
-- Whether Community publishing offers an **unlisted / link-only** visibility that
-  is not a full public listing. **Research only.** An unlisted publish is still a
-  publish, which Scope forbids and route B defers — so a positive finding here is
-  recorded for the 0.2.0 decision and does **not** unblock Step 4 in this pass.
-
-Only the collaborator-invite hatch, if it exists, can unblock Step 4 under route B.
-Record what you find either way — the next person should not re-derive it.
-
-Then decide, and write down, **which ID the evidence is recorded against**. If
-verification runs under `fig-tail-dev` but the plugin ships under a
-Figma-assigned production ID, the *mechanism* evidence carries over but **no
-stored config does** — any config saved during testing is unreadable to the
-published plugin, and the cross-account row would describe an artifact that is
-not the one shipping. Prefer verifying on the ID that will ship.
-
-**Check**: `packages/plugin/notes/storage-matrix.md` has a new "Plugin identity"
-section naming the decided route (A, B, C, or an escape hatch), the exact plugin
-ID, whether it is the shipping ID, the outcome of both time-boxed escape-hatch
-checks, and — if a shared ID was obtained — a screenshot showing it installed on
-both accounts. Under route B, or if no route yields a shared ID, record Step 4 as
-`BLOCKED — Professional plan has no private-share route; see plan 011 Step 1`
-and continue to Step 2.
+**Check**: `packages/plugin/notes/first-hour.md` exists with those four notes, and
+any step below that the hour proved wrong or missing has been edited — with the
+edit noted in the commit message.
 
 ### Step 2: Confirm all three routes load
 
@@ -412,88 +369,6 @@ new rows the table lacks: **"None tier label"** (substep 1) and **"Personal
 overriding document label"** (substep 5). The 3b row names the account and seat.
 The reset procedure and the button-name mismatch are written into that file.
 
-### Step 4: Cross-account document read — run only if an escape hatch worked
-
-Under the chosen route B there is no Community publish in this pass, so this step
-usually does **not** run. Run it only if Step 1's time-boxed checks found a
-collaborator-invite or unlisted-publish route that puts the *same* plugin ID on
-both accounts. If they did not, record BLOCKED and move to Step 5 — do not
-improvise a substitute.
-
-If a route was found: follow the procedure
-already written in `packages/plugin/notes/storage-matrix.md` under
-"Second-account procedure": account A saves on file, shares the file with
-account B, account B installs the **same** plugin ID, opens the file in Dev
-Mode, selects a layer.
-
-Account B must see the **document** label and classes resolved from A's config —
-not personal, not none. A "none" result here means B is reading a different
-namespace: re-check that the plugin IDs genuinely match before recording FAIL.
-
-**Check**: the "Cross-account document read" row in `storage-matrix.md` and in
-`docs/release/feature-audit.md` reads either PASS/FAIL with both accounts' env
-stamps and a screenshot of account B's Dev Mode showing the document label, or
-`BLOCKED — Professional plan has no private-share route; route B chosen
-2026-09-10; see plan 011 Step 1`. On FAIL, apply the fallback already written in
-`storage-matrix.md`: keep the personal path labelled, do not claim team setup in
-Community copy.
-
-### Step 5: Confirm cross-plugin isolation — fix the instrument first
-
-Depends on Step 3 having saved a document-tier config on the file.
-
-**The spike as committed cannot detect a failure.** `spikes/figma-platform-isolation/main.js:3`
-reads `['ft.spike.meta', 'ft.spike.chunk.0', 'ft.spike.chunk.1']`, which are the
-*capture spike's* keys. fig-tail writes `figtail.meta`, `figtail.payload.*` and
-`figtail.document-id` (`packages/plugin/src/storage.ts:25-30`). Run unchanged, it
-prints `ISOLATION PASS` whether namespacing works or not, because it reads keys no
-plugin ever wrote. A screenshot of that toast would satisfy every letter of the
-evidence rule and mean nothing.
-
-So:
-
-1. **Fix the keys.** Change `KEYS` to fig-tail's actual keys. Scope permits editing
-   this file, and only this file, for this reason.
-2. **Add a positive control.** Before reading fig-tail's keys, have the spike write
-   and read back one key of its own. If that read comes back empty, the reader
-   itself is broken and a subsequent "empty" result proves nothing — **STOP**.
-3. **Add a negative control on the fig-tail side.** In the same session,
-   immediately before the isolation read, screenshot fig-tail on that file showing
-   `Using the config saved on this file`. Without it, an empty read is
-   indistinguishable from "no config on this file", "wrong file open", or a typo'd
-   key — `getPluginData` returns `''` for all of them.
-4. **Enumerate rather than look up.** A key-by-key read cannot tell isolation from
-   absence. Call `figma.root.getPluginDataKeys()` from the second plugin: it should
-   return **exactly** that plugin's own control key and none of `figtail.*`. Add
-   `figma.root.getSharedPluginDataKeys('figtail')` too — it documents that fig-tail
-   uses no shared-namespace API (`grep -rn setSharedPluginData packages/plugin/src/`
-   returns nothing), which is the claim a reviewer actually cares about.
-5. **Fix the toast text.** `main.js:15-16` says "can/cannot read **spike** data".
-   After the key change that sentence describes the wrong dataset, and a
-   screenshot of it would contradict the row it supports.
-
-Only the enumeration, behind both controls, is evidence.
-
-**This step also settles the plugin-identity question — run it before Step 4's
-decision.** The two spikes differ only in their hand-written manifest `id`
-(`fig-tail-platform-spike` vs `fig-tail-platform-isolation`). If spike B cannot see
-spike A's keys, then for a locally imported development plugin **the manifest `id`
-string is the namespace key**. That would mean two accounts importing the *same*
-manifest file share one namespace — and Step 4 could run under route B with no
-publish, no org, and no escape hatch, clearing the cross-account gate for free.
-
-If instead Figma mints its own ID per import and ignores the manifest, Step 1's
-premise holds and Step 4 stays blocked. Either way, record which — the claim at
-`packages/plugin/notes/storage-matrix.md:24-26` is uncited and has never been
-tested, and the whole distribution decision rests on it.
-
-**Check**: the "Cross-plugin isolation" rows in `platform-preflight.md:49` and
-`storage-matrix.md` record the positive control, the fig-tail-side negative
-control, and the `getPluginDataKeys()` enumeration, with screenshots, replacing
-"PASS (by documented semantics)". A new "Plugin identity" note records what the
-result implies for two same-`id` manifest imports, and whether Step 4 is thereby
-unblocked. The spike diff is committed with the row.
-
 ### Step 5c: Does variable binding actually work? (suspected shipped bug)
 
 **This may be the most important thing this runbook finds.** Check it early.
@@ -548,61 +423,6 @@ timing code to a build you are in the middle of measuring.
 latency" section recording: the method (coarse external timing), the ten observed
 values and their range, the node used, and a verdict against the 3 s hard limit —
 stated as an upper bound, not as a callback measurement.
-
-### Step 7: Measure linter and subtree export at scale
-
-The linter reports its own duration in the UI status line
-(`packages/plugin/src/ui/main.tsx:400`, rendering
-`<n> findings · <n> nodes · <n>ms`), so this measurement is directly readable.
-
-- **Linter**: run Lint drift over a page of ≥1,000 nodes. Record the node count
-  and `durationMs` from the status line against the <10 s budget in
-  `linter-performance.md`. Record the file's source URL so it is reproducible.
-- **Subtree export**: select a subtree of ≥100 nodes and run each of the HTML,
-  JSX and Outline formats. Note `mode-dev.ts:81` caps this at
-  `maxNodes: 150, deadlineMs: 2000` — a truncated or deadline-exceeded result on
-  a large tree is **expected behaviour**, not a failure. Record which of the three
-  outcomes occurred: truncated, deadline-exceeded, or completed within both caps
-  (possible, since 100 nodes is under the 150 cap — to exercise truncation
-  deliberately, select more than 150).
-
-**Check**: `linter-performance.md` and `subtree-performance.md` each carry the
-observed number, the file used, and a screenshot of the status line.
-
-### Step 8: Stamping apply matrix — on a throwaway file only
-
-**This step writes to a Figma file.** Use the throwaway file from Inputs. Never
-run Apply against the demo file, a shared team file, or any file with variables
-someone else depends on.
-
-Confirm the three-row matrix in `platform-preflight.md` (lines 57–59). **Two of
-its three expectations are worded wrongly for the shipped build** — record what
-actually happens, not what the row predicts:
-
-- **Design editor + edit access** → Apply allowed. (Expected correct.)
-- **Dev Mode** → the row says "denied or unsafe" and this plan previously said
-  "not offered". Both are wrong: `main.tsx:242` renders the `Apply stamp` button
-  **unconditionally**, and `main.ts:11` registers the handler globally, so the
-  button is present and clickable in Dev Mode Inspect. Clicking it should surface
-  `Stamping can only apply in the design editor` (`mode-design.ts:194`) and a
-  `design-editor-only` failure (`mode-design.ts:197`). Expected behaviour is
-  **offered and refused**. Record the exact notification text.
-- **No edit access** (account B, view-only) → there is no edit-access gate in the
-  code: `stamp/apply.ts:59` gates only on `figma.editorType`, and per-variable
-  write failures collect into a `failed` array (`apply.ts:65-70`). Any refusal
-  comes from Figma's own permission enforcement, not from fig-tail. There is no
-  predicted string — record verbatim whatever the user sees, including "nothing
-  happened" if that is the truth.
-
-Then confirm the open question in `stamping-verification.md`: does the Inspect
-panel actually display `codeSyntax.WEB` on a variable after stamping? Undo via
-Figma afterwards and confirm the undo restored the previous state.
-
-**Check**: all three matrix rows carry observed results with screenshots, and any
-row whose stated expectation the build contradicts is **rewritten to match the
-build**, with a note saying it was wrong. The `stamping-verification.md` question
-carries an observed answer. The throwaway file's name is recorded. Undo is
-confirmed.
 
 ### Step 9: Re-capture CSS fixtures and reconcile the tests
 
@@ -708,8 +528,9 @@ ALL must hold:
       all three questions in `devmode-discovery.md` (which is prose, not a table —
       answer them in place). Rows in those files describing code-level facts no
       step measures are left alone.
-- [ ] Every PASS row names an observed value, a committed screenshot, and an env
-      stamp **including the build SHA**.
+- [ ] Every PASS row names an observed value and the build SHA; the session
+      carries one env stamp; the four gating rows carry screenshots.
+- [ ] Step 0 ran, and this plan was revised from what it found.
 - [ ] Every expectation this plan found to be **wrong about the build** — the Dev
       Mode and no-edit-access stamp rows, the isolation spike's keys, the
       "Save on file"/"Save personal" button names in `README.md` and

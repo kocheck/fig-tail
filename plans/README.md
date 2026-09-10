@@ -359,19 +359,30 @@ guidance; the numbered plan wins if the two conflict.
 | 008 | Add whole-subtree className export | P3 | L | 005 | DONE (large-tree UNVERIFIED) |
 | 009 | Add the optional CLI escape hatch for complex configs | P3 | M | 001, 003 | REJECTED for this ship (plugin-only; CLI out of scope) |
 | 010 | Package, document, and publish | P2 | S | 005 | DONE (0.1.0 prep complete; Community blocked on cross-account UNVERIFIED; npm/Community await owner approval) |
-| 011 | Verify fig-tail inside Figma and replace every UNVERIFIED marker with evidence | P0 | L | 000–010 | TODO (human-only; route B — local/team install, Community deferred to 0.2.0) |
-| 012 | Make the class string safe to paste unchecked | P0 | M | 011 | TODO (drafted) |
-| 013 | Decide and build the install path two developers will complete | P0 | M | 011 | TODO (blocked on a distribution decision — see GOAL) |
-| 014 | Make first-run setup completable without the author present | P1 | M | 011 | TODO |
-| 015 | Make everyday output legible on every selection | P1 | M | 011 | TODO |
-| 016 | Run the two-week developer pilot and decide | P0 | M | 012, 013 | TODO |
-
+| 013 | Find out whether fig-tail can read the pilot team's config | P0 | S | — | TODO — **runs first; gates everything** |
+| 014 | Restore variable matching (and stop the tests concealing it) | P0 | S | 013 | TODO |
+| 012 | Make the class string safe to paste unchecked | P0 | M | 013 | TODO (two decisions open) |
+| 015 | Make the product tell the truth about itself | P1 | M | 013 | TODO |
+| 011 | Verify fig-tail inside Figma (trimmed) | P0 | M | 013, 012, 014 | TODO — human-only; **Step 0 runs before the code fixes** |
+| 016 | Get the plugin onto two other machines, and keep it identifiable | P0 | M | 013, 011 Step 0 | TODO |
+| 017 | Run the two-week pilot and read the result honestly | P0 | M | 012, 014, 016 | TODO |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale)
 
-**Plans 011–016 serve one goal**, stated in [GOAL-developer-adoption.md](GOAL-developer-adoption.md):
+**Plans 011–017 serve one goal**, stated in [GOAL-developer-adoption.md](GOAL-developer-adoption.md):
 two developers install fig-tail themselves, use it for two weeks on real work,
-paste its output without hand-checking, and would notice if it vanished. Minimum
-slice for that goal: **011 → 012 → 013 → 016**.
+paste its output without hand-checking, and would notice if it vanished.
+
+**Execution order is not plan-number order.** Numbers are stable IDs; run them in
+this sequence, decided by a five-advisor council review on 2026-09-10
+(`docs/council/council-transcript-2026-09-10-plan-trim.md`):
+
+> **013** (config go/no-go — stop here if it fails) → **011 Step 0** (use it for an
+> hour, then revise 011 from what you saw) → **014** → **012** → **015** →
+> **011** Steps 2–10 → **016** → **017**
+
+The code fixes land before the human runbook runs, because 011 is L-effort and
+human-only and 012/014/015 change what it measures. Never run a hand-executed
+runbook against a build you are about to change.
 
 **Minimum shippable slice: 000 → 001 → 002 → 003 → 004 → 005 → 010.** That is a
 public, installable plugin that fully delivers the core promise. 006–009 are

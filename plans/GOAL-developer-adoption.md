@@ -74,25 +74,31 @@ sources and configures the team's Tailwind config," and the shared-config promis
 goes untested in the one pilot that could have tested it.
 
 This is a decision, not a detail, and it determines whether plan 013 exists and
-what plan 016 can claim. It is recorded in plan 013 as OPEN.
+what plan 016 can claim. It is plan 016 Step 1 — an experiment nobody has run, and the highest-leverage unknown in the program.
 
 ## The series
 
 | Plan | Title | Serves | Status |
 |---|---|---|---|
-| 011 | Verify fig-tail inside Figma | all — nothing below is trustworthy until the build is known to work | drafted |
-| 012 | Make the class string safe to paste unchecked | condition 3 | TODO |
-| 013 | Decide and build the install path two developers will actually complete | conditions 1, 2 | TODO — blocked on the decision above |
-| 014 | Make first-run setup completable without Kyle | conditions 1, 2 | TODO |
-| 015 | Make everyday output legible on every selection | conditions 3, 4 | TODO |
-| 016 | Run the two-week pilot and decide | measures all four | TODO |
+| 013 | Find out whether fig-tail can read the pilot team's config | the gate — all four conditions are void if it fails | drafted |
+| 014 | Restore variable matching | condition 3 — `exact-variable` is unreachable if the hint path is dead | drafted |
+| 012 | Make the class string safe to paste unchecked | condition 3 | drafted, two decisions open |
+| 015 | Make the product tell the truth about itself | conditions 1, 3, 4 | drafted |
+| 011 | Verify fig-tail inside Figma (trimmed) | all — nothing is trustworthy until the build is known to work | drafted |
+| 016 | Distribution, install path and build identity | conditions 1, 2 | drafted |
+| 017 | Run the pilot and read it honestly | measures all four | drafted |
 
-**Minimum slice: 011 → 012 → 013 → 016.** That is a pilot that can honestly
-succeed or fail. 014 and 015 raise the odds and are not prerequisites — if the
-pilot fails, their findings are why, and they become the fix.
+**Order** (not plan-number order): 013 → 011 Step 0 → 014 → 012 → 015 → 011 rest → 016 → 017.
 
-I originally sketched a seventh plan for pilot bug triage. It is one section of
-016, not a plan; splitting it would be padding.
+**The series was restructured on 2026-09-10** after a five-advisor council review
+(`docs/council/council-transcript-2026-09-10-plan-trim.md`). What changed: the
+config check was promoted from a deferred contingency to the gate; the 1,000-node
+linter, subtree performance and stamping-matrix steps were cut from 011 as
+serving a Community publish already deferred; plugin identity, cross-account read
+and cross-plugin isolation moved from 011 to 016 as distribution questions rather
+than verification; the two UX plans were folded into one; and 011 gained a Step 0
+exploratory hour, on the grounds that you cannot write a good runbook for software
+nobody has watched run.
 
 ## Explicitly not in this series
 
