@@ -19,16 +19,17 @@
 Three things the product currently claims are not true, and a developer will hit
 all three in the first hour:
 
-1. **`README.md:64`** — "Export a Markdown table from Tools for reviews." The
+1. **`README.md:61-62`** — "Export a Markdown table from Tools for reviews." The
    Markdown is generated (`lint/run-lint.ts:21`) and never displayed:
    `ui/main.tsx:160-171` returns `state.status` before it ever reaches
    `state.exportCode`, and lint always sets a status.
 2. **The drift linter shows a count and nothing else.** Findings are fully
    computed with node names, severities and nearest tokens
    (`lint/run-lint.ts:8`), passed to the UI, and discarded —
-   `ui/main.tsx:400` renders `N findings · N nodes · Nms`. `lint/dismiss.ts`
-   implements dismissal end to end and **has zero callers**.
-3. **`plans/README.md:442`** credits plan 003 with mitigating config staleness
+   `ui/main.tsx:400` renders `N findings · N nodes · Nms`. `dismissFinding` in
+   `lint/dismiss.ts` has **zero callers** — its sibling `loadDismissals` is used
+   at `lint/scan.ts:64`, so the module is not dead, the dismissal feature is.
+3. **`plans/README.md:453`** credits plan 003 with mitigating config staleness
    via "a stored timestamp and a staleness warning." The timestamp exists
    (`storage.ts:226`). The warning does not exist anywhere —
    `grep -rn "stale|out of date|days ago" packages/plugin/src/ui/ packages/plugin/src/codegen/`
@@ -71,7 +72,7 @@ output.
 
 **In scope**: `packages/plugin/manifest.json`, `ui/main.tsx`, `ui/styles.css`,
 `README.md`, `docs/setup.md`, `docs/troubleshooting.md`,
-`packages/plugin/notes/storage-matrix.md`, `plans/README.md:442`, and tests for
+`packages/plugin/notes/storage-matrix.md`, `plans/README.md:453`, and tests for
 the UI changes.
 
 **Out of scope**:
@@ -103,19 +104,25 @@ four preferences, not five.
 
 ### Step 2: Render the findings that already exist
 
-Invert the precedence in `toolOutContent()` so a lint result displays its
-findings rather than its summary line, and render the findings themselves — node
+Invert the precedence in `toolOutContent()` so a lint result displays its findings
+rather than its summary line — **but not with a bare swap**. `state.exportCode` is
+sticky: set at `main.tsx:402` and `:408`, cleared only on those paths, while errors
+set only `state.status` (`main.tsx:433`). A literal inversion hides every later
+error behind the previous lint's output. Render from the lint payload directly, or
+clear `exportCode` whenever a status is posted. Render the findings themselves — node
 name, property, severity, nearest token where present — not just a count. Keep
 the count; it is useful. Add a copy affordance for the panel, since `#tool-out`
 currently has none (only `#inspect-copy` exists, at `ui/main.tsx:373-375`).
 
 The Markdown at `lint/run-lint.ts:21` can now genuinely be surfaced. If you
-surface it, `README.md:64` becomes true and Step 4 keeps that line. If you do not,
+surface it, `README.md:61-62` becomes true and Step 4 keeps that line. If you do not,
 Step 4 deletes it. Either is fine; decide and be consistent.
 
 **Check**: a test drives a lint payload with two findings through the UI's render
-path and asserts both findings' node names appear in `#tool-out`. Record which
-choice you made about the Markdown claim.
+path and asserts both node names appear in `#tool-out`, **and a second test posts
+an error after a lint result and asserts the error is what shows**. Without the
+second, the check passes on exactly the path you changed and misses what you broke.
+Record which choice you made about the Markdown claim.
 
 ### Step 3: Fix the confidence badges
 
@@ -127,25 +134,28 @@ honest fallback, not an error. Reserve the danger tone for `none`.
 Also replace the raw enum text in the badge with human words; `exact-variable` is
 an internal identifier appearing in the UI.
 
-**Check**: every value in the `Confidence` union has a matching CSS rule — verify
-by listing the union and grepping `styles.css` for each. No confidence value falls
-back to the base class.
+**Check**: a test renders one result per `Confidence` value and asserts each
+carries a class resolving to a distinct, non-base style. A grep for rule existence
+is not enough — an empty `.badge-exact-value {}` would satisfy it.
 
 ### Step 4: Make the docs describe what exists
 
 - `README.md:29-30`, `docs/setup.md:22`, `docs/troubleshooting.md:6-7, 58`,
   `packages/plugin/notes/storage-matrix.md:9, 29` — "Save on file" → **Apply to
   file**, "Save personal" → **Save personally**.
-- `README.md:64` — keep only if Step 2 surfaced the Markdown; otherwise delete.
+- `README.md:61-62` — keep only if Step 2 surfaced the Markdown; otherwise delete.
 - `README.md:60-62` — "scans the selection or page" implies the user chooses.
   They do not: `lint/run-lint.ts:6` always requests `scope: 'selection'`, and
   `lint/scan.ts:50-54` silently falls back to the whole page when nothing is
   selected. Say what it does, or make the fallback visible in the UI.
+- `docs/setup.md:25-28` — "Re-run setup after theme changes… Prefer document save
+  so collaborators share one source" is false for the same cache documented above:
+  a collaborator's re-save never reaches an already-open plugin.
 - `README.md:76` — the limitations list should also say hover, focus and dark-mode
   variants are not considered, since `breakpoints` are resolved into the token set
   (`theme/src/types.ts:153`) and consumed by no matcher.
 - Remove any subtree-export mention that implies a user-facing preference.
-- `plans/README.md:442` — strike the staleness-warning claim and replace it with
+- `plans/README.md:453` — strike the staleness-warning claim and replace it with
   what is actually true: the timestamp is stored, nothing surfaces it, and the read
   cache does not invalidate on another session's write.
 
@@ -180,8 +190,11 @@ alongside. Anything unmatched is filed as a finding in
 - [ ] Every `Confidence` value has a badge rule; `arbitrary` is not styled as danger.
 - [ ] No doc names a button that does not exist.
 - [ ] The Markdown claim is either true or deleted.
-- [ ] The staleness-warning claim in `plans/README.md:442` is corrected.
+- [ ] The staleness-warning claim in `plans/README.md:453` is corrected.
 - [ ] The README claim → delivery list exists.
+- [ ] The claim-by-claim acceptance read has a named owner and a date. It needs the
+      build running in Figma so it happens during plan 011 — but 011 does not
+      depend on this plan, so name who does it, or it lands nowhere.
 - [ ] `pnpm check` exits 0; `plans/README.md` status row updated.
 
 ## STOP conditions
