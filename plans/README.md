@@ -365,7 +365,8 @@ guidance; the numbered plan wins if the two conflict.
 | 015 | Make the product tell the truth about itself | P1 | M | 013 | TODO |
 | 011 | Verify fig-tail inside Figma (trimmed) | P0 | M | 013, 012, 014 | TODO — human-only; **Step 0 runs before the code fixes** |
 | 016 | Get the plugin onto two other machines, and keep it identifiable | P0 | M | 013, 011 Step 0 | TODO |
-| 017 | Run the two-week pilot and read the result honestly | P0 | M | 012, 014, 016 | TODO |
+| 018 | Finish the class string — spaces, and properties with nothing to say | P1 | S | 012 | TODO |
+| 017 | Run the two-week pilot and read the result honestly | P0 | M | 011, 012, 014, 015, 016, 018 | TODO |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale)
 
 **Plans 011–017 serve one goal**, stated in [GOAL-developer-adoption.md](GOAL-developer-adoption.md):
@@ -377,16 +378,19 @@ this sequence, decided by a five-advisor council review on 2026-09-10
 (`docs/council/council-transcript-2026-09-10-plan-trim.md`):
 
 > **013** (config go/no-go — stop here if it fails) → **011 Step 0** (use it for an
-> hour, then revise 011 from what you saw) → **014** → **012** → **015** →
+> hour, then revise 011 from what you saw) → **014** → **012** → **018** → **015** →
 > **011** Steps 2–10 → **016** → **017**
 
 The code fixes land before the human runbook runs, because 011 is L-effort and
 human-only and 012/014/015 change what it measures. Never run a hand-executed
 runbook against a build you are about to change.
 
-**Minimum shippable slice: 000 → 001 → 002 → 003 → 004 → 005 → 010.** That is a
-public, installable plugin that fully delivers the core promise. 006–009 are
-upside.
+**Minimum shippable slice (original 0.1.0 program): 000 → 001 → 002 → 003 → 004 →
+005 → 010.** That slice was defined for a Figma Community publish, which the
+current goal defers. **For the developer-adoption goal the slice is
+013 → 014 → 012 → 016 → 017**, with 011, 015 and 018 as the trust floor — 011
+because nothing is known until the build runs, 015 and 018 because condition 3
+fails without them.
 
 ---
 

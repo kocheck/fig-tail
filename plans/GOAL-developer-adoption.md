@@ -88,9 +88,12 @@ what plan 016 can claim. It is plan 016 Step 1 — an experiment nobody has run,
 | 015 | Make the product tell the truth about itself | conditions 1, 3, 4 | drafted |
 | 011 | Verify fig-tail inside Figma (trimmed) | all — nothing is trustworthy until the build is known to work | drafted |
 | 016 | Distribution, install path and build identity | conditions 1, 2 | drafted |
+| 018 | Finish the class string — spaces, unsupported properties | condition 3 — the last known code obstacles | drafted |
 | 017 | Run the pilot and read it honestly | measures all four | drafted |
 
-**Order** (not plan-number order): 013 → 011 Step 0 → 014 → 012 → 015 → 011 rest → 016 → 017.
+**Order** (not plan-number order): 013 → 011 Step 0 → 014 → 012 → 018 → 015 →
+011 rest → 016 → 017. Status in this table means "written"; `plans/README.md`
+carries the execution status, where all eight are TODO.
 
 **The series was restructured on 2026-09-10** after a five-advisor council review
 (`docs/council/council-transcript-2026-09-10-plan-trim.md`). What changed: the
