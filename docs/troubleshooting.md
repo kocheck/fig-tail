@@ -35,8 +35,12 @@ version evidence, even within the same major.
 
 ## Near colours/spacing never become classes
 
-By design. Near matches are reported in drift notes only — inventing
-`bg-brand-500` when the fill is slightly off would silently fail in code.
+Near matches now emit the design's **raw value** — `bg-[#3b82f1]` — with the
+near token reported as a note. The token name itself is never emitted: inventing
+`bg-brand-500` when the fill is slightly off would silently render the wrong
+colour in code. Previously the property was dropped from the class string
+entirely, which was worse: you pasted a string that looked complete and got an
+unstyled element.
 
 ## The plugin does not appear in Dev Mode's language dropdown
 

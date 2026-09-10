@@ -252,21 +252,20 @@ export const matchColor = (
     }
   }
 
-  if (best) {
-    return {
-      property,
-      className: null,
-      confidence: 'nearest',
-      nearest: {
-        tokenKey: best.key,
-        className: `${utility}-${best.key}`,
-        delta: best.delta,
-        deltaUnit: 'deltaE',
-      },
-      note: `no exact token; nearest is ${best.key}, ΔE ${best.delta.toFixed(1)}`,
-      provenance: provenanceBase,
-    }
-  }
+  // A near miss falls through to the raw-value return below rather than
+  // returning nothing: the design's own value is what invariant 2 prescribes,
+  // and `nearest` stays report-only so no guessed token name is ever emitted.
+  const near = best
+    ? {
+        nearest: {
+          tokenKey: best.key,
+          className: `${utility}-${best.key}`,
+          delta: best.delta,
+          deltaUnit: 'deltaE' as const,
+        },
+        note: `no exact token; nearest is ${best.key}, ΔE ${best.delta.toFixed(1)}`,
+      }
+    : undefined
 
   const partialNote = tokens.partialNamespaces.includes('colors')
     ? 'Bundled default colours were withheld; showing raw values for unmatched colours'
@@ -276,8 +275,10 @@ export const matchColor = (
   return {
     property,
     className,
-    confidence: className ? 'arbitrary' : 'none',
-    ...(partialNote !== undefined ? { note: partialNote } : {}),
+    // `nearest` outranks `arbitrary` so the drift linter keeps its high-severity
+    // finding, including when the prefix cannot be applied and there is no class.
+    confidence: near ? 'nearest' : className ? 'arbitrary' : 'none',
+    ...(near ?? (partialNote !== undefined ? { note: partialNote } : {})),
     provenance: provenanceBase,
   }
 }

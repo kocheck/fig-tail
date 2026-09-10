@@ -14,7 +14,7 @@ confirming it first.
 
 Each of these was independently re-checked against the file and line cited.
 
-### V1. A near-miss silently deletes the property from the class string
+### V1. A near-miss silently deletes the property from the class string — RESOLVED
 
 `packages/match/src/index.ts:183-189`:
 
@@ -43,6 +43,13 @@ which is the harder failure to debug.
 
 This is the highest-severity finding in this document and the one most likely to
 cost trust in front of a team.
+
+**Resolved (plan 012).** Both filters are gone — `index.ts` (codegen) and
+`summarise.ts` (Inspect) — and all five near-miss sites now fall through to the
+raw-value return that already existed below them, rather than early-returning
+`className: null`. `confidence` stays `nearest`, so the drift linter keeps its
+high-severity finding. Disposition F01's second clause is superseded; see the
+amendment in `plans/REVIEW-DISPOSITIONS-2026-07-31.md`.
 
 ### V2. The lint Markdown table the README advertises is unreachable
 

@@ -106,6 +106,31 @@ export const matchLength = (
       provenance,
     }
   }
+  /**
+   * The raw-value result: the design's own value, prefixed. A near miss passes
+   * its `nearest` metadata through here rather than returning nothing, so the
+   * property never silently disappears from the class string — invariant 2's
+   * "fail toward raw values". `nearest` stays report-only; no guessed token name
+   * is ever emitted.
+   */
+  const rawValue = (near?: Pick<MatchResult, 'nearest' | 'note'>): MatchResult => {
+    const partialNote =
+      tokens &&
+      tokens.partialNamespaces.includes(mapping.ns === 'size' ? 'spacing' : mapping.ns)
+        ? `Bundled default ${mapping.ns} tokens were withheld; showing raw values for unmatched lengths`
+        : undefined
+    const className = applyPrefix(tokens, `${mapping.util}-[${value}]`)
+    return {
+      property,
+      className,
+      // `nearest` outranks `arbitrary` so the drift linter keeps its
+      // high-severity finding even when the prefix cannot be applied.
+      confidence: near ? 'nearest' : className ? 'arbitrary' : 'none',
+      ...(near ?? (partialNote !== undefined ? { note: partialNote } : {})),
+      provenance,
+    }
+  }
+
   if (tokens && !utilityAvailable(tokens, mapping.core)) {
     return {
       property,
@@ -184,10 +209,7 @@ export const matchLength = (
         }
       }
       if (step?.kind === 'nearest') {
-        return {
-          property,
-          className: null,
-          confidence: 'nearest',
+        return rawValue({
           nearest: {
             tokenKey: step.key,
             className: `${mapping.util}-${step.key}`,
@@ -195,8 +217,7 @@ export const matchLength = (
             deltaUnit: 'px',
           },
           note: `no exact token; nearest is ${mapping.util}-${step.key}`,
-          provenance,
-        }
+        })
       }
     }
     const scaleHit = matchScale(px, tokens.spacing.scale, exactTol, nearTol)
@@ -210,10 +231,7 @@ export const matchLength = (
       }
     }
     if (scaleHit?.kind === 'nearest') {
-      return {
-        property,
-        className: null,
-        confidence: 'nearest',
+      return rawValue({
         nearest: {
           tokenKey: scaleHit.key,
           className: `${mapping.util}-${scaleHit.key}`,
@@ -221,14 +239,10 @@ export const matchLength = (
           deltaUnit: 'px',
         },
         note: `no exact token; nearest is ${mapping.util}-${scaleHit.key}`,
-        provenance,
-      }
+      })
     }
     if (namedHit?.kind === 'nearest') {
-      return {
-        property,
-        className: null,
-        confidence: 'nearest',
+      return rawValue({
         nearest: {
           tokenKey: namedHit.key,
           className: `${mapping.util}-${namedHit.key}`,
@@ -236,8 +250,7 @@ export const matchLength = (
           deltaUnit: 'px',
         },
         note: `no exact token; nearest is ${mapping.util}-${namedHit.key}`,
-        provenance,
-      }
+      })
     }
   }
 
@@ -254,18 +267,15 @@ export const matchLength = (
       }
     }
     if (hit?.kind === 'nearest') {
-      return {
-        property,
-        className: null,
-        confidence: 'nearest',
+      const util = mapping.util === 'rounded' ? 'rounded' : mapping.util
+      return rawValue({
         nearest: {
           tokenKey: hit.key,
-          className: `rounded-${hit.key}`,
+          className: hit.key === 'DEFAULT' ? util : `${util}-${hit.key}`,
           delta: hit.delta,
           deltaUnit: 'px',
         },
-        provenance,
-      }
+      })
     }
   }
 
@@ -294,18 +304,5 @@ export const matchLength = (
     }
   }
 
-  const partialNote = tokens.partialNamespaces.includes(
-    mapping.ns === 'size' ? 'spacing' : mapping.ns,
-  )
-    ? `Bundled default ${mapping.ns} tokens were withheld; showing raw values for unmatched lengths`
-    : undefined
-
-  const className = applyPrefix(tokens, `${mapping.util}-[${value}]`)
-  return {
-    property,
-    className,
-    confidence: className ? 'arbitrary' : 'none',
-    ...(partialNote !== undefined ? { note: partialNote } : {}),
-    provenance,
-  }
+  return rawValue()
 }

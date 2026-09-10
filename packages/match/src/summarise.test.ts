@@ -27,14 +27,18 @@ describe('summarise', () => {
     expect(withheld.length).toBeLessThanOrEqual(1)
   })
 
-  it('excludes nearest results from className', () => {
+  it('emits a near miss as a raw value on both surfaces, never as the token', () => {
     const results = matchDeclarations(
       { 'background-color': '#3b82f1' },
       { tokens: baseTokenSet() },
     )
-    expect(toClassName(results)).toBe('')
+    // toClassName feeds codegen; summarise feeds the Inspect panel. They had
+    // separate copies of the same filter, so fixing one alone left Inspect
+    // silently dropping the property.
+    expect(toClassName(results)).toBe('bg-[#3b82f1]')
     const summary = summarise(results, true)
-    expect(summary.className).toBe('')
+    expect(summary.className).toBe('bg-[#3b82f1]')
+    expect(summary.className).not.toContain('brand-500')
   })
 
   it('summarises configured matches without the no-config banner', () => {

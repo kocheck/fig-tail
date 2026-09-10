@@ -23,6 +23,19 @@ describe('engine', () => {
     expect(results.some((result) => result.confidence === 'nearest')).toBe(true)
   })
 
+  it('emits every side of a near-miss shorthand as a raw value', () => {
+    // `padding: 25px` expands to four sides, each a near miss against 24px.
+    // collapseSides deliberately refuses to collapse a `nearest` set: the
+    // collapsed result carries no per-side `nearest` metadata, so the drift
+    // finding would vanish. Four raw-value sides is the accepted cost of
+    // keeping the finding — and four raw values still beat the previous
+    // behaviour, which emitted nothing at all for the property.
+    const results = matchDeclarations({ padding: '25px' }, { tokens: baseTokenSet() })
+    expect(toClassName(results)).toBe('pt-[25px] pr-[25px] pb-[25px] pl-[25px]')
+    expect(results.every((r) => r.confidence === 'nearest')).toBe(true)
+    expect(results.every((r) => r.nearest !== undefined)).toBe(true)
+  })
+
   it('does not collapse mismatched corner radii', () => {
     const tokens = baseTokenSet({
       radius: {

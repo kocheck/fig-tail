@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A near-miss match no longer drops the property from the copyable class string.
+  It emits the design's raw value (`bg-[#3b82f1]`) with the near token reported
+  as a note. **`@fig-tail/match`'s `toClassName` and `summarise` output changes
+  shape**: results with `confidence: 'nearest'` now carry a `className`.
+- Variable hints resolve via `getVariableByIdAsync`; the synchronous getter
+  throws under `documentAccess: "dynamic-page"` and its failure was swallowed.
+- `pnpm check` builds before typechecking, so it works from a clean checkout.
+
 ## 0.1.0
 
 ### Added

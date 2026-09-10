@@ -47,7 +47,7 @@ fig-tail only emits a named class when the config confirms it:
 | Outcome | Meaning |
 |---|---|
 | Exact (variable or value) | Class is safe to paste |
-| Nearest | Close to a token — reported as a note, **not** emitted as that token |
+| Nearest | Close to a token — you get the design's **raw value** (`bg-[#3b82f1]`), and the near token is reported as a note. The token name is never emitted. |
 | Unsupported / none | No match — arbitrary value or a clear gap |
 
 If part of your config could not be read (function-valued theme keys, external

@@ -11,6 +11,7 @@ Depends on [`@fig-tail/theme`](https://www.npmjs.com/package/@fig-tail/theme).
 pnpm add @fig-tail/match
 ```
 
-Near matches are reported, never silently promoted to named classes.
+Near matches emit the raw value and report the near token; they are never
+silently promoted to named classes, and never silently dropped.
 
 MIT © 2026 Kyle Kochanek

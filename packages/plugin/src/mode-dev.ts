@@ -29,6 +29,9 @@ export const optionsFromPreferences = (customSettings: Record<string, string> | 
   }
 }
 
+/** Confidences whose class is a bracketed raw value rather than a token name. */
+const ARBITRARY_VALUE_CONFIDENCE = new Set(['arbitrary', 'nearest'])
+
 const LAYOUT_PROPERTIES_TO_STRIP = new Set([
   'display',
   'flex-direction',
@@ -50,11 +53,34 @@ export const applyCodegenFilters = (results: MatchResult[], options: CodegenOpti
     if (!options.includeLayout && LAYOUT_PROPERTIES_TO_STRIP.has(result.property)) {
       return { ...result, className: null }
     }
-    if (!options.allowArbitrary && result.confidence === 'arbitrary') {
+    // A near miss emits the design's raw value, so it is an arbitrary value in
+    // everything but confidence — a user who turned those off does not want it.
+    if (!options.allowArbitrary && ARBITRARY_VALUE_CONFIDENCE.has(result.confidence)) {
       return { ...result, className: null }
     }
     return result
   })
+
+/**
+ * Which sections to show. `Output → Classes` asks for the class string without
+ * routine notes — but never at the cost of hiding that the string is
+ * incomplete. When the preference filters strip a class the matcher did
+ * produce, the second section is kept so the omission is visible.
+ *
+ * Deliberately narrow: `confidence: 'none'` results are routine (every
+ * unsupported property Figma volunteers) and retaining on those would fire on
+ * nearly every node, making the preference a no-op.
+ */
+export const sectionsForOutput = (
+  sections: CodegenSection[],
+  matched: MatchResult[],
+  filtered: MatchResult[],
+  options: CodegenOptions,
+): CodegenSection[] => {
+  if (options.outputNotes) return sections
+  const omitted = matched.some((result, i) => result.className && !filtered[i]?.className)
+  return omitted ? sections : sections.slice(0, 1)
+}
 
 const errorSections = (message: string): CodegenSection[] => [
   { title: 'Tailwind', language: 'PLAINTEXT', code: `/* fig-tail could not generate output: ${message} */` },
@@ -77,7 +103,7 @@ export const runDevMode = () => {
         const filteredResults = applyCodegenFilters(output.results, options)
         const className = toClassName(filteredResults)
         const sections = renderCodegenSections(filteredResults, className, output.warnings, output.tierLabel)
-        const result = options.outputNotes ? sections : sections.slice(0, 1)
+        const result = sectionsForOutput(sections, output.results, filteredResults, options)
         const hasChildren = 'children' in event.node && event.node.children.length > 0
         if (options.subtreeFormat !== 'off' && hasChildren) {
           const tree = await exportSubtree({ format: options.subtreeFormat, deadlineMs: 2000, maxNodes: 150 })

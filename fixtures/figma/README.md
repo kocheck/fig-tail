@@ -22,8 +22,8 @@ codegen / &lt;250 ms Inspect; cold &lt;1 s).
 | `Card / exact` | `flex flex-col items-start self-stretch gap-4 p-6 rounded-xl border border-gray-200 border-solid bg-white shadow-xs` | Exact fixture string from `@fig-tail/match` card test |
 | `Text / exact` | `font-medium text-sm text-gray-900` (or nearest exact tokens) | Inter Medium 14/20 → font-size/weight |
 | `Size / fixed` | `w-80 h-11` (if 320×44 on default scale) | May be arbitrary if scale missing |
-| `Colour / near` | *(empty primary)* + drift nearest `brand-500` | Near `#3B82F1` — never emit as exact |
-| `Spacing / near` | *(empty for padding)* + drift nearest `p-6` | 25 px near 24 |
+| `Colour / near` | `bg-[#3b82f1]` + drift nearest `brand-500` | Near `#3B82F1` — raw value emitted, token name never |
+| `Spacing / near` | `pt-[25px] pr-[25px] pb-[25px] pl-[25px]` + drift nearest `p-6` | 25 px near 24; sides do not collapse across a near miss |
 | `Variable / bound` | Prefer `exact-variable` when WEB syntax + value agree | Else value / name-match |
 | `Gradient / unsupported` | `none` / no fill class | Unsupported — report, don't invent |
 | `Layout / nested` | Parent layout utilities only for selected node | Hidden children skipped in subtree |
