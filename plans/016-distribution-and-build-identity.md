@@ -170,7 +170,7 @@ a later reviewer as two, and this is the row that flips
 `docs/release/feature-audit.md:17` from `**BLOCKER for Community**` to PASS.
 
 What this step adds is **replication**: run the procedure at
-`packages/plugin/notes/storage-matrix.md:28-40` again, on a different file, after
+`packages/plugin/notes/storage-matrix.md:28-39` again, on a different file, after
 a Figma restart on both accounts. If the second run disagrees with the first, that
 is the finding.
 

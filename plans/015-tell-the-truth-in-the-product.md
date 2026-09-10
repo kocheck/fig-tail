@@ -47,10 +47,12 @@ output.
 
 ## Context the executor needs
 
-- **The linter is not in the manifest.** It is a button in the plugin's own UI.
-  Only `subtreeFormat` is a `codegenPreferences` dropdown. (An earlier review
-  claimed both; that was wrong, and it matters because the two need different
-  treatment.)
+- **The linter is not in the manifest.** It is a button in the plugin's own UI
+  (`main.tsx:239`, handler `:347`). Of the two features under discussion, only
+  `subtreeFormat` is manifest-exposed. (An earlier review claimed both were; that
+  was wrong, and the two need different treatment. The manifest declares four
+  `select` dropdowns in total — `includeLayout`, `allowArbitrary`, `output`,
+  `subtreeFormat` — plus one `action`.)
 - `toolOutContent()` at `ui/main.tsx:160-171` has a fixed precedence:
   `stampResult` → `status` → `exportCode` → JSON dump. Status wins, always.
 - The confidence badge classes at `ui/main.tsx:148` are emitted as
@@ -94,8 +96,8 @@ Remove the `subtreeFormat` entry from `codegenPreferences` in
 `packages/plugin/manifest.json`. Leave `tree/export.ts` and its tests alone — the
 code stays, the user-facing switch goes.
 
-`mode-dev.ts:25-29` reads `custom.subtreeFormat` and defaults to `'off'` when
-absent, so removing the declaration should leave the branch inert. Confirm that
+`mode-dev.ts:22` reads `custom.subtreeFormat` and the ternary at `:27-28`
+defaults it to `'off'` when absent, so removing the declaration should leave the branch inert. Confirm that
 rather than assuming it.
 
 **Check**: `pnpm --filter @fig-tail/plugin test` passes; a test asserts

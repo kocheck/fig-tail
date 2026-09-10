@@ -13,7 +13,9 @@
 - **Priority**: P0
 - **Effort**: M (mostly elapsed time, not work)
 - **Risk**: MED
-- **Depends on**: 013 (GO), 012, 014, 016. 011 and 015 strongly recommended.
+- **Depends on**: 013 (GO), 012, 014, **011**, **015**, 016, 018. 011 is not
+  optional — it is the only plan that establishes the plugin loads at all, and a
+  negative pilot result on an unverified build is uninterpretable.
 - **Category**: research
 - **Grounded at**: `abb2c1b` — 2026-09-10
 - **Serves**: [GOAL-developer-adoption.md](GOAL-developer-adoption.md) — this plan
@@ -77,6 +79,10 @@ Before anything else, in writing:
 - **A file with local variables**, if the variable path is to be exercised at all.
 - **A start date and an end date.**
 - **Which config story applies** — shared or per-developer, from plan 016 Step 3.
+  The overall verdict must name it: a per-developer pilot is **not** evidence for
+  the shared-config promise, however well it goes.
+- **Who ran plan 016 Step 4's install check**, and confirmation it was *not* one of
+  these two developers — otherwise condition 1 is measured on a rehearsed install.
 
 **Check**: all six are recorded in `docs/release/pilot-<start-date>.md`. Any
 missing item is a STOP, not a note.
@@ -151,7 +157,8 @@ outcome.
 
 ## Done criteria
 
-- [ ] All six Step 1 items recorded before the pilot started.
+- [ ] All six Step 1 items recorded before the pilot started, plus the config
+      file version from plan 013 that both developers will install.
 - [ ] Pre-registration committed before the start date.
 - [ ] Two install records, including where each developer got stuck.
 - [ ] Two weekly check-ins per developer.

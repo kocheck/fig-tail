@@ -25,7 +25,7 @@ emits `bg-[#3b82f6]`. If it cannot read the pilot team's config it emits
 `plans/README.md:352` records plan 001 landing at **4/8** wild fixtures fully
 resolved. `packages/theme/spike/FINDINGS.md:29-31` names the failing half:
 
-> - External `presets` / cross-package `require`
+> - External `presets` / cross-package `require` (with-preset, monorepo-extend)
 > - Plugin packages (`@tailwindcss/forms`, `@tailwindcss/typography`)
 > - CSS-variable colour strings that are not absolute colours (shadcn-like)
 
@@ -93,7 +93,7 @@ Three ways to get a crash that says nothing about coverage:
    INPUT                       AFTER stripTypeScript
    theme: {                    theme: {
      colors: s.colors,           colors,
-   },                          }
+   },                          (whole line consumed)
    ```
 
    A brace is gone, `acorn.parse` fails, and `v3/evaluate.ts:87` throws
@@ -243,7 +243,12 @@ a coverage NO-GO without ruling out all three Trap 5 causes.
 
 ## Handoff / after it lands
 
-- On **GO**, plan 014 is next, then 012.
+- On **GO**, plan 014 is next, then 012 — **but 012 opens with two UNDECIDED
+  owner decisions** (whether it supersedes disposition F01, and `className` vs a
+  new `rawClassName` field). Put both to the owner as part of reporting this
+  verdict, or 012 stops on arrival. If F01 is upheld, 012 lands in reduced shape
+  and the goal's condition 3 is not fully addressed — plan 017's pre-registration
+  needs to know that.
 - On **NO-GO (coverage)**, the series pauses; the next plan is resolver coverage
   scoped to what actually failed — a far better-grounded plan than one written
   speculatively.
@@ -251,5 +256,6 @@ a coverage NO-GO without ruling out all three Trap 5 causes.
   a P0 defect that will hit real users regardless of this pilot.
 - Keep the config file **and pin its version** — plan 016 Step 3 needs it, and
   plan 017 Step 1 must record which version the pilot ran against. Note the
-  plugin has **no import path for a token JSON** (`grep schemaVersion packages/plugin/src`
-  returns nothing), so 011 and 017 re-resolve the raw config in the plugin UI.
+  plugin has **no production import path for a token JSON** — `grep schemaVersion
+  packages/plugin/src` returns three hits, all in test files — so 011 and 017
+  re-resolve the raw config in the plugin UI.

@@ -14,7 +14,8 @@
 - **Priority**: P0
 - **Effort**: M
 - **Risk**: MED — changes the primary output of the product
-- **Depends on**: none blocking. See "Ordering against plan 011".
+- **Depends on**: **013** (GO). Plan 011's Steps 2–10 depend on this, not the
+  reverse — see "Ordering against plan 011".
 - **Category**: bug
 - **Grounded at**: `abb2c1b` — 2026-09-10
 - **Serves**: [GOAL-developer-adoption.md](GOAL-developer-adoption.md) condition 3
@@ -112,7 +113,8 @@ Recommended: land 012, then run 011 against the build that will actually ship.
 011 Step 9's near-miss observation then confirms the *fix* rather than the defect.
 If 011 has already run, re-run its Steps 7 and 9 after this lands.
 
-This is a scheduling recommendation, not a dependency. Either order works.
+Under the series order (`plans/README.md`), this plan runs **before** 011's Steps
+2–10 and after 011's Step 0.
 
 ## Context the executor needs
 
@@ -474,7 +476,7 @@ a note.
 ### Step 8: Close out
 
 Mark V1 resolved in `docs/release/ux-findings-2026-09-10.md` with the commit SHA.
-Note whether plan 011 Step 9's in-product observation ran, and what it saw.
+If plan 011 Step 0 surfaced anything about near-miss output, note it.
 Update this plan's status row at `plans/README.md`.
 
 **Check**: V1 says resolved and names the commit; the status row reads DONE.
@@ -535,17 +537,18 @@ Update this plan's status row at `plans/README.md`.
   own. Same for `font-['Helvetica Neue']`. Pre-existing, arguably higher-impact
   than the near-miss (it hits every non-token shadow), squarely inside "safe to
   paste", roughly a three-line fix. **Deliberately not folded in** — this plan
-  already carries two undecided design questions — but it should be next, and
+  already carries two undecided design questions — it is **plan 018 Step 1**, and
   Steps 2–3 widen its reach to near-miss rgba fills.
 - **The `none` gap remains.** Unsupported properties still vanish silently from
   the string. Step 6 narrows deliberately to keep `Output → Classes` meaningful;
-  closing it properly is plan 015's, and it is the larger half of the original
-  problem by property count.
+  closing it properly is **plan 018 Step 2** — which also establishes that the gap
+  is narrower than it looks, since `none` is in `ATTENTION_CONFIDENCE` and is
+  invisible only under the `Classes` preference.
 - **Plan 015** inherits the badge inversion (V3): `badge-exact-variable`,
   `badge-exact-value` and `badge-name-match` match no CSS rule, while `arbitrary`
   renders in danger-red. Once near misses carry real classes, that inversion gets
   worse, not better.
-- **Plan 011** should re-run its Steps 7 and 9 against this build.
+- **Plan 011 Step 9** observes this behaviour in-product, against the fixed build.
 - **A reviewer should scrutinise** Step 4's triage hardest — which assertions were
   updated and why — and Step 6's retention condition, which is where narrowing it
   to make a test pass would silently hollow out the plan.

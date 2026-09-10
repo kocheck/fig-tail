@@ -38,9 +38,12 @@ treat it as very likely and unobserved. The vendored typings
 (`@figma/plugin-typings`) declare both methods with no deprecation marker and no
 mention of `dynamic-page`, which is exactly why `pnpm typecheck` never flagged it.
 
-Every other document read in this plugin already uses the async form —
-`pipeline.ts:114`, `stamp/apply.ts:87`, `lint/variables.ts:108`. `hints.ts:49` is
-the only straggler.
+Every other **by-id node or variable lookup** in this plugin already uses the
+async form — `pipeline.ts:114`, `stamp/apply.ts:87`, `lint/variables.ts:108`.
+`hints.ts:49` is the only straggler. (Plenty of *other* document reads are
+legitimately synchronous — `figma.root.getPluginData` at `storage.ts:256, 286,
+301`, the selection reads at `lint/scan.ts:51-53` — so the pattern is about by-id
+lookups, not synchronicity in general.)
 
 **What is actually lost if it throws** — stated precisely, because the impact is
 narrower than it first looks and misreading it will mislead plan 011:
@@ -133,7 +136,9 @@ Use the `\b` form.
 - `packages/plugin/src/pipeline.ts` — the `await` at `:119`, the `varCache` element
   type at `:62`, and the doc comment at `:132-140`.
 - `packages/plugin/src/mode-dev.ts` — the `await` at `:73` **and passing a cache**.
-- `packages/plugin/src/codegen/hints.test.ts` — both mocks and all 8 call sites.
+- `packages/plugin/src/codegen/hints.test.ts` — both mocks and all **10**
+  `collectHints(...)` invocations (8 `it()` blocks; `:132-133` and `:148-149`
+  each call it twice).
 - `packages/plugin/src/pipeline.test.ts`, `pipeline.consistency.test.ts` — the two
   remaining sync mocks, plus one new test with a real `boundVariables` node.
 - `packages/plugin/notes/platform-preflight.md`.

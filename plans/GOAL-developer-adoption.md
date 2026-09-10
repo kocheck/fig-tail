@@ -1,6 +1,6 @@
 # Goal: two developers adopt fig-tail
 
-Set 2026-09-10. This is the goal plans 011–016 serve. Every plan in the series
+Set 2026-09-10. This is the goal plans 011–017 serve. Every plan in the series
 is justified by a line in here; anything that isn't, doesn't belong in the series.
 
 ## The goal
@@ -34,7 +34,9 @@ adopted; it has been shown.
 
 - **V1 becomes a blocker, not a polish item.** A near-miss currently drops the
   property from the class string with no signal
-  (`packages/match/src/index.ts:184`, see `docs/release/ux-findings-2026-09-10.md`).
+  (`packages/match/src/index.ts:186` — and again at `summarise.ts:12`, which feeds
+  the Inspect panel, plus a dead third copy at `normalise.ts:163`; see
+  `docs/release/ux-findings-2026-09-10.md`).
   A developer who pastes a string and gets an unstyled box learns to hand-check
   everything. Condition 3 cannot hold while V1 holds.
 - **The Figma Community listing is not on the critical path.** Two named

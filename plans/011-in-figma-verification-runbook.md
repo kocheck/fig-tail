@@ -21,8 +21,10 @@
 - **Priority**: P0
 - **Effort**: L
 - **Risk**: MED
-- **Depends on**: plans/000–008 and 010 (DONE in code). Plan 009 is REJECTED
-  for this ship and is not a dependency.
+- **Depends on**: **013** (GO) for Step 0; **012, 014, 015** for Steps 2–10.
+  Plans 000–008 and 010 are DONE in code; 009 is REJECTED and is not a dependency.
+- **Serves**: [GOAL-developer-adoption.md](GOAL-developer-adoption.md) — all four
+  conditions. Nothing below is trustworthy until the build is known to work.
 - **Category**: process
 - **Grounded at**: `abb2c1b` — 2026-09-10
 
@@ -46,7 +48,8 @@ Figma actually returns.
 This plan converts that pile of assumptions into recorded evidence for a 0.1.0
 that ships as a **local/team manifest install**. The Figma Community publish is
 deliberately deferred to 0.2.0, because on a Professional plan the only route to
-a shared plugin ID is publishing — see "Breaking the circularity".
+a shared plugin ID is publishing. That decision and its experiment now live in
+**plan 016**.
 
 Intent, for judgment calls: **the goal is truthful status, not green status.**
 A recorded FAIL or BLOCKED with a documented reason is a complete success of this
@@ -118,8 +121,8 @@ them, because a summary is not a spec and the API may have moved.
    `packages/plugin/src/codegen/` and `mode-dev.ts` returns nothing, and
    `grep -rn "console\." packages/plugin/src/` returns nothing either. The
    linter does surface duration (`packages/plugin/src/ui/main.tsx:400` renders
-   `${state.lint.durationMs}ms`), so Step 7 has a real instrument and Step 6 has
-   none. Step 6 says how to handle that.
+   `${state.lint.durationMs}ms`), so the linter has a real instrument and codegen
+   has none. Step 6 says how to handle that.
 4. **The cross-plugin isolation spike reads the wrong keys, and would pass
    vacuously.** `spikes/figma-platform-isolation/main.js:3` reads
    `['ft.spike.meta', 'ft.spike.chunk.0', 'ft.spike.chunk.1']` — the *capture
@@ -127,8 +130,9 @@ them, because a summary is not a spec and the API may have moved.
    (`packages/plugin/src/storage.ts:25-30`: `figtail.meta`, `figtail.payload.*`,
    `figtail.document-id`). Run as-is against a fig-tail config it prints
    `ISOLATION PASS` regardless of whether plugin-data namespacing works, because
-   it looks for keys that exist under no plugin ID at all. Step 5 fixes this
-   before measuring anything.
+   it looks for keys that exist under no plugin ID at all. **Plan 016 Step 1** fixes
+   this before measuring anything; it is recorded here only as context for why the
+   isolation row is not this plan's to close.
 
 ## Inputs & resources
 
@@ -138,13 +142,10 @@ blocks, so a missing input costs that step rather than the run.
 | Input | Detail | Blocks |
 |---|---|---|
 | Figma **desktop** app | Record exact version in the env stamp | all |
-| Account **A** | Edit access on the test file | 2–9 |
-| Account **B** | Separate account, **view-only** (no edit access) on the test file | 3b, 8 (no-edit row), 4 |
-| A shared plugin ID both accounts can install | See Step 1. Under route B this is expected to be unobtainable | 4 only |
-| A real `tailwind.config.js`/`.ts` (v3) or CSS entry with `@theme` (v4) | The team's real config, not a fixture | 3–9 |
+| Account **A** | Edit access on the test file | 2, 3, 5c, 6, 9 |
+| Account **B** | Separate account, **view-only** (no edit access) on the test file | 3b |
+| The pilot team's config, from plan 013 | The team's real config, not a fixture | 0, 3, 5c, 9 |
 | Matching `package.json` with an exact `x.y.z` `tailwindcss` version | Ranges are rejected by design | 3 |
-| A **throwaway** Figma file with local variables | Step 8 writes to it | 8 |
-| A large Figma file, ≥1,000 nodes on one page | Record its source URL so the measurement is reproducible | 7 |
 | Test file with the nine stable node names | **Does not exist yet — build it.** The names and expected classes are the table at `fixtures/figma/README.md:20-30` (`Card / exact`, `Text / exact`, `Size / fixed`, `Colour / near`, `Spacing / near`, `Variable / bound`, `Gradient / unsupported`, `Layout / nested`, `Text / mixed`). These are layer names, *not* the slug filenames in `fixtures/figma/css/design/`. Paste the file's share URL into `fixtures/figma/README.md:7`. | 2, 9 |
 | Someone who has not seen the plugin | For the Step 2 discoverability question only. Optional — Step 2 says what to do without one | 2 (one question) |
 
@@ -194,7 +195,6 @@ never `PASS`.
 
 - `packages/plugin/notes/*.md` — result rows and env stamps.
 - `docs/release/feature-audit.md`, `docs/release/approval-packet.md` — status rows.
-- `docs/community/publish-runbook.md` — prerequisite checkboxes only.
 - `docs/release/evidence/2026-09-10/` — new screenshots.
 - `docs/release/ux-findings-2026-09-10.md` — the V1 row only, to record what Step 9
   observed in-product.
@@ -216,16 +216,17 @@ never `PASS`.
 - **Submitting to Figma Community, or tagging/publishing to npm — including an
   unlisted or link-only publish.** An unlisted publish is still a publish and
   still needs an owner decision. This plan produces evidence; it does not decide.
-- **`manifest.json`'s `id` field**, except as Step 1 explicitly directs.
+- **`manifest.json`** entirely — plan 015 edits its preferences, plan 016 owns
+  its `id`.
 - **The owner-decision rows in `docs/release/approval-packet.md`.** Fill the
   prepared-status rows; leave APPROVED/DEFER/REJECT to the owner.
 - **Plan 009 / `@fig-tail/cli`.** REJECTED for this ship.
 
 ## Working approach
 
-Branch `verify/in-figma-0.1.0`, cut from the commit this plan is grounded at
-(`abb2c1b`) or the current default branch head, whichever the owner names — record
-which. One commit per step, message `011-<step number>: <summary>` (matching the
+Branch `verify/in-figma-0.1.0`, cut from the head that includes plans 012, 014 and
+015. **Do not cut from `abb2c1b`** — that is the pre-fix build, and measuring it is
+the thing this ordering exists to avoid. Record the SHA you cut from. One commit per step, message `011-<step number>: <summary>` (matching the
 `<plan>-<task>` convention in `plans/EXECUTOR-GUIDE.md:252-259`). Commit evidence
 screenshots alongside the note edit they support. Do not open a PR unless asked.
 
@@ -355,7 +356,8 @@ proves nothing. On account B, view-only on the same file: run setup, Resolve,
 **This does not need a shared plugin ID.** Personal config lives in
 `clientStorage`, which is per-user per-plugin, so account B running its own
 manifest import is a valid test of "can a no-edit-access user save a personal
-config". Only Step 4's cross-account *document read* needs the IDs to match.
+config". Only the cross-account *document read* — **plan 016 Step 2** — needs the
+IDs to match.
 
 Also record what **Apply to file** does on account B, since `canWriteDocument`
 is computed but the button is rendered unconditionally — expected is a failure
@@ -487,8 +489,10 @@ line 73's claim corrected.
 
 Propagate every result into the summary surfaces:
 
-- `docs/release/feature-audit.md` — the **six** CONDITIONAL rows (lines 9–14) and
-  the blocker row (line 17). Line 38's summary verdict too.
+- `docs/release/feature-audit.md` — only the rows this plan's steps measured.
+  The cross-account blocker row (line 17) belongs to **plan 016**; the linter and
+  subtree rows (12, 14) have no owner until Community publish returns — mark both
+  with that reason rather than leaving them bare.
 - `docs/release/approval-packet.md` — prepared-status rows only (line 22 included).
 - `docs/community/publish-runbook.md` — the cross-account prerequisite checkbox.
 - `plans/README.md` — this plan's status row, plus the `UNVERIFIED` caveats in
@@ -528,22 +532,22 @@ ALL must hold:
 
 - [ ] Every row **that a step in this plan targets** reads PASS, FAIL, or
       BLOCKED-with-reason — no `UNVERIFIED`, no bare `PASS`. Specifically: the
-      route table and storage/stamping matrices in `platform-preflight.md`, the
-      eight rows of `storage-matrix.md` plus the two new ones from Step 3, the
-      in-product question in `stamping-verification.md`, the 1,000-node row in
-      `linter-performance.md`, the 100+ node row in `subtree-performance.md`, and
-      all three questions in `devmode-discovery.md` (which is prose, not a table —
-      answer them in place). Rows in those files describing code-level facts no
-      step measures are left alone.
+      route table in `platform-preflight.md`, the **six** rows of
+      `storage-matrix.md` this plan's Step 3 covers plus the two new ones it adds,
+      the new "Variable hints" row from Step 5c, and all three questions in
+      `devmode-discovery.md` (prose, not a table — answer them in place). Rows
+      describing code-level facts no step measures are left alone.
+- [ ] Rows this plan **no longer covers** are left UNVERIFIED with a written
+      reason naming their owner: cross-account read and cross-plugin isolation →
+      **plan 016**; the 1,000-node linter row, the 100+ node subtree row and the
+      stamping matrix → **cut** (no developer pasting a class string touches
+      those features; they return if Community publish does).
 - [ ] Every PASS row names an observed value and the build SHA; the session
       carries one env stamp; the four gating rows carry screenshots.
 - [ ] Step 0 ran, and this plan was revised from what it found.
-- [ ] Every expectation this plan found to be **wrong about the build** — the Dev
-      Mode and no-edit-access stamp rows, the isolation spike's keys, the
-      "Save on file"/"Save personal" button names in `README.md` and
-      `docs/setup.md` — is corrected or recorded as a finding.
-- [ ] The cross-account document read row is PASS, FAIL, or BLOCKED with Step 1's
-      written reason and route B recorded.
+- [ ] Every expectation this plan found to be **wrong about the build** is
+      corrected or recorded as a finding. (The button-name mismatch is plan 015's
+      to fix; if you still see "Save on file" in the docs, 015 did not run.)
 - [ ] Nothing was published to Figma Community or npm under this plan.
 - [ ] Both fixture directories hold real captures, and `pnpm check` is either
       exit 0 or its failures are recorded verbatim in `fixture-recapture.md`.
@@ -562,21 +566,13 @@ Stop and report back — do not improvise — if:
 
 - **Step 9's `pnpm check` fails after re-capture.** Report the failures; never
   edit a captured fixture to go green.
-- **Anyone proposes switching off route B** (publishing to Community to unblock
-  Step 4). That is a new owner decision, not an executor call.
-- **Step 1 finds no route to a shared plugin ID.** Do not substitute two
-  manifest imports and record the result as a real cross-account test.
-- **Step 1's escape hatches look like they work but the two plugin IDs differ.**
-  A "none" tier on account B then proves nothing except the method was wrong.
 - **The evidence recorded would be against a plugin ID that is not the shipping
   one**, and nobody has decided whether that is acceptable.
-- **Any step would require editing `packages/*/src/**`** to proceed. Step 5's
-  spike fix is the only permitted code change, and `spikes/` is not `src/`.
+- **Any step would require editing `packages/*/src/**`** to proceed. This plan
+  measures the build; it does not change it.
 - **Stamping Apply is about to run on anything other than the throwaway file.**
 - **The plugin does not load at all in Step 2** — everything downstream is moot;
   report immediately rather than working around it.
-- **Step 5's positive control fails** — the isolation reader cannot see its own
-  data. An empty read then proves nothing.
 - **A check's result is ambiguous** — a tier you cannot explain, or a label that
   is not one of the **four** quoted in "Current state". Record what you saw and
   ask. Do not round it to the nearest expected outcome.
@@ -587,7 +583,7 @@ Stop and report back — do not improvise — if:
   reopening condition is concrete: an Organization/Enterprise workspace to
   publish privately into, or a confirmed collaborator-invite route. (An unlisted
   publish would also do it, but is itself a publish and needs its own decision.)
-  When one appears, Step 4 is the only step that needs re-running.
+  When one appears, **plan 016 Step 2** is what re-runs.
 - **npm is unaffected.** `@fig-tail/theme` and `@fig-tail/match` were never
   gated on cross-account read; that decision stays in the approval packet.
 - **The demo checklist** in `plans/README.md` ("Before you show it to
