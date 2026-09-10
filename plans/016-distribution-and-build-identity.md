@@ -114,24 +114,65 @@ Run in the design editor on a throwaway file, in one sitting.
    before the isolation read, confirm fig-tail shows
    `Using the config saved on this file` on that file. Without it, an empty read
    is indistinguishable from "no config here".
-4. **Enumerate.** Call `figma.root.getPluginDataKeys()` from the isolation spike.
-   It should return exactly its own control key and none of `figtail.*`.
-5. **Then the real question.** Import the **same** `packages/plugin/manifest.json`
-   on a second account. Save a config on the file from account A. From account B,
-   open the file and read the tier.
+4. **Enumerate, both namespaces.** Call `figma.root.getPluginDataKeys()` from the
+   isolation spike: it should return exactly its own control key and none of
+   `figtail.*`. **Also call `figma.root.getSharedPluginDataKeys('figtail')`** and
+   record it empty — that is the evidence behind the shipped privacy claim, since
+   `grep -rn setSharedPluginData packages/plugin/src/` returns nothing and nobody
+   has confirmed it in product.
+
+   While here, replace the stale verdict at
+   `packages/plugin/notes/platform-preflight.md:49` —
+   `PASS (by documented private-plugin-data semantics); in-product UNVERIFIED`,
+   the exact "PASS (code path)" pattern this project has been burned by — and
+   reconcile it with `storage-matrix.md:14`, which says UNVERIFIED for the same
+   check. The two records disagree and no other plan touches either.
+
+5. **Then the real question**, which needs its own controls — sub-steps 1–4 test
+   isolation between two *different* ids and do not control this at all.
+
+   **Before B reads anything**: confirm both installs report the same
+   `figma.pluginId`. **Clear B's personal config** (`Remove personal config`), or
+   the tier you read is B's own. **Run in Dev Mode, not the design editor** —
+   `mode-design.ts:21-29` posts `kind: 'empty'` with no tier string when there is
+   no config, so there is no reading to take. Have B open the file **after** A
+   saves: `readConfig` caches at module level and clears only on its own writes
+   (`storage.ts:246-252`).
+
+   Then: A saves a config on the file, B opens it in Dev Mode, B reads the label.
+
+**How to score the label — this is easy to get backwards.** `storage.ts:400` is
+`const overridden = available.document && available.user && preferred === 'user'`,
+so the "overriding" label **requires the document tier to have been readable**:
+
+| Label B sees | Means |
+|---|---|
+| `Using the config saved on this file` | **Shared.** B read A's document config. |
+| `Using your personal config — overriding this file's shared config` | **Also shared** — `overridden` cannot be true unless `available.document` is true. B simply also has a personal config, which is why you were told to clear it. |
+| `Using your personal config — this file has no shared one` | **Not shared** — after ruling out the four confounds above. |
+| `No Tailwind config — …` | **Not shared**, same caveat. |
+
+Scoring the second row as "a lower tier" would kill the shared-config story on
+evidence that proves the opposite.
 
 **Check**: `packages/plugin/notes/storage-matrix.md` gains a "Plugin identity"
-section recording: the positive control, the negative control, the enumeration,
-and — the point of the exercise — whether account B saw
-`Using the config saved on this file` or a lower tier. State plainly what that
-implies about whether a manifest `id` is the namespace key.
+section recording both `figma.pluginId` values, the positive control, the
+fig-tail-side negative control, both enumerations, confirmation that B's personal
+config was cleared, the verbatim label B saw, and its reading from the table
+above. State plainly what it implies about whether a manifest `id` is the
+namespace key.
 
 ### Step 2: Cross-account document read — if Step 1 says it is possible
 
-If Step 1 showed two same-manifest imports share a namespace, run the
-second-account procedure already written at
-`packages/plugin/notes/storage-matrix.md:28-40` and record PASS or FAIL with both
-accounts' details.
+Step 1.5 **is** the cross-account read. Do not re-record it here as though it were
+an independent confirmation — one observation written into two documents reads to
+a later reviewer as two, and this is the row that flips
+`docs/release/feature-audit.md:17` from `**BLOCKER for Community**` to PASS.
+
+What this step adds is **replication**: run the procedure at
+`packages/plugin/notes/storage-matrix.md:28-40` again, on a different file, after
+a Figma restart on both accounts. If the second run disagrees with the first, that
+is the finding.
 
 If Step 1 showed they do not, record
 `BLOCKED — separate imports get separate namespaces; see plan 016 Step 1` and go
@@ -213,8 +254,8 @@ rendered. `docs/install.md` has an "updating" section naming the steps.
 ## STOP conditions
 
 - **Step 1's positive control fails** — the reader cannot see its own data.
-- **Step 1's two imports produce ids you cannot confirm are identical.** A shared
-  read then proves nothing; report rather than assuming.
+- **`figma.pluginId` differs between the two installs, or you cannot read it.** A
+  shared or unshared read then proves nothing; report rather than assuming.
 - **Anyone proposes publishing to Community** to solve the distribution problem.
   That reverses an owner decision.
 - **The install requires more than the documented steps** and you are tempted to
@@ -227,7 +268,10 @@ rendered. `docs/install.md` has an "updating" section naming the steps.
   personal-tier pilot as evidence for the shared-config promise.
 - **If Step 1 clears the namespace question**, the Community-publish blocker in
   `docs/community/publish-runbook.md` may be closable — but publishing is still a
-  separate owner decision for 0.2.0.
+  separate owner decision for 0.2.0, **and the evidence does not carry over
+  unchanged**: a Community publish assigns a Figma-issued plugin ID, so the
+  *mechanism* conclusion survives while every config stored under `fig-tail-dev`
+  becomes unreadable. Restate that wherever the blocker is closed.
 - **A reviewer should scrutinise** Step 1's inference hardest. It replaces an
   uncited claim that has shaped the entire program, and replacing one confident
   unverified sentence with another would be the worst outcome available.
