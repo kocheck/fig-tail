@@ -40,9 +40,14 @@ whether the CSS shapes the matching engine was built against resemble what
 Figma actually returns. This plan converts that pile of assumptions into
 recorded evidence, so the publish decision is made on facts.
 
+This plan converts that pile of assumptions into recorded evidence for a 0.1.0
+that ships as a **local/team manifest install**. The Figma Community publish is
+deliberately deferred to 0.2.0, because on a Professional plan the only route to
+a shared plugin ID is publishing — see "Breaking the circularity".
+
 Intent, for judgment calls: **the goal is truthful status, not green status.**
-A recorded FAIL with a documented fallback is a complete success of this plan.
-Manufacturing a PASS is the only real failure mode.
+A recorded FAIL or BLOCKED with a documented reason is a complete success of this
+plan. Manufacturing a PASS is the only real failure mode.
 
 ## Context the executor needs
 
@@ -104,15 +109,15 @@ them, because a summary is not a spec and the API may have moved.
 
 ## Inputs & resources
 
-Have all of these before starting. Missing any one of them blocks a specific
-step, named in the right-hand column.
+Have these before starting. The right-hand column names which step each one
+blocks, so a missing input costs that step rather than the run.
 
 | Input | Detail | Blocks |
 |---|---|---|
 | Figma **desktop** app | Record exact version in the env stamp | all |
 | Account **A** | Edit access on the test file | 2–9 |
-| Account **B** | Separate account, Dev-seat or view-only, on the same file | 4 |
-| A shared plugin ID both accounts can install | See Step 1 — this is the gate | 4 |
+| Account **B** | Separate account, view-only or Dev seat, on the same file | 3.2, 4 |
+| A shared plugin ID both accounts can install | See Step 1. Under route B this is expected to be unobtainable | 4 only |
 | A real `tailwind.config.js`/`.ts` (v3) or CSS entry with `@theme` (v4) | The team's real config, not a fixture | 3–9 |
 | Matching `package.json` with an exact `x.y.z` `tailwindcss` version | Ranges are rejected by design | 3 |
 | A **throwaway** Figma file with local variables | Step 8 writes to it | 8 |
@@ -230,25 +235,34 @@ both accounts. Under route B, or if no route yields a shared ID, record Step 4 a
 `BLOCKED — Professional plan has no private-share route; see plan 011 Step 1`
 and continue to Step 2.
 
-### Breaking the circularity — OWNER DECISION: UNDECIDED
+### Breaking the circularity — OWNER DECISION: **route B**, decided 2026-09-10
 
-Pick one before Step 1 runs. Each has a different blast radius.
+**0.1.0 ships as a local/team manifest install. It is not published to Community
+in this pass, and the cross-account row is expected to end BLOCKED.** The
+alternatives are kept below so the reasoning survives; do not switch routes
+mid-run without a new owner decision.
 
 | Route | What happens | Cost |
 |---|---|---|
-| **A. Publish, then verify** | Publish to Community — that ID is the shipping ID — then immediately run Step 4 on account B. On FAIL, unpublish or patch. | A public listing exists before the blocker clears. Requires listing copy that does **not** claim team sharing until Step 4 is PASS. |
-| **B. Re-scope 0.1.0 to local/team install** | Do not publish. Verify Steps 2–3 and 5–9 fully; record cross-account as BLOCKED with the plan-tier reason. Ship via manifest import for the team demo. | Community publish slips to 0.2.0. Matches the existing CHANGELOG note that the plugin ships via Community *or* local manifest install. |
-| **C. Borrow an org** | Run the cross-account test inside an Organization/Enterprise workspace you have access to, via org-private publishing. | Needs an org you can publish into. The plugin ID there is not the shipping ID, so mechanism evidence transfers but stored config does not. |
+| A. Publish, then verify | Publish to Community — that ID is the shipping ID — then immediately run Step 4 on account B. On FAIL, unpublish or patch. | A public listing exists before the blocker clears. Requires listing copy that does **not** claim team sharing until Step 4 is PASS. |
+| **B. Re-scope 0.1.0 to local/team install — CHOSEN** | Do not publish. Verify Steps 2–3 and 5–9 fully; record cross-account as BLOCKED with the plan-tier reason. Ship via manifest import for the team demo. | Community publish slips to 0.2.0. Matches the existing CHANGELOG note that the plugin ships via Community *or* local manifest install. |
+| C. Borrow an org | Run the cross-account test inside an Organization/Enterprise workspace you have access to, via org-private publishing. | Needs an org you can publish into. The plugin ID there is not the shipping ID, so mechanism evidence transfers but stored config does not. |
 
-**Recommended: B**, unless the Community listing is time-critical. It is the only
-route where every published claim stays backed by evidence, and it costs nothing
-that a 0.2.0 publish cannot recover once an org or an escape hatch exists. Under
-B, Step 4 is *expected* to end BLOCKED — a correct outcome of this plan, not a
-failure of it.
+**Why B.** It is the only route where every published claim stays backed by
+evidence, and it costs nothing a 0.2.0 publish cannot recover once an org or an
+escape hatch exists. It also matches what `CHANGELOG.md` already says — the
+plugin ships via Community *or* local manifest install.
 
-If **A** is chosen, add a Step 4a: before submitting, strip every team-sharing
-claim from `docs/community/listing.md` and `README.md`, and restore it only on a
-Step 4 PASS.
+**What B means for this plan**: Steps 2, 3, 5, 6, 7, 8 and 9 run in full and are
+expected to produce real PASS/FAIL rows. Step 4 runs **only** if one of Step 1's
+escape hatches works; otherwise it is recorded BLOCKED with the plan-tier reason.
+A run that ends with Step 4 BLOCKED and everything else evidenced is a **complete
+success** of this plan.
+
+**What B does not change**: nothing about the plugin's behaviour or copy. The
+README already hedges Community install as "when published", so no claim needs
+retracting. Do not add "local install only" language to shipped docs under this
+plan — that is a release decision, and it belongs to the owner.
 
 ### Step 2: Confirm all three routes load
 
@@ -284,8 +298,17 @@ and none labels unobservable without a reset. Run these in order on one file:
 1. **None** — on a file with no config at either tier, select a layer. Expect
    the none label and generic arbitrary suggestions.
 2. **Personal** — run setup, Resolve, **Save personal**. Reload. Expect the
-   personal label. Do this from a view-only or Dev-Mode context to also prove
-   the "no edit access required" claim in one shot.
+   personal label.
+
+   Substep **3.2** doubles as the "personal write without edit access" row, but
+   only if performed by an account that genuinely lacks edit access — account A
+   in Dev Mode still holds edit rights and does not prove it. Use account B on a
+   view-only seat. **This does not need a shared plugin ID**: personal config
+   lives in `clientStorage`, which is per-user per-plugin, so account B running
+   its own manifest import is a valid test of "can a no-edit-access user save a
+   personal config". Only the cross-account *document read* in Step 4 needs the
+   IDs to match. Run substeps 1 and 2 on account B, then continue from substep 3
+   on account A.
 3. **Document** — **Save on file** (needs edit access). Reload. Expect the
    document label, and confirm it now takes precedence over the personal config
    saved in substep 2.
@@ -297,14 +320,22 @@ and none labels unobservable without a reset. Run these in order on one file:
 Write down the reset procedure you used to return the file to "no config" — the
 next person needs it, and it is not currently documented anywhere.
 
-**Check**: rows 1, 2, 3, 4 and 10 of the table in
-`packages/plugin/notes/storage-matrix.md` carry observed labels matching the
-verbatim strings in "Current state" above, each with a screenshot; the reset
-procedure is written into that file.
+**Check**: the "Document write + same-user reload", "Document write + Figma
+restart", "Personal write without edit access" and "Preference switch
+document↔user persists" rows of `packages/plugin/notes/storage-matrix.md` carry
+observed labels matching the verbatim strings in "Current state" above, each with
+a screenshot. The personal-without-edit-access row names the account and seat
+used. The reset procedure is written into that file.
 
-### Step 4: Cross-account document read — the Community blocker
+### Step 4: Cross-account document read — run only if an escape hatch worked
 
-Requires Step 1 to have produced a shared plugin ID. Follow the procedure
+Under the chosen route B there is no Community publish in this pass, so this step
+usually does **not** run. Run it only if Step 1's time-boxed checks found a
+collaborator-invite or unlisted-publish route that puts the *same* plugin ID on
+both accounts. If they did not, record BLOCKED and move to Step 5 — do not
+improvise a substitute.
+
+If a route was found: follow the procedure
 already written in `packages/plugin/notes/storage-matrix.md` under
 "Second-account procedure": account A saves on file, shares the file with
 account B, account B installs the **same** plugin ID, opens the file in Dev
@@ -315,10 +346,12 @@ not personal, not none. A "none" result here means B is reading a different
 namespace: re-check that the plugin IDs genuinely match before recording FAIL.
 
 **Check**: the "Cross-account document read" row in `storage-matrix.md` and in
-`docs/release/feature-audit.md` reads PASS or FAIL with both accounts' env
-stamps and a screenshot of account B's Dev Mode showing the document label. On
-FAIL, apply the fallback already written in `storage-matrix.md`: keep the
-personal path labelled, do not claim team setup in Community copy.
+`docs/release/feature-audit.md` reads either PASS/FAIL with both accounts' env
+stamps and a screenshot of account B's Dev Mode showing the document label, or
+`BLOCKED — Professional plan has no private-share route; route B chosen
+2026-09-10; see plan 011 Step 1`. On FAIL, apply the fallback already written in
+`storage-matrix.md`: keep the personal path labelled, do not claim team setup in
+Community copy.
 
 ### Step 5: Confirm cross-plugin isolation
 
@@ -453,8 +486,9 @@ ALL must hold:
       `subtree-performance.md` and `devmode-discovery.md` reads PASS, FAIL, or
       BLOCKED-with-reason — no `UNVERIFIED`, no bare `PASS`.
 - [ ] Every PASS row names an observed value, a committed screenshot, and an env stamp.
-- [ ] The cross-account document read row is PASS or FAIL — **or** BLOCKED with
-      Step 1's written reason and the chosen circularity route recorded.
+- [ ] The cross-account document read row is PASS, FAIL, or BLOCKED with Step 1's
+      written reason and route B recorded.
+- [ ] Nothing was published to Figma Community or npm under this plan.
 - [ ] Both fixture directories hold real captures, and `pnpm check` is either
       exit 0 or its failures are recorded verbatim in `fixture-recapture.md`.
 - [ ] `platform-preflight.md` line 73's false claim about fixture consumption is corrected.
@@ -468,12 +502,12 @@ Stop and report back — do not improvise — if:
 
 - **Step 9's `pnpm check` fails after re-capture.** Report the failures; never
   edit a captured fixture to go green.
-- **The "Breaking the circularity" decision still reads UNDECIDED.** Step 1 does
-  not start until the owner has picked A, B or C.
+- **Anyone proposes switching off route B** (publishing to Community to unblock
+  Step 4). That is a new owner decision, not an executor call.
 - **Step 1 finds no route to a shared plugin ID.** Do not substitute two
   manifest imports and record the result as a real cross-account test.
-- **Route A was chosen and Step 4 comes back FAIL.** Unpublishing a live listing
-  is an owner decision, not an executor one.
+- **Step 1's escape hatches look like they work but the two plugin IDs differ.**
+  A "none" tier on account B then proves nothing except the method was wrong.
 - **The evidence recorded would be against a plugin ID that is not the shipping
   one**, and nobody has decided whether that is acceptable.
 - **Any step would require editing `packages/*/src/**`** to proceed (Step 6's
@@ -487,9 +521,12 @@ Stop and report back — do not improvise — if:
 
 ## Handoff / after it lands
 
-- **The publish decision is downstream of this plan, not part of it.** With
-  evidence recorded, the owner works `docs/release/approval-packet.md` and, on
-  a cross-account PASS plus approval, `docs/community/publish-runbook.md`.
+- **Community publish is deferred to 0.2.0 by decision, not by oversight.** The
+  reopening condition is concrete: an Organization/Enterprise workspace to
+  publish privately into, or a confirmed collaborator-invite / unlisted-publish
+  route. When one appears, Step 4 is the only step that needs re-running.
+- **npm is unaffected.** `@fig-tail/theme` and `@fig-tail/match` were never
+  gated on cross-account read; that decision stays in the approval packet.
 - **The demo checklist** in `plans/README.md` ("Before you show it to
   developers") is the *other* prerequisite for showing this to anyone. This
   plan does not satisfy it — it makes satisfying it possible.
