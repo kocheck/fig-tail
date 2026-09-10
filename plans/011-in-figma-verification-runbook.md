@@ -179,6 +179,8 @@ never `PASS`.
 - `docs/release/feature-audit.md`, `docs/release/approval-packet.md` — status rows.
 - `docs/community/publish-runbook.md` — prerequisite checkboxes only.
 - `docs/release/evidence/2026-09-10/` — new screenshots.
+- `docs/release/ux-findings-2026-09-10.md` — the V1 row only, to record what Step 9
+  observed in-product.
 - `fixtures/figma/css/{design,dev}/*.json` and
   `packages/match/fixtures/css/*.json` — Step 9 re-capture only.
 - `fixtures/figma/README.md` — the file URL at line 7, and the "seeded from
@@ -558,6 +560,25 @@ signal.
    dev output actually match (the preflight note calls this a provisional PASS).
 5. Run `pnpm check`.
 
+**While you have each node selected, record one extra observation.** Two of the
+nine nodes exist precisely to exercise near-misses: `Colour / near` (ΔE ~0.8 from
+`brand-500`) and `Spacing / near` (25 px against a 24 px token). For each, on the
+Dev Mode Code section, write down **the complete primary class string** — then
+switch the `Output` preference to **Classes** and write it down again.
+
+The code says the near-miss property is absent from both
+(`packages/match/src/index.ts:184` filters `confidence !== 'nearest'`, and
+`mode-dev.ts:78` drops the notes section under `Classes`), so the expected
+observation is a class string with **no background utility** on `Colour / near`
+and **no padding utility** on `Spacing / near`, with no note explaining the
+absence under `Classes`.
+
+Nobody has watched this happen. Confirming it in-product converts
+`docs/release/ux-findings-2026-09-10.md` finding V1 from a code reading into an
+observed fact, and it costs one extra look at nodes you are already selecting.
+Record it either way — including if the property turns out to be present, which
+would mean V1 is wrong.
+
 **If tests fail, that is the finding.** It means the matching engine was tuned
 to fabricated CSS shapes. Record the failures verbatim in a new
 `packages/plugin/notes/fixture-recapture.md` and STOP. **Do not edit the
@@ -631,6 +652,9 @@ ALL must hold:
 - [ ] Both fixture directories hold real captures, and `pnpm check` is either
       exit 0 or its failures are recorded verbatim in `fixture-recapture.md`.
 - [ ] `platform-preflight.md` line 73's false claim about fixture consumption is corrected.
+- [ ] The near-miss observation from Step 9 is recorded for both `Colour / near`
+      and `Spacing / near`, under both `Output` settings, and the result is noted
+      against finding V1 in `docs/release/ux-findings-2026-09-10.md`.
 - [ ] No file under `packages/*/src/**` was modified. (`spikes/figma-platform-isolation/main.js`
       is expected to change, per Step 5.)
 - [ ] `docs/release/feature-audit.md` and `approval-packet.md` reflect every result.
