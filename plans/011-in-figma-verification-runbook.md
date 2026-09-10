@@ -10,7 +10,9 @@
 > evidence files, but may never record a verification result it did not observe.
 >
 > **Drift check (run first)**:
-> `git diff --stat abb2c1b..HEAD -- packages/plugin fixtures/figma packages/match/fixtures`
+> `git diff --stat abb2c1b..HEAD -- packages/plugin packages/match/src fixtures/figma packages/match/fixtures`
+> (`packages/match/src` matters: plan 012 changes only files there, so without it
+> a 012'd build reports clean drift and Step 9 measures the wrong expectations.)
 > If the plugin source, manifest, or CSS fixtures changed since `abb2c1b`, re-read
 > "Current state" below and confirm it still holds before starting.
 
@@ -28,10 +30,10 @@
 
 fig-tail 0.1.0 is fully built and unit-tested, and has never once been run
 inside Figma. Eight of the eleven plans (000, 003, 004, 005, 006, 007, 008, 010)
-are marked DONE with an `UNVERIFIED` caveat, and 37 `UNVERIFIED` markers sit
-across `packages/plugin/notes/`, `docs/release/` and `plans/README.md` — all of
-them resting on documentation reading plus code-path inspection rather than
-observation. One — cross-account document read — is the named blocker on the
+are marked DONE with an `UNVERIFIED` caveat, and **48** `UNVERIFIED` markers sit
+across `packages/plugin/notes/`, `docs/`, `fixtures/figma/` and `plans/README.md`
+at `abb2c1b` (measured, not estimated) — all of them resting on documentation
+reading plus code-path inspection rather than observation. One — cross-account document read — is the named blocker on the
 Figma Community publish.
 
 The cost is not theoretical. This repo's own demo checklist says a plugin that
@@ -165,7 +167,14 @@ result in Figma, and writes all three of:
 2. **An artifact** — screenshot committed to
    `docs/release/evidence/2026-09-10/<step>-<name>.png`, referenced by filename.
 3. **An env stamp** — Figma desktop version, account label (A/B), seat type,
-   plugin ID used, date.
+   plugin ID used, date, **and the build's commit SHA**.
+
+The SHA is not optional bookkeeping. Plan 012 changes the class string this
+runbook measures, and without a SHA on each row there is no way to tell a current
+measurement from one superseded by a later build — which is how three-part,
+personally-observed, screenshotted evidence quietly becomes the very artifact this
+rule exists to prevent. A row whose SHA is not an ancestor of `HEAD` for the paths
+it covers is **STALE**, not PASS.
 
 Bare `PASS`, `PASS (code path)`, `looks right`, and `should work` are forbidden
 values. If a check could not be run, the value is `BLOCKED` plus the reason —
@@ -448,15 +457,71 @@ So:
 2. **Add a positive control.** Before reading fig-tail's keys, have the spike write
    and read back one key of its own. If that read comes back empty, the reader
    itself is broken and a subsequent "empty" result proves nothing — **STOP**.
-3. **Then measure.** With the positive control passing, read fig-tail's keys from
-   the second plugin ID. Expect empty.
+3. **Add a negative control on the fig-tail side.** In the same session,
+   immediately before the isolation read, screenshot fig-tail on that file showing
+   `Using the config saved on this file`. Without it, an empty read is
+   indistinguishable from "no config on this file", "wrong file open", or a typo'd
+   key — `getPluginData` returns `''` for all of them.
+4. **Enumerate rather than look up.** A key-by-key read cannot tell isolation from
+   absence. Call `figma.root.getPluginDataKeys()` from the second plugin: it should
+   return **exactly** that plugin's own control key and none of `figtail.*`. Add
+   `figma.root.getSharedPluginDataKeys('figtail')` too — it documents that fig-tail
+   uses no shared-namespace API (`grep -rn setSharedPluginData packages/plugin/src/`
+   returns nothing), which is the claim a reviewer actually cares about.
+5. **Fix the toast text.** `main.js:15-16` says "can/cannot read **spike** data".
+   After the key change that sentence describes the wrong dataset, and a
+   screenshot of it would contradict the row it supports.
 
-Only step 3's empty read, sitting behind a passing positive control, is evidence.
+Only the enumeration, behind both controls, is evidence.
+
+**This step also settles the plugin-identity question — run it before Step 4's
+decision.** The two spikes differ only in their hand-written manifest `id`
+(`fig-tail-platform-spike` vs `fig-tail-platform-isolation`). If spike B cannot see
+spike A's keys, then for a locally imported development plugin **the manifest `id`
+string is the namespace key**. That would mean two accounts importing the *same*
+manifest file share one namespace — and Step 4 could run under route B with no
+publish, no org, and no escape hatch, clearing the cross-account gate for free.
+
+If instead Figma mints its own ID per import and ignores the manifest, Step 1's
+premise holds and Step 4 stays blocked. Either way, record which — the claim at
+`packages/plugin/notes/storage-matrix.md:24-26` is uncited and has never been
+tested, and the whole distribution decision rests on it.
 
 **Check**: the "Cross-plugin isolation" rows in `platform-preflight.md:49` and
-`storage-matrix.md` record both the positive-control result and the empty read of
-`figtail.*`, with a screenshot, replacing "PASS (by documented semantics)". The
-spike diff is committed with the row.
+`storage-matrix.md` record the positive control, the fig-tail-side negative
+control, and the `getPluginDataKeys()` enumeration, with screenshots, replacing
+"PASS (by documented semantics)". A new "Plugin identity" note records what the
+result implies for two same-`id` manifest imports, and whether Step 4 is thereby
+unblocked. The spike diff is committed with the row.
+
+### Step 5c: Does variable binding actually work? (suspected shipped bug)
+
+**This may be the most important thing this runbook finds.** Check it early.
+
+`packages/plugin/src/codegen/hints.ts:49` calls the **synchronous**
+`figma.variables.getVariableById(id)`, inside a `try`/`catch` that sets
+`variable = null` on any error (`hints.ts:50-53`). The manifest declares
+`"documentAccess": "dynamic-page"` (`manifest.json:9`), under which the
+synchronous getters are documented to **throw**; the async form is
+`getVariableByIdAsync`. Every other document read in the plugin already uses the
+async form — `pipeline.ts:114`, `stamp/apply.ts:87`, `lint/variables.ts:108` —
+which makes `hints.ts:49` look like a straggler rather than a choice.
+
+If it does throw in product, the catch swallows it silently and **every variable
+hint resolves to null**, on every surface, for every node with `boundVariables`.
+Matching degrades to raw-value matching, `exact-variable` — the top of the
+confidence ladder and the product's main differentiator — becomes unreachable, and
+nothing warns anyone. There is no console output to notice it in.
+
+Select the **`Variable / bound`** node with a config loaded, in Dev Mode. Record
+the emitted class **and its confidence**: `fixtures/figma/README.md:26` expects
+`exact-variable` when the WEB syntax and value agree. If you instead see
+`exact-value`, `nearest` or an arbitrary value, the hint path is dead.
+
+**Check**: `packages/plugin/notes/platform-preflight.md` gains a "Variable hints"
+row recording the observed confidence for `Variable / bound`, with a screenshot.
+If the confidence is anything other than `exact-variable`, that is a **finding, not
+a failure of this step** — write it up and continue; a fix is a new plan.
 
 ### Step 6: Measure codegen latency against the 3 s budget
 
@@ -566,18 +631,17 @@ nine nodes exist precisely to exercise near-misses: `Colour / near` (ΔE ~0.8 fr
 Dev Mode Code section, write down **the complete primary class string** — then
 switch the `Output` preference to **Classes** and write it down again.
 
-The code says the near-miss property is absent from both
-(`packages/match/src/index.ts:184` filters `confidence !== 'nearest'`, and
-`mode-dev.ts:78` drops the notes section under `Classes`), so the expected
-observation is a class string with **no background utility** on `Colour / near`
-and **no padding utility** on `Spacing / near`, with no note explaining the
-absence under `Classes`.
+**Record what you see and the build SHA — do not score it against an expectation.**
+At `abb2c1b` the code drops the near-miss property (`index.ts:186` filters
+`confidence !== 'nearest'`; `mode-dev.ts:78` drops the notes section under
+`Classes`), so on that build expect no background utility on `Colour / near` and
+no padding utility on `Spacing / near`.
 
-Nobody has watched this happen. Confirming it in-product converts
-`docs/release/ux-findings-2026-09-10.md` finding V1 from a code reading into an
-observed fact, and it costs one extra look at nodes you are already selecting.
-Record it either way — including if the property turns out to be present, which
-would mean V1 is wrong.
+**But plan 012 changes exactly this.** On a build that includes 012 the property
+*should* be present as a raw value — which is the fix working, not evidence that
+finding V1 was wrong. So the row records the observation plus the SHA, and the
+reading of it depends on whether 012 is in that build. Do not write "V1 not
+reproduced" without checking `git log --oneline -- packages/match/src` first.
 
 **If tests fail, that is the finding.** It means the matching engine was tuned
 to fabricated CSS shapes. Record the failures verbatim in a new
@@ -613,8 +677,10 @@ whatever its underlying rows now say.
 
 **Check**: `grep -rn "UNVERIFIED" packages/plugin/notes/ docs/ fixtures/figma/ plans/README.md`
 returns only markers this plan did not have a step for, and each surviving one has
-a written reason on the same line. Record the before and after counts — it was 37
-across those paths at `abb2c1b`.
+a written reason on the same line. Record the before and after counts. The baseline is **48** at `abb2c1b` for
+exactly the paths in the grep above; re-measure before starting rather than
+trusting this number, and note that `docs/release/ux-findings-2026-09-10.md` did
+not exist at `abb2c1b`, so before/after are not the same corpus unless you say so.
 
 ## Validation plan
 
@@ -625,8 +691,9 @@ across those paths at `abb2c1b`.
   asking a follow-up question. That is the acceptance bar, and the owner
   confirms it.
 - **Integrity spot-check**: pick any two PASS rows at random and confirm the
-  referenced screenshot exists and shows what the row claims. A row whose
-  artifact is missing is treated as unverified.
+  referenced screenshot exists and shows what the row claims. A row whose artifact
+  is missing is treated as unverified. Also confirm each row's stamped SHA is an
+  ancestor of `HEAD` for the paths that row covers — if not, the row is STALE.
 
 ## Done criteria
 
@@ -641,7 +708,8 @@ ALL must hold:
       all three questions in `devmode-discovery.md` (which is prose, not a table —
       answer them in place). Rows in those files describing code-level facts no
       step measures are left alone.
-- [ ] Every PASS row names an observed value, a committed screenshot, and an env stamp.
+- [ ] Every PASS row names an observed value, a committed screenshot, and an env
+      stamp **including the build SHA**.
 - [ ] Every expectation this plan found to be **wrong about the build** — the Dev
       Mode and no-edit-access stamp rows, the isolation spike's keys, the
       "Save on file"/"Save personal" button names in `README.md` and
