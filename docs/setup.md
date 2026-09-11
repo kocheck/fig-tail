@@ -19,7 +19,7 @@ listing. Same Dev Mode paths afterwards.
    - **v3:** `tailwind.config.js` / `.ts`
    - **v4:** CSS entry with `@theme` / `@theme inline` / `@theme static`
    - Optionally `package.json` with an exact `tailwindcss` version (`x.y.z`)
-3. Click **Resolve**, read unresolved warnings, then **Save on file** (shared) or **Save personal**.
+3. Click **Resolve**, read unresolved warnings, then **Apply to file** (shared) or **Save personally**.
 4. Raw source is discarded — only the resolved token set is stored. No CLI for normal setup.
 
 ### Keeping config fresh

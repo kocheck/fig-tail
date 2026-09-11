@@ -37,22 +37,37 @@ const SCALAR_FIELD_TO_PROPERTY: Record<keyof ScalarBoundVariables, string> = {
   strokeWeight: 'border-width',
 }
 
-const SCALAR_FIELDS = Object.keys(SCALAR_FIELD_TO_PROPERTY) as Array<keyof ScalarBoundVariables>
+/** Array-alias fields mapped to a CSS property. `fills` becomes `color` on TEXT nodes. */
+const ARRAY_FIELD_TO_PROPERTY: Record<keyof ArrayBoundVariables, string> = {
+  fills: 'background-color',
+  strokes: 'border-color',
+  fontSize: 'font-size',
+}
 
-/** Resolve a variable by id, using and populating `cache` when provided. */
-const resolveVariable = (id: string, cache?: Map<string, Variable | null>): Variable | null => {
-  if (cache?.has(id)) {
-    return cache.get(id) ?? null
-  }
-  let variable: Variable | null = null
-  try {
-    variable = figma.variables.getVariableById(id)
-  } catch {
-    // Variable may be from an unavailable library — fall through to value matching.
-    variable = null
-  }
-  cache?.set(id, variable)
-  return variable
+/**
+ * Resolve a variable by id, using and populating `cache` when provided.
+ *
+ * `getVariableByIdAsync` is required under `documentAccess: "dynamic-page"` —
+ * the synchronous getter throws there, and a swallowed throw silently disables
+ * every variable hint. The cache holds the *promise*, so concurrent workers
+ * sharing one context (`pipeline.ts`) collapse to a single lookup per id. The
+ * `.catch` is attached before caching, both to keep a failed lookup cached as
+ * `null` rather than retried and so a failure can never escape to a caller.
+ * The call is wrapped in `Promise.resolve().then` so a *synchronous* throw
+ * (a malformed id, or `figma.variables` missing) becomes a rejection too and
+ * still degrades to value matching, rather than failing the whole node.
+ */
+const resolveVariable = (
+  id: string,
+  cache?: Map<string, Promise<Variable | null>>,
+): Promise<Variable | null> => {
+  const cached = cache?.get(id)
+  if (cached) return cached
+  const pending = Promise.resolve()
+    .then(() => figma.variables.getVariableByIdAsync(id))
+    .catch(() => null)
+  cache?.set(id, pending)
+  return pending
 }
 
 const hintFromVariable = (variable: Variable): VariableHint => {
@@ -70,55 +85,40 @@ const hintFromVariable = (variable: Variable): VariableHint => {
  * (see `pipeline.ts`) should pass so repeated bindings to the same variable
  * cost exactly one lookup.
  */
-export const collectHints = (
+export const collectHints = async (
   node: SceneNode,
-  varCache?: Map<string, Variable | null>,
-): Record<string, VariableHint> => {
+  varCache?: Map<string, Promise<Variable | null>>,
+): Promise<Record<string, VariableHint>> => {
   const hints: Record<string, VariableHint> = {}
   if (!('boundVariables' in node) || !node.boundVariables) {
     return hints
   }
   const bound = node.boundVariables as NodeBoundVariables
 
-  const fillAlias = bound.fills?.[0]
-  if (fillAlias?.id) {
-    const variable = resolveVariable(fillAlias.id, varCache)
-    if (variable) {
-      const hint = hintFromVariable(variable)
-      if (node.type === 'TEXT') {
-        hints.color = hint
-      } else {
-        hints['background-color'] = hint
-      }
-    }
-  }
-
-  const strokeAlias = bound.strokes?.[0]
-  if (strokeAlias?.id) {
-    const variable = resolveVariable(strokeAlias.id, varCache)
-    if (variable) {
-      hints['border-color'] = hintFromVariable(variable)
-    }
-  }
-
-  const fontSizeAlias = bound.fontSize?.[0]
-  if (fontSizeAlias?.id) {
-    const variable = resolveVariable(fontSizeAlias.id, varCache)
-    if (variable) {
-      hints['font-size'] = hintFromVariable(variable)
-    }
-  }
-
-  for (const field of SCALAR_FIELDS) {
-    const alias = bound[field]
-    if (!alias?.id) continue
-    const variable = resolveVariable(alias.id, varCache)
-    if (!variable) continue
-    const property = SCALAR_FIELD_TO_PROPERTY[field]
-    if (property) {
-      hints[property] = hintFromVariable(variable)
-    }
-  }
+  // Every binding is looked up concurrently: a node with a dozen bound
+  // variables would otherwise cost a dozen serial round-trips against the 3s
+  // codegen budget. The promise cache keeps duplicate ids to one lookup.
+  await Promise.all([
+    ...(Object.entries(ARRAY_FIELD_TO_PROPERTY) as Array<[keyof ArrayBoundVariables, string]>).map(
+      async ([field, property]) => {
+        const alias = bound[field]?.[0]
+        if (!alias?.id) return
+        const variable = await resolveVariable(alias.id, varCache)
+        if (!variable) return
+        hints[field === 'fills' && node.type === 'TEXT' ? 'color' : property] =
+          hintFromVariable(variable)
+      },
+    ),
+    ...(Object.entries(SCALAR_FIELD_TO_PROPERTY) as Array<[keyof ScalarBoundVariables, string]>).map(
+      async ([field, property]) => {
+        const alias = bound[field]
+        if (!alias?.id) return
+        const variable = await resolveVariable(alias.id, varCache)
+        if (!variable) return
+        hints[property] = hintFromVariable(variable)
+      },
+    ),
+  ])
 
   return hints
 }

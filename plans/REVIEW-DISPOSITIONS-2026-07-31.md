@@ -25,6 +25,25 @@ stronger program invariant. No finding was rejected or deferred.
 | F14 | ACCEPT | Core resolver copy is independent of the optional CLI. CLI guidance appears only when plan 009 is actually shipped. |
 | F15 | MODIFY | Plan 009 starts with a version-bounded v4 compiler/package API spike and explicitly verifies package `bin`, shebang, target resolution, and trust-flag behaviour before implementation. |
 
+## Amendment — F01, 2026-09-10
+
+F01 reads: *"Remove every `acceptNearest` path. Near matches are report-only data
+and never enter copyable class output."*
+
+**The first sentence stands. The second is superseded**, by owner decision, for
+this reason: F01's live concern was emitting `bg-brand-500` when the fill is not
+`brand-500` — a wrong *token name* that compiles and silently renders the wrong
+colour in someone's codebase. That remains forbidden, and `nearest.className` is
+still never emitted.
+
+What F01's wording also prevented, unintentionally, was emitting *anything* — so
+the property vanished from the class string with no signal, which collides with
+invariant 2 ("fallbacks fail toward raw values, never toward a guessed token
+name"). Failing toward nothing is not failing toward a raw value. A near miss now
+emits the design's own value, which is what invariant 2 prescribes.
+
+Recorded as finding V1; implemented in plan 012.
+
 ## Cold-review dispositions after revision
 
 The substantially revised corpus received a fresh read-only contract review.

@@ -1,7 +1,7 @@
 import { differenceCiede2000, parse } from 'culori'
 import type { ColorToken, TokenSet } from '@fig-tail/theme'
 import type { MatchResult, VariableHint } from '../types'
-import { applyPrefix, utilityAvailable, withKnownPrefix } from '../availability'
+import { arbitrary, utilityAvailable, withKnownPrefix } from '../availability'
 
 const deltaE = differenceCiede2000()
 
@@ -168,11 +168,11 @@ export const matchColor = (
   }
 
   if (tokens?.unknownNamespaces.includes('colors')) {
-    const arbitrary = applyPrefix(tokens, `${utility}-[${value}]`)
+    const className = arbitrary(tokens, utility, value)
     return {
       property,
-      className: arbitrary,
-      confidence: arbitrary ? 'arbitrary' : 'none',
+      className,
+      confidence: className ? 'arbitrary' : 'none',
       note: 'fig-tail could not read your colours; showing raw values for them',
       provenance: provenanceBase,
     }
@@ -204,7 +204,7 @@ export const matchColor = (
   if (!tokens) {
     return {
       property,
-      className: `${utility}-[${value}]`,
+      className: arbitrary(null, utility, value),
       confidence: 'arbitrary',
       note: 'No Tailwind config — generic Tailwind syntax; project prefix/settings may require changes.',
       provenance: provenanceBase,
@@ -252,32 +252,32 @@ export const matchColor = (
     }
   }
 
-  if (best) {
-    return {
-      property,
-      className: null,
-      confidence: 'nearest',
-      nearest: {
-        tokenKey: best.key,
-        className: `${utility}-${best.key}`,
-        delta: best.delta,
-        deltaUnit: 'deltaE',
-      },
-      note: `no exact token; nearest is ${best.key}, ΔE ${best.delta.toFixed(1)}`,
-      provenance: provenanceBase,
-    }
-  }
+  // A near miss falls through to the raw-value return below rather than
+  // returning nothing: the design's own value is what invariant 2 prescribes.
+  const near = best
+    ? {
+        nearest: {
+          tokenKey: best.key,
+          className: `${utility}-${best.key}`,
+          delta: best.delta,
+          deltaUnit: 'deltaE' as const,
+        },
+        note: `no exact token; nearest is ${best.key}, ΔE ${best.delta.toFixed(1)}`,
+      }
+    : undefined
 
   const partialNote = tokens.partialNamespaces.includes('colors')
     ? 'Bundled default colours were withheld; showing raw values for unmatched colours'
     : undefined
 
-  const className = applyPrefix(tokens, `${utility}-[${value}]`)
+  const className = arbitrary(tokens, utility, value)
   return {
     property,
     className,
-    confidence: className ? 'arbitrary' : 'none',
-    ...(partialNote !== undefined ? { note: partialNote } : {}),
+    // `nearest` outranks `arbitrary` so the drift linter keeps its high-severity
+    // finding, including when the prefix cannot be applied and there is no class.
+    confidence: near ? 'nearest' : className ? 'arbitrary' : 'none',
+    ...(near ?? (partialNote !== undefined ? { note: partialNote } : {})),
     provenance: provenanceBase,
   }
 }

@@ -180,10 +180,16 @@ export const matchDeclarations = (
   return collapseRadius(collapsePadding(results))
 }
 
-/** Join copyable classes; nearest results are structurally excluded. */
+/**
+ * Join copyable classes. A `nearest` result carries the design's raw value, so
+ * it belongs in the string like any other class — what a user prefers to copy is
+ * a preference concern, applied in the plugin's `applyCodegenFilters`, not a
+ * matcher one. `result.nearest` is report-only and is never emitted here: no
+ * guessed token name reaches a copyable string, from any matcher.
+ */
 export const toClassName = (results: MatchResult[]): string => {
   const classes = results
-    .filter((result) => result.confidence !== 'nearest' && result.className)
+    .filter((result) => result.className)
     .map((result) => result.className as string)
   return sortClasses([...new Set(classes)]).join(' ')
 }

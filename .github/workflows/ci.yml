@@ -13,7 +13,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # Node 20 cannot natively import the TypeScript tsdown.config.ts files,
+          # so tsdown falls back to its optional `unrun` peer, which is not
+          # installed — `pnpm -r build` then fails. Node 22 strips types natively.
+          # (Node 20 is also deprecated on GitHub runners.)
+          node-version: '22'
 
       - name: Enable Corepack
         run: |

@@ -59,7 +59,7 @@ export type ResolutionContext = {
   /** Bounded worker count; never an unbounded `Promise.all`. */
   maxInFlight: number
   cssCache: Map<string, Record<string, string>>
-  varCache: Map<string, Variable | null>
+  varCache: Map<string, Promise<Variable | null>>
 }
 
 /** Stable resolution failure codes — consumers must not string-compare free text. */
@@ -116,7 +116,7 @@ const resolveOne = async (nodeId: string, ctx: ResolutionContext): Promise<Resol
       return { nodeId, output: null, error: ResolutionError.NODE_NOT_FOUND, detail: 'Node not found' }
     }
     const css = await getCachedCss(node, ctx)
-    const hints = 'boundVariables' in node ? collectHints(node as SceneNode, ctx.varCache) : {}
+    const hints = 'boundVariables' in node ? await collectHints(node as SceneNode, ctx.varCache) : {}
     const output = runPipeline({ css, hints, config: ctx.config })
     return { nodeId, output }
   } catch (error) {

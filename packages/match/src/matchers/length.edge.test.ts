@@ -6,8 +6,9 @@ describe('length edge cases', () => {
   it('reports nearest radius matches', () => {
     const result = matchLength('border-radius', '11px', baseTokenSet(), undefined)
     expect(result.confidence).toBe('nearest')
-    expect(result.className).toBeNull()
+    expect(result.className).toBe('rounded-[11px]')
     expect(result.nearest?.tokenKey).toBe('xl')
+    expect(result.nearest?.className).toBe('rounded-xl')
   })
 
   it('matches non-default border widths from tokens', () => {
@@ -84,7 +85,7 @@ describe('length edge cases', () => {
     })
     const result = matchLength('padding-top', '85px', tokens, undefined)
     expect(result.confidence).toBe('nearest')
-    expect(result.className).toBeNull()
+    expect(result.className).toBe('pt-[85px]')
     expect(result.nearest?.tokenKey).toBe('21')
   })
 

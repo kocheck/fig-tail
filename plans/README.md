@@ -175,7 +175,7 @@ The fallback ladders this program commits to:
 | No config at all | **Generic arbitrary-value suggestions** (`bg-[#3b82f6]`, `p-[24px]`), not project-confirmed | "No Tailwind config — generic Tailwind syntax; project prefix/settings may require changes. Add your config for confirmed names." |
 | Variable bound but unresolvable (e.g. from an unavailable library) | Value matching against the theme | confidence drops from `exact-variable` to `exact-value` |
 | No token matches a value | Arbitrary value | `arbitrary` confidence badge |
-| Value is *near* a token | **Nothing is emitted for it** — the near-miss is reported instead | "no exact token; nearest is `brand-500`, ΔE 0.4" |
+| Value is *near* a token | **The design's own raw value** (`bg-[#3b82f1]`) — never the near token's name | "no exact token; nearest is `brand-500`, ΔE 0.4" |
 | Subtree too large or too slow | A truncated tree | an explicit truncation marker saying why |
 | Config resolution fails entirely | Generic raw suggestions; if and only if plan 009 shipped, also offer its optional CLI escape hatch | the plugin labels the generic output; core copy never assumes the CLI exists |
 
@@ -211,7 +211,9 @@ plan that owns it:
   so same-major guessing is forbidden (plan 001).
 - An unresolvable `prefix` or a disabled core plugin suppresses the affected
   utilities rather than emitting them unprefixed or non-existent (plan 002).
-- A near-miss value is reported, not emitted (plan 002).
+- A near-miss emits the design's raw value; the near *token name* is reported,
+  never emitted (plan 002, amended by plan 012 — see the F01 amendment in
+  `REVIEW-DISPOSITIONS-2026-07-31.md`).
 
 **Two things are refusals, not degradations**, and correctly block: writing to
 the document outside the sanctioned path (invariant 3), and executing user
@@ -359,12 +361,38 @@ guidance; the numbered plan wins if the two conflict.
 | 008 | Add whole-subtree className export | P3 | L | 005 | DONE (large-tree UNVERIFIED) |
 | 009 | Add the optional CLI escape hatch for complex configs | P3 | M | 001, 003 | REJECTED for this ship (plugin-only; CLI out of scope) |
 | 010 | Package, document, and publish | P2 | S | 005 | DONE (0.1.0 prep complete; Community blocked on cross-account UNVERIFIED; npm/Community await owner approval) |
-
+| 013 | Find out whether fig-tail can read the pilot team's config | P0 | S | — | TODO — **runs first; gates everything** |
+| 014 | Restore variable matching (and stop the tests concealing it) | P0 | S | 013 | TODO |
+| 012 | Make the class string safe to paste unchecked | P0 | M | 013 | TODO (two decisions open) |
+| 015 | Make the product tell the truth about itself | P1 | M | 013 | TODO |
+| 011 | Verify fig-tail inside Figma (trimmed) | P0 | M | 013, 012, 014 | TODO — human-only; **Step 0 runs before the code fixes** |
+| 016 | Get the plugin onto two other machines, and keep it identifiable | P0 | M | 013, 011 Step 0 | TODO |
+| 018 | Finish the class string — spaces, and properties with nothing to say | P1 | S | 012 | TODO |
+| 017 | Run the two-week pilot and read the result honestly | P0 | M | 011, 012, 014, 015, 016, 018 | TODO |
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale)
 
-**Minimum shippable slice: 000 → 001 → 002 → 003 → 004 → 005 → 010.** That is a
-public, installable plugin that fully delivers the core promise. 006–009 are
-upside.
+**Plans 011–017 serve one goal**, stated in [GOAL-developer-adoption.md](GOAL-developer-adoption.md):
+two developers install fig-tail themselves, use it for two weeks on real work,
+paste its output without hand-checking, and would notice if it vanished.
+
+**Execution order is not plan-number order.** Numbers are stable IDs; run them in
+this sequence, decided by a five-advisor council review on 2026-09-10
+(`docs/council/council-transcript-2026-09-10-plan-trim.md`):
+
+> **013** (config go/no-go — stop here if it fails) → **011 Step 0** (use it for an
+> hour, then revise 011 from what you saw) → **014** → **012** → **018** → **015** →
+> **011** Steps 2–10 → **016** → **017**
+
+The code fixes land before the human runbook runs, because 011 is L-effort and
+human-only and 012/014/015 change what it measures. Never run a hand-executed
+runbook against a build you are about to change.
+
+**Minimum shippable slice (original 0.1.0 program): 000 → 001 → 002 → 003 → 004 →
+005 → 010.** That slice was defined for a Figma Community publish, which the
+current goal defers. **For the developer-adoption goal the slice is
+013 → 014 → 012 → 016 → 017**, with 011, 015 and 018 as the trust floor — 011
+because nothing is known until the build runs, 015 and 018 because condition 3
+fails without them.
 
 ---
 
@@ -428,7 +456,9 @@ Recorded so these are not re-raised without new information.
   Rejected by the repo owner in favour of paste/drop: avoids `networkAccess`
   review friction, CORS, private-repo auth, and the hidden-iframe dance codegen
   plugins need for `fetch`. Cost accepted: the stored config goes stale
-  silently. Plan 003 mitigates with a stored timestamp and a staleness warning.
+  silently. Plan 003 stores a timestamp (`storage.ts:226`) but **nothing surfaces
+  it** — there is no staleness warning in the UI, and the read cache does not
+  invalidate on another session's write. Recorded as U5; unowned.
 
 - **Evaluating the Tailwind config with `eval` or `new Function`.** Would handle
   every config perfectly. Rejected: it is a plugin-review red flag, the sandbox

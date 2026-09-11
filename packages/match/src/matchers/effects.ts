@@ -1,6 +1,6 @@
 import type { TokenSet } from '@fig-tail/theme'
 import type { MatchResult } from '../types'
-import { applyPrefix } from '../availability'
+import { applyPrefix, arbitrary } from '../availability'
 
 /** Match effects like opacity and text-decoration. */
 export const matchEffects = (
@@ -25,7 +25,7 @@ export const matchEffects = (
     }
     return {
       property,
-      className: applyPrefix(tokens, `opacity-[${value}]`),
+      className: arbitrary(tokens, 'opacity', value),
       confidence: 'arbitrary',
       provenance,
     }

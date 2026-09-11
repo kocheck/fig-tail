@@ -143,10 +143,13 @@ const renderInspectBody = (inspect: InspectPayload | null): string => {
 
   const resultsList = inspect.results.length
     ? `<div class="list">${inspect.results
-        .map(
-          (r) =>
-            `<div class="item"><span class="badge badge-${escapeHtml(r.confidence)}">${escapeHtml(r.confidence)}</span> <strong>${escapeHtml(r.property)}</strong>: ${escapeHtml(r.className ?? r.note ?? '—')}</div>`,
-        )
+        .map((r) => {
+          // Both, not either: a near miss now emits a raw-value class AND a note
+          // naming the token it just missed. Showing only the class would drop
+          // the near token from the row that explains it.
+          const detail = [r.className, r.note].filter(Boolean).join(' · ') || '—'
+          return `<div class="item"><span class="badge badge-${escapeHtml(r.confidence)}">${escapeHtml(CONFIDENCE_LABEL[r.confidence] ?? r.confidence)}</span> <strong>${escapeHtml(r.property)}</strong>: ${escapeHtml(detail)}</div>`
+        })
         .join('')}</div>`
     : ''
 
@@ -157,6 +160,26 @@ const renderInspectBody = (inspect: InspectPayload | null): string => {
   return `${tierBanner}${storageBanner}${namespaceNotes}${selectionNote}${classOut}${resultsList}${warnings}`
 }
 
+/** Findings as narrow-panel rows, with the review Markdown underneath. */
+const formatLintFindings = (lint: LintPayload): string => {
+  if (lint.findings.length === 0) return 'No drift found.'
+  const rows = lint.findings.map((f) => {
+    const near = f.nearest ? ` → nearest ${f.nearest}${f.distance !== undefined ? ` (Δ${f.distance})` : ''}` : ''
+    return `${f.severity.toUpperCase().padEnd(6)} ${f.nodeName} · ${f.property}: ${f.note}${near}`
+  })
+  return [...rows, '', '--- Markdown (for reviews) ---', '', lint.markdown].join('\n')
+}
+
+/** Human words in the panel; the enum values are internal identifiers. */
+const CONFIDENCE_LABEL: Record<string, string> = {
+  'exact-variable': 'variable',
+  'exact-value': 'exact',
+  'name-match': 'by name',
+  nearest: 'near',
+  arbitrary: 'raw value',
+  none: 'no match',
+}
+
 const toolOutContent = (): string => {
   if (state.stampResult) {
     return [
@@ -165,9 +188,8 @@ const toolOutContent = (): string => {
       ...state.stampResult.failed.map((f) => `failed ${f.id || '—'}: ${f.error}`),
     ].join('\n')
   }
-  if (state.status) return state.status
   if (state.exportCode) return state.exportCode
-  return JSON.stringify(state.lint ?? state.stamp ?? {}, null, 2)
+  return state.stamp ? JSON.stringify(state.stamp, null, 2) : ''
 }
 
 const render = () => {
@@ -244,6 +266,7 @@ const render = () => {
         ${statusBanner}
         ${stampSummary}
         <pre class="class-out" id="tool-out">${escapeHtml(toolOutContent())}</pre>
+        <div class="row"><button type="button" id="tool-copy" aria-label="Copy tool output">Copy output</button></div>
       </section>
     </main>
   `
@@ -373,6 +396,9 @@ const render = () => {
   document.getElementById('inspect-copy')?.addEventListener('click', () => {
     void copyText(state.inspect?.className || '', 'inspect-class-out')
   })
+  document.getElementById('tool-copy')?.addEventListener('click', () => {
+    void copyText(toolOutContent(), 'tool-out')
+  })
   document.getElementById('inspect-add-config')?.addEventListener('click', () => post({ type: 'open-setup' }))
 }
 
@@ -397,9 +423,10 @@ onmessage = (event: MessageEvent) => {
       state.lint.resolutionFailures > 0
         ? ` · skipped ${state.lint.resolutionFailures} layers`
         : ''
-    state.status = `${state.lint.findings.length} findings · ${state.lint.visited} nodes · ${state.lint.durationMs}ms${state.lint.truncated ? ' (truncated)' : ''}${skipNote}`
+    const summary = `${state.lint.findings.length} findings · ${state.lint.visited} nodes · ${state.lint.durationMs}ms${state.lint.truncated ? ' (truncated)' : ''}${skipNote}`
+    state.status = summary
     state.statusKind = state.lint.resolutionFailures > 0 || state.lint.truncated ? 'warn' : 'info'
-    state.exportCode = state.lint.markdown
+    state.exportCode = formatLintFindings(state.lint)
     state.stampResult = null
     render()
     return
@@ -415,6 +442,10 @@ onmessage = (event: MessageEvent) => {
   if (msg.type === 'stamp-diff') {
     state.stamp = (msg as Extract<PluginMessage, { type: 'stamp-diff' }>).payload
     state.stampResult = null
+    // Without this the dry-run diff stays hidden behind the previous lint or
+    // export output, and Copy output copies that instead — so the user could
+    // apply a stamp having reviewed another feature's result.
+    state.exportCode = ''
     state.status = `${state.stamp.changes.length} stamp changes`
     state.statusKind = 'info'
     render()
@@ -432,6 +463,8 @@ onmessage = (event: MessageEvent) => {
     const err = msg as Extract<PluginMessage, { type: 'operation-error' }>
     state.status = `${err.operation} failed: ${err.message}`
     state.statusKind = 'danger'
+    // A failure must not leave the last successful output on screen contradicting it.
+    state.exportCode = ''
     render()
     return
   }

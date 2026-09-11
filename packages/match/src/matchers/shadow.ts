@@ -1,6 +1,6 @@
 import type { TokenSet } from '@fig-tail/theme'
 import type { MatchResult } from '../types'
-import { applyPrefix } from '../availability'
+import { applyPrefix, arbitrary } from '../availability'
 
 const normaliseShadowColour = (segment: string): string => {
   const rgba = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\s*\)$/i.exec(segment)
@@ -62,7 +62,7 @@ export const matchShadow = (
   }
   return {
     property,
-    className: applyPrefix(tokens, `shadow-[${value}]`),
+    className: arbitrary(tokens, 'shadow', value),
     confidence: 'arbitrary',
     provenance,
   }

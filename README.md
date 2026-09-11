@@ -26,8 +26,8 @@ Under two minutes once the plugin is installed and a config is on the file.
 2. Drop `tailwind.config.js` / `.ts` (v3) or your CSS entry with `@theme` (v4).
 3. Optionally drop `package.json` so an exact `tailwindcss` version (`x.y.z`) can
    confirm bundled defaults. Ranges and same-major guesses are rejected.
-4. Click **Resolve**, review warnings, then **Save on file** (shared) or
-   **Save personal** (per-user; no edit access required).
+4. Click **Resolve**, review warnings, then **Apply to file** (shared) or
+   **Save personally** (per-user; no edit access required).
 
 Raw source is processed locally and discarded. Only the resolved token set is stored.
 There is no CLI step for normal setup.
@@ -47,7 +47,7 @@ fig-tail only emits a named class when the config confirms it:
 | Outcome | Meaning |
 |---|---|
 | Exact (variable or value) | Class is safe to paste |
-| Nearest | Close to a token — reported as a note, **not** emitted as that token |
+| Nearest | Close to a token — you get the design's **raw value** (`bg-[#3b82f1]`), and the near token is reported as a note. The token name is never emitted. |
 | Unsupported / none | No match — arbitrary value or a clear gap |
 
 If part of your config could not be read (function-valued theme keys, external
@@ -57,13 +57,12 @@ honest arbitrary values.
 
 ## Drift linter and stamping
 
-- **Lint drift** (read-only) — scans the selection or page for nearest,
-  off-system, unbound, and related findings. Export a Markdown table from Tools
-  for reviews.
+- **Lint drift** (read-only) — scans your selection, or the whole page when
+  nothing is selected. Findings list in the Tools panel with a Markdown table
+  underneath for pasting into a review.
 - **Code-syntax stamping** — opt-in. Writes `WEB` code syntax on **local**
   variables only after an explicit confirm in the design editor. Never runs
   silently; undo via Figma. Dry-run works in Dev Mode; **Apply** is design-editor only.
-- **Subtree export** — HTML / JSX / outline skeletons with classNames (codegen preference).
 
 ## Privacy
 
@@ -73,7 +72,8 @@ is saved.
 
 ## Limitations
 
-- Does not generate components, assets, or responsive variants.
+- Does not generate components, assets, or responsive variants, and does not
+  consider hover, focus, or dark-mode states.
 - Tailwind **v3** (JS/TS theme) and **v4** (`@theme` CSS) only.
 - Does not evaluate function-valued theme keys, external presets/plugins, or
   dynamic expressions — those are reported, not guessed.

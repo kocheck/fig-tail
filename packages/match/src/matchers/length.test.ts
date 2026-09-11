@@ -38,7 +38,7 @@ describe('length', () => {
     })
     const result = matchLength('padding-top', '25px', tokens, undefined)
     expect(result.confidence).toBe('nearest')
-    expect(result.className).toBeNull()
+    expect(result.className).toBe('pt-[25px]')
     expect(result.nearest?.delta).toBe(1)
     expect(result.nearest?.deltaUnit).toBe('px')
   })

@@ -6,26 +6,21 @@ import { createResolutionContext, resolveNodes, runPipeline } from './pipeline'
 import { readConfig } from './storage'
 import { meaningfulStorageFailures } from './shared/errors'
 import type { InspectPayload } from './shared/messages'
-import { exportSubtree } from './tree/export'
 
 /** Options derived from `figma.codegen.preferences.customSettings`. Defaults match the manifest. */
 export type CodegenOptions = {
   includeLayout: boolean
   allowArbitrary: boolean
   outputNotes: boolean
-  subtreeFormat: 'off' | 'html' | 'jsx' | 'outline'
 }
 
 /** Map manifest `codegenPreferences` custom settings onto `CodegenOptions`. */
 export const optionsFromPreferences = (customSettings: Record<string, string> | undefined): CodegenOptions => {
   const custom = customSettings ?? {}
-  const subtree = custom.subtreeFormat
   return {
     includeLayout: custom.includeLayout !== 'no',
     allowArbitrary: custom.allowArbitrary !== 'no',
     outputNotes: custom.output !== 'classes',
-    subtreeFormat:
-      subtree === 'html' || subtree === 'jsx' || subtree === 'outline' ? subtree : 'off',
   }
 }
 
@@ -50,11 +45,34 @@ export const applyCodegenFilters = (results: MatchResult[], options: CodegenOpti
     if (!options.includeLayout && LAYOUT_PROPERTIES_TO_STRIP.has(result.property)) {
       return { ...result, className: null }
     }
-    if (!options.allowArbitrary && result.confidence === 'arbitrary') {
+    // A near miss emits the design's raw value, so it is an arbitrary value in
+    // everything but confidence — a user who turned those off does not want it.
+    if (!options.allowArbitrary && (result.confidence === 'arbitrary' || result.confidence === 'nearest')) {
       return { ...result, className: null }
     }
     return result
   })
+
+/**
+ * Which sections to show. `Output → Classes` asks for the class string without
+ * routine notes — but never at the cost of hiding that the string is
+ * incomplete. When the preference filters strip a class the matcher did
+ * produce, the second section is kept so the omission is visible.
+ *
+ * Deliberately narrow: `confidence: 'none'` results are routine (every
+ * unsupported property Figma volunteers) and retaining on those would fire on
+ * nearly every node, making the preference a no-op.
+ */
+export const sectionsForOutput = (
+  sections: CodegenSection[],
+  matched: MatchResult[],
+  filtered: MatchResult[],
+  options: CodegenOptions,
+): CodegenSection[] => {
+  if (options.outputNotes) return sections
+  const omitted = matched.some((result, i) => result.className && !filtered[i]?.className)
+  return omitted ? sections : sections.slice(0, 1)
+}
 
 const errorSections = (message: string): CodegenSection[] => [
   { title: 'Tailwind', language: 'PLAINTEXT', code: `/* fig-tail could not generate output: ${message} */` },
@@ -70,22 +88,14 @@ export const runDevMode = () => {
         const options = optionsFromPreferences(figma.codegen.preferences.customSettings)
         const config = await readConfig()
         const css = await event.node.getCSSAsync()
-        const hints = collectHints(event.node)
+        // A per-generate cache: without one every binding on the node is an
+        // independent awaited round-trip, on the path with the 3 s budget.
+        const hints = await collectHints(event.node, new Map())
         const output = runPipeline({ css, hints, config })
         const filteredResults = applyCodegenFilters(output.results, options)
         const className = toClassName(filteredResults)
         const sections = renderCodegenSections(filteredResults, className, output.warnings, output.tierLabel)
-        const result = options.outputNotes ? sections : sections.slice(0, 1)
-        const hasChildren = 'children' in event.node && event.node.children.length > 0
-        if (options.subtreeFormat !== 'off' && hasChildren) {
-          const tree = await exportSubtree({ format: options.subtreeFormat, deadlineMs: 2000, maxNodes: 150 })
-          result.push({
-            title: 'Subtree',
-            language: 'PLAINTEXT',
-            code: tree,
-          })
-        }
-        return result
+        return sectionsForOutput(sections, output.results, filteredResults, options)
       } catch (error) {
         return errorSections(error instanceof Error ? error.message : String(error))
       }

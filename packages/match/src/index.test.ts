@@ -23,6 +23,39 @@ describe('engine', () => {
     expect(results.some((result) => result.confidence === 'nearest')).toBe(true)
   })
 
+  it('emits every side of a near-miss shorthand as a raw value', () => {
+    // `padding: 25px` expands to four sides, each a near miss against 24px.
+    // collapseSides deliberately refuses to collapse a `nearest` set: the
+    // collapsed result carries no per-side `nearest` metadata, so the drift
+    // finding would vanish. Four raw-value sides is the accepted cost of
+    // keeping the finding.
+    const results = matchDeclarations({ padding: '25px' }, { tokens: baseTokenSet() })
+    expect(toClassName(results)).toBe('pt-[25px] pr-[25px] pb-[25px] pl-[25px]')
+    expect(results.every((r) => r.confidence === 'nearest')).toBe(true)
+    expect(results.every((r) => r.nearest !== undefined)).toBe(true)
+  })
+
+  it('does not let a spaced arbitrary value shred the class string', () => {
+    // Figma emits spaced values: `rgba(59, 130, 246, 0.5)`, `Helvetica Neue`.
+    // toClassName joins with a space, so an unescaped value fragments into
+    // several tokens and corrupts every OTHER class in the string too.
+    const results = matchDeclarations(
+      {
+        'box-shadow': '0px 7px 13px 2px rgba(11, 22, 33, 0.37)',
+        'font-family': 'Helvetica Neue, sans-serif',
+        display: 'flex',
+      },
+      { tokens: baseTokenSet() },
+    )
+    const className = toClassName(results)
+    expect(className).toContain('shadow-[0px_7px_13px_2px_rgba(11,_22,_33,_0.37)]')
+    expect(className).toContain("font-['Helvetica_Neue']")
+    // The real invariant: one token per emitted class, whatever the values are.
+    // Counted through a Set because toClassName dedupes.
+    const emitted = new Set(results.map((r) => r.className).filter(Boolean)).size
+    expect(className.split(' ')).toHaveLength(emitted)
+  })
+
   it('does not collapse mismatched corner radii', () => {
     const tokens = baseTokenSet({
       radius: {

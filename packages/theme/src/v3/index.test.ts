@@ -58,6 +58,22 @@ describe('v3', () => {
     expect(result.unresolved.some((item) => item.reason === 'unknown-module')).toBe(true)
   })
 
+  it('parses a plain-JS spread config the TypeScript pre-pass would corrupt', () => {
+    // The pre-pass regex reads `colors: { ...colors, brand-500` as a type
+    // annotation and deletes it, leaving unbalanced JS. Plain JS must never
+    // reach the pre-pass at all — it parses as-is.
+    const result = resolveTheme({
+      sources: [{ name: 'spread-colors.js', text: read('spread-colors.js') }],
+      tailwindVersion: { exact: V3_DEFAULTS_VERSION, source: 'package-json' },
+    })
+    expect(result.ok).toBe(true)
+    expect(result.tokens?.colors['brand-500']?.hex).toBe('#3b82f6')
+    expect(result.tokens?.spacing.scale['18']?.px).toBe(72)
+    expect(
+      result.unresolved.some((u) => u.reason === 'parse-error'),
+    ).toBe(false)
+  })
+
   it('resolves typed.ts via the TypeScript pre-pass', () => {
     const result = resolveTheme({
       sources: [{ name: 'typed.ts', text: read('typed.ts') }],
@@ -65,6 +81,19 @@ describe('v3', () => {
     })
     expect(result.ok).toBe(true)
     expect(result.tokens?.colors['brand-500']?.hex).toBe('#3b82f6')
+  })
+
+  it('resolves a TypeScript config using spread, satisfies and a default export', () => {
+    // The pre-pass ran on this correctly-typed file and ate both the spread
+    // colours and the `export default` after `satisfies Config`.
+    const result = resolveTheme({
+      sources: [{ name: 'typed-spread.ts', text: read('typed-spread.ts') }],
+      tailwindVersion: { exact: V3_DEFAULTS_VERSION, source: 'package-json' },
+    })
+    expect(result.ok).toBe(true)
+    expect(result.tokens?.colors['brand-500']?.hex).toBe('#3b82f6')
+    expect(result.tokens?.colors['blue-500']?.hex).toBe('#3b82f6')
+    expect(result.tokens?.spacing.scale['18']?.px).toBe(72)
   })
 
   it('records a known v3 prefix', () => {

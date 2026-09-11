@@ -43,17 +43,6 @@
         { "label": "Classes", "value": "classes" },
         { "label": "Classes + notes", "value": "classes-notes", "isDefault": true }
       ]
-    },
-    {
-      "itemType": "select",
-      "propertyName": "subtreeFormat",
-      "label": "Subtree export",
-      "options": [
-        { "label": "Off", "value": "off", "isDefault": true },
-        { "label": "HTML", "value": "html" },
-        { "label": "JSX", "value": "jsx" },
-        { "label": "Outline", "value": "outline" }
-      ]
     }
   ]
 }

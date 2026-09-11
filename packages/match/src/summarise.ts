@@ -9,7 +9,7 @@ export const summarise = (
   const classes = sortClasses([
     ...new Set(
       results
-        .filter((result) => result.confidence !== 'nearest' && result.className)
+        .filter((result) => result.className)
         .map((result) => result.className as string),
     ),
   ])

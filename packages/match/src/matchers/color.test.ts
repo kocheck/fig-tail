@@ -28,10 +28,13 @@ describe('color', () => {
     expect(result.confidence).toBe('name-match')
   })
 
-  it('reports nearest without a className', () => {
+  it('emits the raw value for a near miss, never the near token name', () => {
     const result = matchColor('background-color', '#3b82f1', baseTokenSet(), undefined)
     expect(result.confidence).toBe('nearest')
-    expect(result.className).toBeNull()
+    // The design's own value is emitted — invariant 2, "fail toward raw values".
+    expect(result.className).toBe('bg-[#3b82f1]')
+    // ...and the near token name is reported, never emitted (disposition F01).
+    expect(result.className).not.toContain('brand-500')
     expect(result.nearest?.tokenKey).toBe('brand-500')
     expect(result.nearest?.deltaUnit).toBe('deltaE')
   })

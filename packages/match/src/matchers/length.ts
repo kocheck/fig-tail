@@ -1,6 +1,6 @@
 import type { TokenSet } from '@fig-tail/theme'
 import type { MatchResult, VariableHint } from '../types'
-import { applyPrefix, utilityAvailable } from '../availability'
+import { applyPrefix, arbitrary, utilityAvailable } from '../availability'
 
 const PROP_TO_UTIL: Record<string, { util: string; core: string; ns: 'spacing' | 'radius' | 'borderWidth' | 'size' }> = {
   'padding-top': { util: 'pt', core: 'padding', ns: 'spacing' },
@@ -106,6 +106,30 @@ export const matchLength = (
       provenance,
     }
   }
+  /**
+   * The raw-value result: the design's own value, prefixed. A near miss passes
+   * its `nearest` metadata through here rather than returning nothing, so the
+   * property never silently disappears from the class string — invariant 2's
+   * "fail toward raw values".
+   */
+  const rawValue = (near?: Pick<MatchResult, 'nearest' | 'note'>): MatchResult => {
+    const partialNote =
+      tokens &&
+      tokens.partialNamespaces.includes(mapping.ns === 'size' ? 'spacing' : mapping.ns)
+        ? `Bundled default ${mapping.ns} tokens were withheld; showing raw values for unmatched lengths`
+        : undefined
+    const className = arbitrary(tokens, mapping.util, value)
+    return {
+      property,
+      className,
+      // `nearest` outranks `arbitrary` so the drift linter keeps its
+      // high-severity finding even when the prefix cannot be applied.
+      confidence: near?.nearest ? 'nearest' : className ? 'arbitrary' : 'none',
+      ...(near ?? (partialNote !== undefined ? { note: partialNote } : {})),
+      provenance,
+    }
+  }
+
   if (tokens && !utilityAvailable(tokens, mapping.core)) {
     return {
       property,
@@ -118,7 +142,7 @@ export const matchLength = (
 
   const px = toPx(value)
   if (px === null) {
-    const className = applyPrefix(tokens, `${mapping.util}-[${value}]`)
+    const className = arbitrary(tokens, mapping.util, value)
     return {
       property,
       className,
@@ -141,24 +165,13 @@ export const matchLength = (
   }
 
   if (!tokens) {
-    return {
-      property,
-      className: `${mapping.util}-[${value}]`,
-      confidence: 'arbitrary',
+    return rawValue({
       note: 'No Tailwind config — generic Tailwind syntax; project prefix/settings may require changes.',
-      provenance,
-    }
+    })
   }
 
   if (tokens.unknownNamespaces.includes(mapping.ns === 'size' ? 'spacing' : mapping.ns)) {
-    const className = applyPrefix(tokens, `${mapping.util}-[${value}]`)
-    return {
-      property,
-      className,
-      confidence: className ? 'arbitrary' : 'none',
-      note: `fig-tail could not read your ${mapping.ns}; showing raw values`,
-      provenance,
-    }
+    return rawValue({ note: `fig-tail could not read your ${mapping.ns}; showing raw values` })
   }
 
   if (mapping.ns === 'spacing' || mapping.ns === 'size') {
@@ -184,10 +197,7 @@ export const matchLength = (
         }
       }
       if (step?.kind === 'nearest') {
-        return {
-          property,
-          className: null,
-          confidence: 'nearest',
+        return rawValue({
           nearest: {
             tokenKey: step.key,
             className: `${mapping.util}-${step.key}`,
@@ -195,8 +205,7 @@ export const matchLength = (
             deltaUnit: 'px',
           },
           note: `no exact token; nearest is ${mapping.util}-${step.key}`,
-          provenance,
-        }
+        })
       }
     }
     const scaleHit = matchScale(px, tokens.spacing.scale, exactTol, nearTol)
@@ -210,10 +219,7 @@ export const matchLength = (
       }
     }
     if (scaleHit?.kind === 'nearest') {
-      return {
-        property,
-        className: null,
-        confidence: 'nearest',
+      return rawValue({
         nearest: {
           tokenKey: scaleHit.key,
           className: `${mapping.util}-${scaleHit.key}`,
@@ -221,14 +227,10 @@ export const matchLength = (
           deltaUnit: 'px',
         },
         note: `no exact token; nearest is ${mapping.util}-${scaleHit.key}`,
-        provenance,
-      }
+      })
     }
     if (namedHit?.kind === 'nearest') {
-      return {
-        property,
-        className: null,
-        confidence: 'nearest',
+      return rawValue({
         nearest: {
           tokenKey: namedHit.key,
           className: `${mapping.util}-${namedHit.key}`,
@@ -236,8 +238,7 @@ export const matchLength = (
           deltaUnit: 'px',
         },
         note: `no exact token; nearest is ${mapping.util}-${namedHit.key}`,
-        provenance,
-      }
+      })
     }
   }
 
@@ -245,7 +246,7 @@ export const matchLength = (
     const hit = matchScale(px, tokens.radius, exactTol, nearTol)
     if (hit?.kind === 'exact') {
       const key = hit.key === 'DEFAULT' ? '' : `-${hit.key}`
-      const className = applyPrefix(tokens, `${mapping.util === 'rounded' ? 'rounded' : mapping.util}${key}`)
+      const className = applyPrefix(tokens, `${mapping.util}${key}`)
       return {
         property,
         className,
@@ -254,18 +255,14 @@ export const matchLength = (
       }
     }
     if (hit?.kind === 'nearest') {
-      return {
-        property,
-        className: null,
-        confidence: 'nearest',
+      return rawValue({
         nearest: {
           tokenKey: hit.key,
-          className: `rounded-${hit.key}`,
+          className: hit.key === 'DEFAULT' ? mapping.util : `${mapping.util}-${hit.key}`,
           delta: hit.delta,
           deltaUnit: 'px',
         },
-        provenance,
-      }
+      })
     }
   }
 
@@ -294,18 +291,5 @@ export const matchLength = (
     }
   }
 
-  const partialNote = tokens.partialNamespaces.includes(
-    mapping.ns === 'size' ? 'spacing' : mapping.ns,
-  )
-    ? `Bundled default ${mapping.ns} tokens were withheld; showing raw values for unmatched lengths`
-    : undefined
-
-  const className = applyPrefix(tokens, `${mapping.util}-[${value}]`)
-  return {
-    property,
-    className,
-    confidence: className ? 'arbitrary' : 'none',
-    ...(partialNote !== undefined ? { note: partialNote } : {}),
-    provenance,
-  }
+  return rawValue()
 }
